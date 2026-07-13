@@ -144,31 +144,152 @@ async def cmd_dice(event, db: AsyncSession):
     else:
         await message_obj.answer(card, parse_mode="HTML")
 
+# Trivia Questions List
+TRIVIA_QUESTIONS = [
+    {
+        "q": "Who is known as the Strongest Sorcerer in Jujutsu Kaisen?",
+        "opts": ["Gojo Satoru", "Ryomen Sukuna", "Megumi Fushiguro", "Yuji Itadori"],
+        "ans": 0
+    },
+    {
+        "q": "Who is the protagonist of One Piece?",
+        "opts": ["Roronoa Zoro", "Monkey D. Luffy", "Vinsmoke Sanji", "Portgas D. Ace"],
+        "ans": 1
+    },
+    {
+        "q": "What is Goku's signature energy attack in Dragon Ball?",
+        "opts": ["Rasengan", "Spirit Gun", "Chidori", "Kamehameha"],
+        "ans": 3
+    },
+    {
+        "q": "Who is known as the 'Copy Ninja' in Naruto?",
+        "opts": ["Kakashi Hatake", "Sasuke Uchiha", "Itachi Uchiha", "Jiraiya"],
+        "ans": 0
+    },
+    {
+        "q": "What is Saitama's hero name in One Punch Man?",
+        "opts": ["Caped Baldy", "Demon Cyborg", "Silver Fang", "Tornado of Terror"],
+        "ans": 0
+    },
+    {
+        "q": "Who is the main protagonist of Attack on Titan?",
+        "opts": ["Armin Arlert", "Levi Ackerman", "Eren Yeager", "Mikasa Ackerman"],
+        "ans": 2
+    },
+    {
+        "q": "In Demon Slayer, who is Tanjiro's demon sister?",
+        "opts": ["Nezuko Kamado", "Shinobu Kocho", "Kanao Tsuyuri", "Mitsuri Kanroji"],
+        "ans": 0
+    },
+    {
+        "q": "Which anime features characters called 'Ghouls' who feed on humans?",
+        "opts": ["Bleach", "Tokyo Ghoul", "Naruto", "Death Note"],
+        "ans": 1
+    },
+    {
+        "q": "What is the name of the notebook that can kill anyone whose name is written in it?",
+        "opts": ["Death Book", "Kill Note", "Death Note", "Shinshoku"],
+        "ans": 2
+    },
+    {
+        "q": "Which guild does Natsu Dragneel belong to in Fairy Tail?",
+        "opts": ["Fairy Tail", "Blue Pegasus", "Sabertooth", "Lamia Scale"],
+        "ans": 0
+    }
+]
+
 @router.callback_query(F.data == "game_trivia")
 @router.message(Command("trivia"))
 async def cmd_trivia(event, db: AsyncSession):
-    user_id = event.from_user.id if isinstance(event, Message) else event.from_user.id
+    user_id = event.from_user.id
     message_obj = event if isinstance(event, Message) else event.message
     
-    user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
-    reward = config.TRIVIA_REWARD
-    user.coins += reward
-    await db.commit()
-
-    card = (
+    # Pick a random question
+    q_idx = random.randint(0, len(TRIVIA_QUESTIONS) - 1)
+    question_data = TRIVIA_QUESTIONS[q_idx]
+    
+    # Build options buttons
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from aiogram.types import InlineKeyboardButton
+    builder = InlineKeyboardBuilder()
+    
+    # Render option buttons
+    for opt_idx, opt in enumerate(question_data["opts"]):
+        builder.row(InlineKeyboardButton(
+            text=opt,
+            callback_data=f"t_a:{user_id}:{q_idx}:{opt_idx}"
+        ))
+    builder.row(InlineKeyboardButton(text="🔙 Back to Games", callback_data="dm_games"))
+    
+    text = (
         "🧠 <b>ANIME TRIVIA CHALLENGE!</b>\n\n"
         + format_blockquote(
-            f"❓ <b>Question:</b> Who is known as the Strongest Sorcerer in Jujutsu Kaisen?\n"
-            f"✅ <b>Correct Answer:</b> Gojo Satoru\n"
-            f"🎉 <b>Reward:</b> +{reward} Coins!\n"
-            f"💰 <b>Balance:</b> {user.coins:,} Coins"
+            f"❓ <b>Question:</b>\n{question_data['q']}\n\n"
+            f"💰 <b>Reward:</b> +{config.TRIVIA_REWARD} Coins!"
         )
     )
+    
     if isinstance(event, CallbackQuery):
-        await message_obj.edit_text(card, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
+        await message_obj.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
         await event.answer()
     else:
-        await message_obj.answer(card, parse_mode="HTML")
+        await message_obj.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+@router.callback_query(F.data.startswith("t_a:"))
+async def handle_trivia_answer(callback: CallbackQuery, db: AsyncSession):
+    parts = callback.data.split(":")
+    if len(parts) != 4:
+        await callback.answer("❌ Invalid game session.", show_alert=True)
+        return
+        
+    _, play_id_str, q_idx_str, opt_idx_str = parts
+    play_id = int(play_id_str)
+    q_idx = int(q_idx_str)
+    opt_idx = int(opt_idx_str)
+    
+    if callback.from_user.id != play_id:
+        await callback.answer("❌ This trivia challenge is not yours! Start a new one with /trivia.", show_alert=True)
+        return
+        
+    if q_idx >= len(TRIVIA_QUESTIONS):
+        await callback.answer("❌ Question no longer exists.", show_alert=True)
+        return
+        
+    question_data = TRIVIA_QUESTIONS[q_idx]
+    user = await get_or_create_user(db, play_id, callback.from_user.username, callback.from_user.first_name)
+    
+    is_correct = opt_idx == question_data["ans"]
+    chosen_opt = question_data["opts"][opt_idx]
+    correct_opt = question_data["opts"][question_data["ans"]]
+    
+    if is_correct:
+        reward = config.TRIVIA_REWARD
+        user.coins += reward
+        await db.commit()
+        
+        card = (
+            "🧠 <b>ANIME TRIVIA CHALLENGE!</b>\n\n"
+            + format_blockquote(
+                f"❓ <b>Question:</b> {question_data['q']}\n\n"
+                f"✅ <b>Your Answer:</b> {chosen_opt} (Correct!)\n"
+                f"🎉 <b>Reward:</b> +{reward} Coins!\n"
+                f"💰 <b>Balance:</b> {user.coins:,} Coins"
+            )
+        )
+    else:
+        card = (
+            "🧠 <b>ANIME TRIVIA CHALLENGE!</b>\n\n"
+            + format_blockquote(
+                f"❓ <b>Question:</b> {question_data['q']}\n\n"
+                f"❌ <b>Your Answer:</b> {chosen_opt} (Incorrect!)\n"
+                f"💡 <b>Correct Answer:</b> {correct_opt}\n"
+                f"💀 <b>Reward:</b> 0 Coins\n"
+                f"💰 <b>Balance:</b> {user.coins:,} Coins"
+            )
+        )
+        
+    await callback.message.edit_text(card, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
+    await callback.answer()
 
 @router.callback_query(F.data == "game_mines")
 @router.message(Command("mines"))
