@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 import os
+from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -118,10 +119,28 @@ class JoinCheckMiddleware:
 
         return await handler(event, data)
 
+async def start_health_server():
+    """Lightweight HTTP server for Render health checks — keeps the service alive."""
+    async def health(request):
+        return web.Response(text="AniVerse Bot is running! ✅")
+
+    app = web.Application()
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Health check server running on port {port}")
+
 async def main():
     if not config.BOT_TOKEN or config.BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
         logger.warning("BOT_TOKEN is not configured in environment variables or config.py!")
-    
+
+    # Start health check server (required for Render free tier)
+    await start_health_server()
+
     await init_db()
     await seed_characters()
 
