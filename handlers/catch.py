@@ -59,16 +59,13 @@ async def spawn_character(chat_id: int, db: AsyncSession, bot, custom_rarity: st
 
     r_emoji = get_rarity_emoji(character.rarity)
     caption = (
-        f"╭───「 ⛩️ Character Spawn 」───╮\n"
-        f"│\n"
-        f"│  ✨ A wild character has appeared!\n"
-        f"│\n"
-        f"│  📺 <b>Anime:</b> {escape_html(character.anime)}\n"
-        f"│  {r_emoji} <b>Rarity:</b> {r_emoji} {character.rarity}\n"
-        f"│\n"
-        f"│  🎯 Use <code>/guess &lt;name&gt;</code> to collect!\n"
-        f"│\n"
-        f"╰───────────────────────────╯"
+        "✨ <b>A WILD CHARACTER HAS APPEARED!</b>\n\n"
+        + format_blockquote(
+            f"📺 <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"💎 <b>Rarity:</b> {r_emoji} {character.rarity}\n\n"
+            f"🎯 <b>Catch Command:</b>\n"
+            f"👉 <code>/guess &lt;name&gt;</code>"
+        )
     )
     
     msg = None
@@ -103,34 +100,25 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
         return
     
     chat_id = message.chat.id
-    if chat_id not in group_settings_cache:
-        stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-        res = await db.execute(stmt)
-        settings = res.scalar_one_or_none()
-        if not settings:
-            settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0)
-            db.add(settings)
-            await db.commit()
-        group_settings_cache[chat_id] = {
-            "threshold": settings.spawn_threshold,
-            "counter": settings.message_counter,
-            "enabled": settings.spawns_enabled
-        }
+    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
+    res = await db.execute(stmt)
+    settings = res.scalar_one_or_none()
     
-    cache = group_settings_cache[chat_id]
-    if not cache["enabled"]:
+    if not settings:
+        settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0, spawns_enabled=True)
+        db.add(settings)
+        await db.commit()
+    
+    if not settings.spawns_enabled:
         return
 
-    cache["counter"] += 1
-    if cache["counter"] >= cache["threshold"]:
-        cache["counter"] = 0
-        stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-        res = await db.execute(stmt)
-        settings = res.scalar_one_or_none()
-        if settings:
-            settings.message_counter = 0
-            await db.commit()
+    settings.message_counter += 1
+    if settings.message_counter >= settings.spawn_threshold:
+        settings.message_counter = 0
+        await db.commit()
         await spawn_character(chat_id, db, bot)
+    else:
+        await db.commit()
 
 @router.message(Command("guess", "catch", "snatch"))
 async def cmd_catch(message: Message, db: AsyncSession, bot):
