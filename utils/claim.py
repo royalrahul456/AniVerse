@@ -1,37 +1,20 @@
-import json
-import os
-import time
 import datetime
+import time
 from typing import Tuple
+from sqlalchemy import select
+from database.models import UserDailyLimit
 
-CLAIM_FILE = "data/claim_cooldowns.json"
-
-def _load_claims() -> dict:
-    if not os.path.exists(CLAIM_FILE):
-        os.makedirs(os.path.dirname(CLAIM_FILE), exist_ok=True)
-        with open(CLAIM_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
-    try:
-        with open(CLAIM_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-def _save_claims(claims: dict):
-    os.makedirs(os.path.dirname(CLAIM_FILE), exist_ok=True)
-    with open(CLAIM_FILE, "w") as f:
-        json.dump(claims, f, indent=2)
-
-def check_claim_cooldown(user_id: int) -> Tuple[bool, int]:
+async def check_claim_cooldown(db, user_id: int) -> Tuple[bool, int]:
     """
     Checks if a user is eligible for their daily claim.
     The claim resets daily at 5:30 AM IST (UTC+5:30).
     Returns (can_claim, seconds_remaining)
     """
-    claims = _load_claims()
-    str_id = str(user_id)
-    last_claim_ts = claims.get(str_id, 0)
+    stmt = select(UserDailyLimit).where(UserDailyLimit.user_id == user_id)
+    res = await db.execute(stmt)
+    limit = res.scalar_one_or_none()
+    
+    last_claim_ts = limit.last_claim_at if limit else 0
     
     # IST timezone (UTC+5:30)
     ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
@@ -57,7 +40,15 @@ def check_claim_cooldown(user_id: int) -> Tuple[bool, int]:
     remaining_seconds = int((next_reset - now).total_seconds())
     return False, remaining_seconds
 
-def record_claim(user_id: int):
-    claims = _load_claims()
-    claims[str(user_id)] = int(time.time())
-    _save_claims(claims)
+async def record_claim(db, user_id: int):
+    stmt = select(UserDailyLimit).where(UserDailyLimit.user_id == user_id)
+    res = await db.execute(stmt)
+    limit = res.scalar_one_or_none()
+    
+    if not limit:
+        limit = UserDailyLimit(user_id=user_id, last_claim_at=int(time.time()))
+        db.add(limit)
+    else:
+        limit.last_claim_at = int(time.time())
+        
+    await db.commit()

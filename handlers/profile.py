@@ -800,8 +800,7 @@ async def render_anime_list(query_str: str, page: int, message_obj, db: AsyncSes
 @router.message(Command("claim"))
 async def cmd_claim(message: Message, db: AsyncSession):
     user_id = message.from_user.id
-    can_claim, time_remaining = check_claim_cooldown(user_id)
-    
+    can_claim, time_remaining = await check_claim_cooldown(db, user_id)    
     if not can_claim:
         hours = time_remaining // 3600
         minutes = (time_remaining % 3600) // 60
@@ -835,8 +834,7 @@ async def cmd_claim(message: Message, db: AsyncSession):
     user_char = UserCharacter(user_id=user_id, character_id=character.id, nickname=character.name)
     db.add(user_char)
     await db.commit()
-
-    record_claim(user_id)
+    await record_claim(db, user_id)
     r_emoji = get_rarity_emoji(character.rarity)
     total_weight = sum(config.RARITY_CONFIG.get(c.rarity, {"weight": 10})["weight"] for c in characters)
     char_weight = config.RARITY_CONFIG.get(character.rarity, {"weight": 10})["weight"]

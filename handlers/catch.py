@@ -27,29 +27,30 @@ async def get_cached_characters(db: AsyncSession):
         character_cache = {c.id: c for c in chars}
     return list(character_cache.values())
 
-async def get_enabled_spawn_rarities(db: AsyncSession) -> set:
-    default_rarities = {"common", "rare", "epic", "legendary", "mythical"}
-    stmt = select(RarityType).where(RarityType.spawn_enabled == True)
-    res = await db.execute(stmt)
-    custom_enabled = {r.name.lower() for r in res.scalars().all()}
-    return default_rarities.union(custom_enabled)
-
 async def spawn_character(chat_id: int, db: AsyncSession, bot, custom_rarity: str = None) -> bool:
     characters = await get_cached_characters(db)
     if not characters:
         return False
 
     if custom_rarity:
-        filtered = [c for c in characters if c.rarity.lower() == custom_rarity.lower()]
-        if not filtered:
-            return False
-        character = random.choice(filtered)
+        selected_rarity = custom_rarity.title()
     else:
-        allowed_rarities = await get_enabled_spawn_rarities(db)
-        eligible_chars = [c for c in characters if c.rarity.lower() in allowed_rarities]
-        if not eligible_chars:
-            return False
-        character = random.choice(eligible_chars)
+        stmt = select(RarityType).where(RarityType.spawn_enabled == True)
+        res = await db.execute(stmt)
+        rarities = res.scalars().all()
+        
+        if not rarities:
+            selected_rarity = "Common"
+        else:
+            choices = [r.name for r in rarities]
+            weights = [r.weight for r in rarities]
+            selected_rarity = random.choices(choices, weights=weights, k=1)[0]
+
+    filtered = [c for c in characters if c.rarity.lower() == selected_rarity.lower()]
+    if not filtered:
+        filtered = characters
+
+    character = random.choice(filtered)
 
     await db.execute(delete(ActiveSpawn).where(ActiveSpawn.chat_id == chat_id))
     

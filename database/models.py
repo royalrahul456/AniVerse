@@ -134,3 +134,17 @@ class Bid(Base):
     placed_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     bidder = relationship("User")
+
+class UserDailyLimit(Base):
+    __tablename__ = "user_daily_limits"
+
+    user_id = Column(BigInteger, primary_key=True, index=True)
+    last_claim_at = Column(BigInteger, default=0)
+    dice_count = Column(Integer, default=0)
+    last_dice_at = Column(BigInteger, default=0)
+    coinflip_count = Column(Integer, default=0)
+    last_coinflip_at = Column(BigInteger, default=0)
+    spin_count = Column(Integer, default=0)
+    last_spin_at = Column(BigInteger, default=0)
+    dart_count = Column(Integer, default=0)
+    last_dart_at = Column(BigInteger, default=0)

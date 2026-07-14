@@ -38,8 +38,7 @@ async def cmd_games(event, db: AsyncSession):
 async def cmd_spin(event, db: AsyncSession):
     user_id = event.from_user.id
     message_obj = event if isinstance(event, Message) else event.message
-    
-    can_play, current_count, remaining_seconds = check_game_limit(user_id, "spin", 3)
+    can_play, current_count, remaining_seconds = await check_game_limit(db, user_id, "spin", 3)
     if not can_play:
         hours = remaining_seconds // 3600
         minutes = (remaining_seconds % 3600) // 60
@@ -62,7 +61,7 @@ async def cmd_spin(event, db: AsyncSession):
     user.coins += won_coins
     await db.commit()
 
-    record_game_play(user_id, "spin")
+    await record_game_play(db, user_id, "spin")
 
     text = (
         "🎰 <b>LUCKY WHEEL SPIN!</b> 🎰\n\n"
@@ -118,7 +117,7 @@ async def cmd_coinflip(event, db: AsyncSession):
     message_obj = event if isinstance(event, Message) else event.message
     is_callback = isinstance(event, CallbackQuery)
     
-    can_play, current_count, remaining_seconds = check_game_limit(user_id, "coinflip", 2)
+    can_play, current_count, remaining_seconds = await check_game_limit(db, user_id, "coinflip", 2)
     if not can_play:
         hours = remaining_seconds // 3600
         minutes = (remaining_seconds % 3600) // 60
@@ -156,7 +155,7 @@ async def cmd_coinflip(event, db: AsyncSession):
         res_text = f"💀 <b>LOSS!</b> It landed on {outcome}! You lost {bet} coins."
 
     await db.commit()
-    record_game_play(user_id, "coinflip")
+    await record_game_play(db, user_id, "coinflip")
 
     card = (
         f"🪙 <b>COIN FLIP CHALLENGE</b>\n\n" 
@@ -179,7 +178,7 @@ async def cmd_dice(event, db: AsyncSession):
     message_obj = event if isinstance(event, Message) else event.message
     is_callback = isinstance(event, CallbackQuery)
     
-    can_play, current_count, remaining_seconds = check_game_limit(user_id, "dice", 2)
+    can_play, current_count, remaining_seconds = await check_game_limit(db, user_id, "dice", 2)
     if not can_play:
         hours = remaining_seconds // 3600
         minutes = (remaining_seconds % 3600) // 60
@@ -230,7 +229,7 @@ async def cmd_dice(event, db: AsyncSession):
         res = f"🎲 You rolled a <b>{roll}</b>! 💀 <b>LOSS!</b> -{loss} Coins."
 
     await db.commit()
-    record_game_play(user_id, "dice")
+    await record_game_play(db, user_id, "dice")
 
     card = (
         "🎲 <b>DICE ROLL BET</b>\n\n" 
@@ -252,8 +251,7 @@ async def cmd_dart(event, db: AsyncSession):
     user_id = event.from_user.id
     message_obj = event if isinstance(event, Message) else event.message
     is_callback = isinstance(event, CallbackQuery)
-    
-    can_play, current_count, remaining_seconds = check_game_limit(user_id, "dart", 2)
+    can_play, current_count, remaining_seconds = await check_game_limit(db, user_id, "dart", 2)
     if not can_play:
         hours = remaining_seconds // 3600
         minutes = (remaining_seconds % 3600) // 60
@@ -304,7 +302,7 @@ async def cmd_dart(event, db: AsyncSession):
         res = f"🎯 You hit a <b>{score}</b>! 💀 <b>LOSS!</b> -{loss} Coins."
 
     await db.commit()
-    record_game_play(user_id, "dart")
+    await record_game_play(db, user_id, "dart")
 
     card = (
         "🎯 <b>DART ARENA CHALLENGE</b>\n\n" 

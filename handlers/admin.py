@@ -280,7 +280,8 @@ async def cmd_addrarity(message: Message, db: AsyncSession):
         db.add(new_rarity)
 
     await db.commit()
-    RARITY_CACHE.clear()
+    from utils.formatters import RARITY_CACHE
+    RARITY_CACHE[name] = {"emoji": emoji}
 
     card = (
         f"✨ <b>CUSTOM RARITY TIER ADDED!</b> ✨\n\n"
@@ -962,3 +963,75 @@ async def cb_admin_tools(callback: CallbackQuery):
     from handlers.start import send_or_edit_start
     await send_or_edit_start(callback.message, get_cover_media("start"), card, builder.as_markup(), is_callback=True)
     await callback.answer()
+
+@router.message(Command("spawnchance", "spawnchances"))
+async def cmd_spawnchance(message: Message, db: AsyncSession):
+    stmt = select(RarityType).where(RarityType.spawn_enabled == True)
+    res = await db.execute(stmt)
+    rarities = res.scalars().all()
+    
+    if not rarities:
+        await message.reply("⚠️ No rarities are currently enabled for wild spawn.")
+        return
+        
+    total_weight = sum(r.weight for r in rarities)
+    
+    lines = []
+    # Sort by weight descending
+    rarities.sort(key=lambda x: x.weight, reverse=True)
+    
+    for r in rarities:
+        pct = (r.weight / total_weight) * 100 if total_weight > 0 else 0
+        from utils.formatters import get_rarity_emoji
+        r_emoji = get_rarity_emoji(r.name)
+        lines.append(f"{r_emoji} <b>{r.name}</b>: {r.weight} weight ({pct:.2f}%)")
+        
+    text = (
+        "🎯 <b>WILD CHARACTER SPAWN CHANCES</b>\n\n"
+        + format_blockquote("\n".join(lines))
+    )
+    await message.reply(text, parse_mode="HTML")
+
+@router.message(Command("editspawnchance", "setspawnchance"))
+async def cmd_editspawnchance(message: Message, db: AsyncSession):
+    if not is_admin(message):
+        await message.answer("⛔ Only bot owners can edit spawn chance!")
+        return
+
+    parts = message.text.strip().split()
+    if len(parts) < 3:
+        await message.reply(
+            "⚠️ <b>Usage:</b>\n"
+            "👉 <code>/editspawnchance &lt;rarity_name&gt; &lt;weight&gt;</code>\n\n"
+            "Example: <code>/editspawnchance Epic 20</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    rarity_name = parts[1].strip()
+    weight_str = parts[2].strip()
+
+    if not weight_str.isdigit():
+        await message.reply("❌ Weight must be a valid positive number.")
+        return
+
+    weight = int(weight_str)
+    if weight < 0:
+        await message.reply("❌ Weight cannot be negative.")
+        return
+
+    stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
+    res = await db.execute(stmt)
+    rarity_item = res.scalar_one_or_none()
+
+    if not rarity_item:
+        await message.reply(f"❌ Rarity tier '<b>{escape_html(rarity_name)}</b>' not found. Add it first using /addrarity.", parse_mode="HTML")
+        return
+
+    rarity_item.weight = weight
+    await db.commit()
+
+    await message.reply(
+        f"✅ Spawn chance for <b>{rarity_item.name}</b> has been updated to weight <b>{weight}</b>!",
+        parse_mode="HTML"
+    )

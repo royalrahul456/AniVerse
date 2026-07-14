@@ -12,9 +12,8 @@ from sqlalchemy import select
 
 import config
 from database.database import init_db, AsyncSessionLocal
-from database.models import Character, RarityType
+from database.models import Character, RarityType, UserDailyLimit
 from handlers import start, profile, catch, shop, games, trade, admin, xo, inline_query, redeem, auction
-
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -145,6 +144,34 @@ async def main():
     await init_db()
     await seed_characters()
 
+    # Pre-populate custom rarity cache and seed defaults
+    try:
+        from database.models import RarityType
+        from utils.formatters import RARITY_CACHE
+        async with AsyncSessionLocal() as session:
+            for name, config_info in config.RARITY_CONFIG.items():
+                stmt = select(RarityType).where(RarityType.name.ilike(name))
+                res = await session.execute(stmt)
+                existing = res.scalar_one_or_none()
+                if not existing:
+                    new_r = RarityType(
+                        name=name.title(),
+                        emoji=config_info.get("emoji", "⚪"),
+                        weight=config_info.get("weight", 10),
+                        color=config_info.get("color", "Gray"),
+                        spawn_enabled=True
+                    )
+                    session.add(new_r)
+            await session.commit()
+
+            res = await session.execute(select(RarityType))
+            rarities = res.scalars().all()
+            for r in rarities:
+                RARITY_CACHE[r.name.title()] = {"emoji": r.emoji}
+        logger.info(f"Loaded {len(rarities)} custom rarities into cache.")
+    except Exception as e:
+        logger.error(f"Failed to pre-populate custom rarities: {e}")
+
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
 
@@ -168,6 +195,8 @@ async def main():
         BotCommand(command="dart", description="Play animated dart throw (daily 2x)"),
         BotCommand(command="trivia", description="Play anime quiz trivia"),
         BotCommand(command="scramble", description="Play word scramble puzzle"),
+        BotCommand(command="spawnchance", description="View wild character spawn chances"),
+        BotCommand(command="editspawnchance", description="Edit spawn weights (Admin only)"),
         BotCommand(command="shop", description="Buy new profile themes")
     ]
     try:
