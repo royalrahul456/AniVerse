@@ -477,7 +477,6 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
                 text=f"💰 Cashout (+{current_reward:,} Coins)",
                 callback_data=f"mines_cashout:{user_id}"
             ))
-    builder.row(InlineKeyboardButton(text="🔙 Back to Games", callback_data="dm_games"))
     return builder.as_markup()
 
 @router.callback_query(F.data.startswith("mines_click:"))

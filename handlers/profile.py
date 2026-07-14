@@ -602,6 +602,14 @@ async def cmd_check(message: Message, db: AsyncSession):
 @router.callback_query(F.data.startswith("who_has_"))
 async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
     char_id = int(callback.data.split("_")[2])
+    
+    char_stmt = select(Character).where(Character.id == char_id)
+    char_res = await db.execute(char_stmt)
+    character = char_res.scalar_one_or_none()
+    if not character:
+        await callback.answer("❌ Character not found.", show_alert=True)
+        return
+
     stmt = (
         select(User.first_name, User.user_id, func.count(UserCharacter.id).label("cnt"))
         .join(UserCharacter, UserCharacter.user_id == User.user_id)
@@ -623,11 +631,24 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
     for f_name, u_id, cnt in rows:
         lines.append(f"• <a href=\"tg://user?id={u_id}\">{escape_html(f_name)}</a> ×{cnt}")
 
+    r_emoji = get_rarity_emoji(character.rarity)
     text = (
-        f"👥 <b>PLAYERS WHO OWN THIS CHARACTER</b>\n\n"
+        f"👾 <b>Character Info</b>\n"
+        f"🆔 <b>ID:</b> {character.id}\n"
+        f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
+        f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
+        f"{r_emoji} <b>Rarity:</b> {r_emoji} {character.rarity}\n\n"
+        f"👥 <b>PLAYERS WHO OWN THIS CHARACTER</b>\n"
         + format_blockquote("\n".join(lines))
     )
-    await callback.message.reply(text, parse_mode="HTML")
+
+    try:
+        await callback.message.edit_caption(caption=text, parse_mode="HTML", reply_markup=None)
+    except Exception:
+        try:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=None)
+        except Exception:
+            pass
     try:
         await callback.answer()
     except Exception:
