@@ -40,10 +40,13 @@ def get_games_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(text="🎲 Dice Bet", callback_data="game_dice"),
-        InlineKeyboardButton(text="🪙 Coinflip", callback_data="game_coinflip")
+        InlineKeyboardButton(text="🎯 Dart Arena", callback_data="game_dart")
     )
     builder.row(
-        InlineKeyboardButton(text="💣 Mines", callback_data="game_mines"),
+        InlineKeyboardButton(text="🪙 Coinflip", callback_data="game_coinflip"),
+        InlineKeyboardButton(text="💣 Mines", callback_data="game_mines")
+    )
+    builder.row(
         InlineKeyboardButton(text="🧩 Word Scramble", callback_data="game_scramble")
     )
     builder.row(InlineKeyboardButton(text="🔙 Back to Hub Menu", callback_data="dm_home"))

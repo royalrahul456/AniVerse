@@ -10,8 +10,10 @@ from sqlalchemy import select, delete
 import config
 from database.models import User, ActiveGame
 from utils.formatters import format_blockquote, escape_html
-from keyboards.inline import get_games_keyboard, get_back_to_hub_keyboard
 from handlers.start import get_or_create_user
+from utils.game_limits import check_game_limit, record_game_play
+from keyboards.inline import get_games_keyboard, get_back_to_hub_keyboard
+
 
 router = Router()
 
@@ -34,27 +36,48 @@ async def cmd_games(event, db: AsyncSession):
 @router.callback_query(F.data == "game_spin")
 @router.message(Command("spin"))
 async def cmd_spin(event, db: AsyncSession):
-    user_id = event.from_user.id if isinstance(event, Message) else event.from_user.id
+    user_id = event.from_user.id
     message_obj = event if isinstance(event, Message) else event.message
     
+    can_play, current_count, remaining_seconds = check_game_limit(user_id, "spin", 3)
+    if not can_play:
+        hours = remaining_seconds // 3600
+        minutes = (remaining_seconds % 3600) // 60
+        text = (
+            "⏳ <b>Spin Wheel Limit Reached!</b>\n\n"
+            + format_blockquote(
+                f"You have already used your <b>3</b> daily free spins!\n\n"
+                f"Come back in <b>{hours}h {minutes}m</b> for more spins!\n<i>Resets daily at 5:30 AM IST</i>"
+            )
+        )
+        if isinstance(event, CallbackQuery):
+            await event.answer("❌ Spin limit reached!", show_alert=True)
+            await message_obj.edit_text(text, parse_mode="HTML")
+        else:
+            await message_obj.reply(text, parse_mode="HTML")
+        return
+
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
     won_coins = random.choice(config.SPIN_REWARDS)
     user.coins += won_coins
     await db.commit()
+
+    record_game_play(user_id, "spin")
 
     text = (
         "🎰 <b>LUCKY WHEEL SPIN!</b> 🎰\n\n"
         + format_blockquote(
             f"🌀 <i>*The wheel spins rapidly...*</i>\n\n"
             f"🎉 <b>Land:</b> +{won_coins} Coins!\n"
-            f"💰 <b>Total Balance:</b> {user.coins:,} Coins"
+            f"💰 <b>Total Balance:</b> {user.coins:,} Coins\n"
+            f"🎯 <b>Remaining spins today:</b> {2 - current_count}/3"
         )
     )
     if isinstance(event, CallbackQuery):
-        await message_obj.edit_text(text, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
+        await message_obj.edit_text(text, parse_mode="HTML")
         await event.answer()
     else:
-        await message_obj.answer(text, parse_mode="HTML")
+        await message_obj.reply(text, parse_mode="HTML")
 
 @router.message(Command("daily"))
 async def cmd_daily(message: Message, db: AsyncSession):
@@ -91,17 +114,36 @@ async def cmd_daily(message: Message, db: AsyncSession):
 @router.callback_query(F.data == "game_coinflip")
 @router.message(Command("coinflip"))
 async def cmd_coinflip(event, db: AsyncSession):
-    user_id = event.from_user.id if isinstance(event, Message) else event.from_user.id
+    user_id = event.from_user.id
     message_obj = event if isinstance(event, Message) else event.message
+    is_callback = isinstance(event, CallbackQuery)
     
+    can_play, current_count, remaining_seconds = check_game_limit(user_id, "coinflip", 2)
+    if not can_play:
+        hours = remaining_seconds // 3600
+        minutes = (remaining_seconds % 3600) // 60
+        text = (
+            "⏳ <b>Coin Flip Limit Reached!</b>\n\n"
+            + format_blockquote(
+                f"You have already played your <b>2</b> daily coin flips!\n\n"
+                f"Come back in <b>{hours}h {minutes}m</b>!\n<i>Resets daily at 5:30 AM IST</i>"
+            )
+        )
+        if is_callback:
+            await event.answer("❌ Coin Flip limit reached!", show_alert=True)
+            await message_obj.edit_text(text, parse_mode="HTML")
+        else:
+            await message_obj.reply(text, parse_mode="HTML")
+        return
+
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
     bet = 100
     if user.coins < bet:
         text = "❌ You need at least 100 coins to flip a coin!"
-        if isinstance(event, CallbackQuery):
+        if is_callback:
             await event.answer(text, show_alert=True)
         else:
-            await message_obj.answer(text)
+            await message_obj.reply(text)
         return
 
     win = random.choice([True, False])
@@ -114,21 +156,70 @@ async def cmd_coinflip(event, db: AsyncSession):
         res_text = f"💀 <b>LOSS!</b> It landed on {outcome}! You lost {bet} coins."
 
     await db.commit()
-    card = f"🪙 <b>COIN FLIP CHALLENGE</b>\n\n" + format_blockquote(f"{res_text}\n💰 <b>Balance:</b> {user.coins:,} Coins")
-    if isinstance(event, CallbackQuery):
-        await message_obj.edit_text(card, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
+    record_game_play(user_id, "coinflip")
+
+    card = (
+        f"🪙 <b>COIN FLIP CHALLENGE</b>\n\n" 
+        + format_blockquote(
+            f"{res_text}\n"
+            f"💰 <b>Balance:</b> {user.coins:,} Coins\n"
+            f"🎯 <b>Remaining flips today:</b> {1 - current_count}/2"
+        )
+    )
+    if is_callback:
+        await message_obj.edit_text(card, parse_mode="HTML")
         await event.answer()
     else:
-        await message_obj.answer(card, parse_mode="HTML")
+        await message_obj.reply(card, parse_mode="HTML")
 
 @router.callback_query(F.data == "game_dice")
 @router.message(Command("dice"))
 async def cmd_dice(event, db: AsyncSession):
-    user_id = event.from_user.id if isinstance(event, Message) else event.from_user.id
+    user_id = event.from_user.id
     message_obj = event if isinstance(event, Message) else event.message
+    is_callback = isinstance(event, CallbackQuery)
     
+    can_play, current_count, remaining_seconds = check_game_limit(user_id, "dice", 2)
+    if not can_play:
+        hours = remaining_seconds // 3600
+        minutes = (remaining_seconds % 3600) // 60
+        text = (
+            "⏳ <b>Dice Roll Limit Reached!</b>\n\n"
+            + format_blockquote(
+                f"You have already played your <b>2</b> daily dice rolls!\n\n"
+                f"Come back in <b>{hours}h {minutes}m</b>!\n<i>Resets daily at 5:30 AM IST</i>"
+            )
+        )
+        if is_callback:
+            await event.answer("❌ Dice limit reached!", show_alert=True)
+            await message_obj.edit_text(text, parse_mode="HTML")
+        else:
+            await message_obj.reply(text, parse_mode="HTML")
+        return
+
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
-    roll = random.randint(1, 6)
+    bet = 100
+    if user.coins < bet:
+        text = "❌ You need at least 100 coins to roll the dice!"
+        if is_callback:
+            await event.answer(text, show_alert=True)
+        else:
+            await message_obj.reply(text)
+        return
+
+    # Send dice emoji first
+    if is_callback:
+        await message_obj.edit_text("🎲 <i>*Rolling the dice...*</i>", parse_mode="HTML")
+        dice_msg = await message_obj.reply_dice(emoji="🎲")
+        await event.answer()
+    else:
+        dice_msg = await message_obj.reply_dice(emoji="🎲")
+
+    # Wait for animation to finish
+    import asyncio
+    await asyncio.sleep(3.5)
+    
+    roll = dice_msg.dice.value
     if roll >= 4:
         reward = 150
         user.coins += reward
@@ -139,12 +230,95 @@ async def cmd_dice(event, db: AsyncSession):
         res = f"🎲 You rolled a <b>{roll}</b>! 💀 <b>LOSS!</b> -{loss} Coins."
 
     await db.commit()
-    card = "🎲 <b>DICE ROLL BET</b>\n\n" + format_blockquote(f"{res}\n💰 <b>Balance:</b> {user.coins:,} Coins")
-    if isinstance(event, CallbackQuery):
-        await message_obj.edit_text(card, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
+    record_game_play(user_id, "dice")
+
+    card = (
+        "🎲 <b>DICE ROLL BET</b>\n\n" 
+        + format_blockquote(
+            f"{res}\n"
+            f"💰 <b>Balance:</b> {user.coins:,} Coins\n"
+            f"🎯 <b>Remaining rolls today:</b> {1 - current_count}/2"
+        )
+    )
+
+    if is_callback:
+        await message_obj.edit_text(card, parse_mode="HTML")
+    else:
+        await dice_msg.reply(card, parse_mode="HTML")
+
+@router.callback_query(F.data == "game_dart")
+@router.message(Command("dart"))
+async def cmd_dart(event, db: AsyncSession):
+    user_id = event.from_user.id
+    message_obj = event if isinstance(event, Message) else event.message
+    is_callback = isinstance(event, CallbackQuery)
+    
+    can_play, current_count, remaining_seconds = check_game_limit(user_id, "dart", 2)
+    if not can_play:
+        hours = remaining_seconds // 3600
+        minutes = (remaining_seconds % 3600) // 60
+        text = (
+            "⏳ <b>Dart Throw Limit Reached!</b>\n\n"
+            + format_blockquote(
+                f"You have already played your <b>2</b> daily dart throws!\n\n"
+                f"Come back in <b>{hours}h {minutes}m</b>!\n<i>Resets daily at 5:30 AM IST</i>"
+            )
+        )
+        if is_callback:
+            await event.answer("❌ Dart limit reached!", show_alert=True)
+            await message_obj.edit_text(text, parse_mode="HTML")
+        else:
+            await message_obj.reply(text, parse_mode="HTML")
+        return
+
+    user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
+    bet = 100
+    if user.coins < bet:
+        text = "❌ You need at least 100 coins to throw a dart!"
+        if is_callback:
+            await event.answer(text, show_alert=True)
+        else:
+            await message_obj.reply(text)
+        return
+
+    # Send dart emoji first
+    if is_callback:
+        await message_obj.edit_text("🎯 <i>*Throwing the dart...*</i>", parse_mode="HTML")
+        dart_msg = await message_obj.reply_dice(emoji="🎯")
         await event.answer()
     else:
-        await message_obj.answer(card, parse_mode="HTML")
+        dart_msg = await message_obj.reply_dice(emoji="🎯")
+
+    # Wait for animation to finish
+    import asyncio
+    await asyncio.sleep(3.5)
+    
+    score = dart_msg.dice.value
+    if score >= 4:
+        reward = 150
+        user.coins += reward
+        res = f"🎯 You hit a <b>{score}</b>! 🎉 <b>WIN!</b> +150 Coins!"
+    else:
+        loss = 50
+        user.coins -= loss
+        res = f"🎯 You hit a <b>{score}</b>! 💀 <b>LOSS!</b> -{loss} Coins."
+
+    await db.commit()
+    record_game_play(user_id, "dart")
+
+    card = (
+        "🎯 <b>DART ARENA CHALLENGE</b>\n\n" 
+        + format_blockquote(
+            f"{res}\n"
+            f"💰 <b>Balance:</b> {user.coins:,} Coins\n"
+            f"🎯 <b>Remaining throws today:</b> {1 - current_count}/2"
+        )
+    )
+
+    if is_callback:
+        await message_obj.edit_text(card, parse_mode="HTML")
+    else:
+        await dart_msg.reply(card, parse_mode="HTML")
 
 # Trivia Questions List
 TRIVIA_QUESTIONS = [
