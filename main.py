@@ -160,6 +160,8 @@ async def main():
         BotCommand(command="anime", description="Filter characters by anime title"),
         BotCommand(command="claim", description="Claim a free daily character"),
         BotCommand(command="games", description="Open Games Center"),
+        BotCommand(command="mines", description="Start a new Mines game"),
+        BotCommand(command="endmines", description="Force-quit your active Mines game"),
         BotCommand(command="shop", description="Buy new profile themes")
     ]
     try:
