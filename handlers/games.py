@@ -369,15 +369,14 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
             ))
     builder.row(InlineKeyboardButton(text="🔙 Back to Games", callback_data="dm_games"))
     return builder.as_markup()
-
 @router.callback_query(F.data.startswith("mines_click:"))
 async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
     parts = callback.data.split(":")
-    if len(parts) != 4:
+    if len(parts) != 3:
         await callback.answer("❌ Invalid session.", show_alert=True)
         return
 
-    _, play_id_str, idx_str = parts[0], parts[1], parts[2]
+    _, play_id_str, idx_str = parts
     play_id = int(play_id_str)
     idx = int(idx_str)
 
