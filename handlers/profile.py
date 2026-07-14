@@ -750,7 +750,7 @@ async def cmd_claim(message: Message, db: AsyncSession):
         minutes = (time_remaining % 3600) // 60
         text = (
             f"⏳ <b>Daily Free Roll Cooldown!</b>\n\n"
-            + format_blockquote(f"You must wait <b>{hours}h {minutes}m</b> before claiming your next random free character!")
+            + format_blockquote(f"You must wait <b>{hours}h {minutes}m</b> before claiming your next random free character!\n\n<i>Resets daily at 5:30 AM IST</i>")
         )
         cover = get_cover_media("start")
         try:
@@ -786,13 +786,15 @@ async def cmd_claim(message: Message, db: AsyncSession):
     chance_pct = (char_weight / total_weight) * 100
 
     card = (
-        f"✨ Congrats {escape_html(message.from_user.first_name)}!\n\n"
-        f"📛 Name: {escape_html(character.name)}\n"
-        f"{r_emoji} Rarity: {r_emoji} {character.rarity}\n"
-        f"⏳ Chance: {chance_pct:.2f}%\n"
-        f"📺 Anime: {escape_html(character.anime)}\n"
-        f"🆔 ID: {character.id}\n\n"
-        f"🌍 Come back tomorrow for another claim!"
+        f"✨ <b>CONGRATS {escape_html(message.from_user.first_name.upper())}!</b>\n\n"
+        + format_blockquote(
+            f"📛 <b>Name:</b> {escape_html(character.name)}\n"
+            f"💎 <b>Rarity:</b> {r_emoji} {character.rarity}\n"
+            f"⚡ <b>Chance:</b> {chance_pct:.2f}%\n"
+            f"📺 <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"🆔 <b>ID:</b> #{character.id:03d}\n\n"
+            f"⏳ <i>Resets daily at 5:30 AM IST</i>"
+        )
     )
     
     photo_to_send = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO

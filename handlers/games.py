@@ -290,33 +290,230 @@ async def handle_trivia_answer(callback: CallbackQuery, db: AsyncSession):
         
     await callback.message.edit_text(card, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
     await callback.answer()
-
 @router.callback_query(F.data == "game_mines")
 @router.message(Command("mines"))
 async def cmd_mines(event, db: AsyncSession):
-    user_id = event.from_user.id if isinstance(event, Message) else event.from_user.id
+    user_id = event.from_user.id
     message_obj = event if isinstance(event, Message) else event.message
-    
-    user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
-    reward = 200
-    user.coins += reward
+
+    # Delete any existing active mines game
+    await db.execute(
+        delete(ActiveGame).where(ActiveGame.user_id == user_id, ActiveGame.game_type == "mines")
+    )
+
+    # 3x3 grid, index 0 to 8
+    # 2 hidden mines
+    mine_indices = random.sample(range(9), 2)
+    game_state = {
+        "mines": mine_indices,
+        "revealed": [],
+        "reward": 0,
+        "status": "playing"
+    }
+
+    new_game = ActiveGame(user_id=user_id, game_type="mines", data=json.dumps(game_state))
+    db.add(new_game)
     await db.commit()
 
+    kb = render_mines_keyboard(user_id, game_state)
     card = (
-        "💣 <b>ANIME MINES FIELD</b> 💣\n\n"
+        "💣 <b>ANIME MINES ARENA</b> 💣\n\n"
         + format_blockquote(
-            "💎 💎 💎\n"
-            "💎 💣 💎\n"
-            "💎 💎 💎\n\n"
-            f"🎉 You disarmed 3 mine fields safely! Won +{reward} Coins!\n"
+            "Find the hidden diamonds 💎 and avoid the mines 💣!\n\n"
+            "💰 <b>Current Cashout:</b> 0 Coins\n"
+            "💎 <b>Diamonds Found:</b> 0 / 7"
+        )
+    )
+
+    if isinstance(event, CallbackQuery):
+        await message_obj.edit_text(card, parse_mode="HTML", reply_markup=kb)
+        await event.answer()
+    else:
+        await message_obj.reply(card, parse_mode="HTML", reply_markup=kb)
+
+def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    builder = InlineKeyboardBuilder()
+
+    mines = state["mines"]
+    revealed = state["revealed"]
+    status = state["status"]
+
+    # 3x3 grid buttons
+    buttons = []
+    for idx in range(9):
+        if status == "playing":
+            if idx in revealed:
+                buttons.append(InlineKeyboardButton(text="💎", callback_data="noop"))
+            else:
+                buttons.append(InlineKeyboardButton(text="⬜", callback_data=f"mines_click:{user_id}:{idx}"))
+        else: # Game over (lost/won/cashed out)
+            if idx in mines:
+                buttons.append(InlineKeyboardButton(text="💣", callback_data="noop"))
+            elif idx in revealed:
+                buttons.append(InlineKeyboardButton(text="💎", callback_data="noop"))
+            else:
+                # show remaining diamonds
+                buttons.append(InlineKeyboardButton(text="💎", callback_data="noop"))
+
+    for i in range(0, 9, 3):
+        builder.row(buttons[i], buttons[i+1], buttons[i+2])
+
+    if status == "playing":
+        current_reward = state["reward"]
+        if current_reward > 0:
+            builder.row(InlineKeyboardButton(
+                text=f"💵 Cash Out (+{current_reward} Coins)",
+                callback_data=f"mines_cashout:{user_id}"
+            ))
+    builder.row(InlineKeyboardButton(text="🔙 Back to Games", callback_data="dm_games"))
+    return builder.as_markup()
+
+@router.callback_query(F.data.startswith("mines_click:"))
+async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
+    parts = callback.data.split(":")
+    if len(parts) != 4:
+        await callback.answer("❌ Invalid session.", show_alert=True)
+        return
+
+    _, play_id_str, idx_str = parts[0], parts[1], parts[2]
+    play_id = int(play_id_str)
+    idx = int(idx_str)
+
+    if callback.from_user.id != play_id:
+        await callback.answer("❌ This game is not yours! Start a new one with /mines.", show_alert=True)
+        return
+
+    stmt = select(ActiveGame).where(ActiveGame.user_id == play_id, ActiveGame.game_type == "mines")
+    res = await db.execute(stmt)
+    game = res.scalar_one_or_none()
+    if not game:
+        await callback.answer("❌ Game not found. Start a new one with /mines.", show_alert=True)
+        return
+
+    state = json.loads(game.data)
+    if state["status"] != "playing":
+        await callback.answer("❌ Game already finished.", show_alert=True)
+        return
+
+    # Process click
+    mines = state["mines"]
+    revealed = state["revealed"]
+
+    if idx in revealed:
+        await callback.answer()
+        return
+
+    user = await get_or_create_user(db, play_id, callback.from_user.username, callback.from_user.first_name)
+
+    if idx in mines:
+        # HIT MINE -> Lose game
+        state["status"] = "lost"
+        await db.delete(game)
+        await db.commit()
+
+        kb = render_mines_keyboard(play_id, state)
+        card = (
+            "💣 <b>ANIME MINES ARENA</b> 💣\n\n"
+            + format_blockquote(
+                "💥 <b>BOOM! You hit a mine!</b>\n"
+                "You lost your accumulated coins!\n\n"
+                f"💎 <b>Diamonds Found:</b> {len(revealed)} / 7\n"
+                f"💀 <b>Reward:</b> 0 Coins\n"
+                f"💰 <b>Balance:</b> {user.coins:,} Coins"
+            )
+        )
+        await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
+        await callback.answer("💥 BOOM! You lost!", show_alert=True)
+    else:
+        # HIT DIAMOND -> Keep playing or cashout
+        revealed.append(idx)
+        diamonds_found = len(revealed)
+        
+        # Reward increases per diamond found: e.g. 75 coins per diamond
+        reward = diamonds_found * 75
+        state["reward"] = reward
+
+        if diamonds_found == 7:
+            # Found all diamonds -> Perfect Win
+            state["status"] = "won"
+            user.coins += reward
+            await db.delete(game)
+            await db.commit()
+
+            kb = render_mines_keyboard(play_id, state)
+            card = (
+                "💣 <b>ANIME MINES ARENA</b> 💣\n\n"
+                + format_blockquote(
+                    "🎉 <b>PERFECT WIN!</b>\n"
+                    "You found all the diamonds safely!\n\n"
+                    f"💎 <b>Diamonds Found:</b> 7 / 7\n"
+                    f"🎉 <b>Reward:</b> +{reward} Coins!\n"
+                    f"💰 <b>Balance:</b> {user.coins:,} Coins"
+                )
+            )
+            await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
+            await callback.answer("🎉 Perfect win!", show_alert=True)
+        else:
+            # Update state in DB
+            game.data = json.dumps(state)
+            await db.commit()
+
+            kb = render_mines_keyboard(play_id, state)
+            card = (
+                "💣 <b>ANIME MINES ARENA</b> 💣\n\n"
+                + format_blockquote(
+                    "Find the hidden diamonds 💎 and avoid the mines 💣!\n\n"
+                    f"💰 <b>Current Cashout:</b> {reward} Coins\n"
+                    f"💎 <b>Diamonds Found:</b> {diamonds_found} / 7"
+                )
+            )
+            await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
+            await callback.answer("💎 Diamond found!")
+
+@router.callback_query(F.data.startswith("mines_cashout:"))
+async def handle_mines_cashout(callback: CallbackQuery, db: AsyncSession):
+    parts = callback.data.split(":")
+    if len(parts) != 2:
+        return
+
+    play_id = int(parts[1])
+    if callback.from_user.id != play_id:
+        await callback.answer("❌ This game is not yours!", show_alert=True)
+        return
+
+    stmt = select(ActiveGame).where(ActiveGame.user_id == play_id, ActiveGame.game_type == "mines")
+    res = await db.execute(stmt)
+    game = res.scalar_one_or_none()
+    if not game:
+        await callback.answer("❌ Game already finished.", show_alert=True)
+        return
+
+    state = json.loads(game.data)
+    reward = state["reward"]
+    revealed = state["revealed"]
+
+    user = await get_or_create_user(db, play_id, callback.from_user.username, callback.from_user.first_name)
+    user.coins += reward
+    state["status"] = "cashed_out"
+
+    await db.delete(game)
+    await db.commit()
+
+    kb = render_mines_keyboard(play_id, state)
+    card = (
+        "💣 <b>ANIME MINES ARENA</b> 💣\n\n"
+        + format_blockquote(
+            "💵 <b>CASHOUT SUCCESSFUL!</b>\n"
+            "You disarmed the field and kept your earnings!\n\n"
+            f"💎 <b>Diamonds Found:</b> {len(revealed)} / 7\n"
+            f"🎉 <b>Reward:</b> +{reward} Coins!\n"
             f"💰 <b>Balance:</b> {user.coins:,} Coins"
         )
     )
-    if isinstance(event, CallbackQuery):
-        await message_obj.edit_text(card, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
-        await event.answer()
-    else:
-        await message_obj.answer(card, parse_mode="HTML")
+    await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
+    await callback.answer("💵 Cashed out successfully!")
 
 @router.callback_query(F.data == "game_scramble")
 @router.message(Command("scramble"))

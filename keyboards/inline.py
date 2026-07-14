@@ -64,10 +64,8 @@ def get_harem_keyboard(user_id: int, page: int, max_page: int, rarity: str = "Al
     builder.row(*nav_row)
  
     builder.row(
-        InlineKeyboardButton(text="🔍 Filter Rarity", callback_data=f"dm_bag_rarity_menu_{sort_by}"),
-        InlineKeyboardButton(text="⇅ Sort Harem", callback_data=f"dm_bag_sort_menu_{rarity}_{page}_{sort_by}")
+        InlineKeyboardButton(text="🔍 Filter Rarity", callback_data=f"dm_bag_rarity_menu_{sort_by}")
     )
-    builder.row(InlineKeyboardButton(text="🔙 Back to Hub Menu", callback_data="dm_home"))
     return builder.as_markup()
 
 def get_harem_sorting_keyboard(rarity: str, page: int, current_sort: str) -> InlineKeyboardMarkup:
@@ -133,9 +131,6 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(text="🎨 Themes", callback_data="cb_themes_menu"),
         InlineKeyboardButton(text="🎒 Harem", callback_data="dm_bag_All_1")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🔙 Back to Hub Menu", callback_data="dm_home")
     )
     return builder.as_markup()
 
