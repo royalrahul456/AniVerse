@@ -104,10 +104,17 @@ def get_list_pagination_keyboard(cmd_prefix: str, query_str: str, page: int, max
     builder.row(*nav_row)
     return builder.as_markup()
 
+
 def get_check_character_keyboard(char_id: int) -> InlineKeyboardMarkup:
     """Generates the 'Who Has It' button for /check."""
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="👥 Who Has It", callback_data=f"who_has_{char_id}"))
+    return builder.as_markup()
+
+def get_check_back_keyboard(char_id: int) -> InlineKeyboardMarkup:
+    """Generates the 'Back' button for /check owners page."""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🔙 Back", callback_data=f"check_back_{char_id}"))
     return builder.as_markup()
 
 def get_rarity_selection_menu_keyboard(rarity_items: List[Tuple[str, str]], sort_by: str = "anime") -> InlineKeyboardMarkup:

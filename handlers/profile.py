@@ -18,6 +18,7 @@ from keyboards.inline import (
     get_rarity_selection_menu_keyboard,
     get_list_pagination_keyboard,
     get_check_character_keyboard,
+    get_check_back_keyboard,
     get_back_to_hub_keyboard,
     get_showcase_keyboard,
     get_profile_keyboard,
@@ -549,11 +550,13 @@ async def render_harem_showcase(user_id: int, mode: str, page: int, message_obj,
     text = (
         f"{title_header} ({page}/{total_items})\n"
         f"👤 <b>Owner:</b> <a href=\"tg://user?id={user_id}\">{owner_name}</a>\n\n"
-        f"🌟 <b>{escape_html(char.name)}</b> [{r_emoji}]\n"
-        f"🆔 <b>ID:</b> #{char.id}\n"
-        f"📺 <b>Anime:</b> {escape_html(char.anime)}\n"
-        f"{r_emoji} <b>Rarity:</b> {r_emoji} {char.rarity}\n"
-        f"📦 <b>Copies Owned:</b> ×{u_cnt}"
+        + format_blockquote(
+            f"🌟 <b>Name:</b> {escape_html(char.name)}\n"
+            f"🆔 <b>ID:</b> #{char.id}\n"
+            f"📺 <b>Anime:</b> {escape_html(char.anime)}\n"
+            f"🎬 <b>Rarity:</b> {r_emoji} {char.rarity}\n"
+            f"📦 <b>Copies Owned:</b> ×{u_cnt}"
+        )
     )
 
     media_url = char.image_url if char.image_url else DEFAULT_CHAR_PHOTO
@@ -582,11 +585,13 @@ async def cmd_check(message: Message, db: AsyncSession):
 
     r_emoji = get_rarity_emoji(character.rarity)
     card = (
-        f"👾 <b>Character Info</b>\n"
-        f"🆔 <b>ID:</b> {character.id}\n"
-        f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
-        f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
-        f"{r_emoji} <b>Rarity:</b> {r_emoji} {character.rarity}"
+        f"👾 <b>Character Info</b>\n\n"
+        + format_blockquote(
+            f"🆔 <b>ID:</b> {character.id}\n"
+            f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
+            f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"🎬 <b>Rarity:</b> {r_emoji} {character.rarity}"
+        )
     )
 
     photo_to_send = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
@@ -615,6 +620,7 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
         .join(UserCharacter, UserCharacter.user_id == User.user_id)
         .where(UserCharacter.character_id == char_id)
         .group_by(User.user_id)
+        .order_by(func.count(UserCharacter.id).desc())
         .limit(15)
     )
     res = await db.execute(stmt)
@@ -628,25 +634,55 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
         return
 
     lines = []
-    for f_name, u_id, cnt in rows:
-        lines.append(f"• <a href=\"tg://user?id={u_id}\">{escape_html(f_name)}</a> ×{cnt}")
+    for idx, (f_name, u_id, cnt) in enumerate(rows, 1):
+        lines.append(f"{idx}. {escape_html(f_name)} ×{cnt}")
 
-    r_emoji = get_rarity_emoji(character.rarity)
     text = (
-        f"👾 <b>Character Info</b>\n"
-        f"🆔 <b>ID:</b> {character.id}\n"
-        f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
-        f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
-        f"{r_emoji} <b>Rarity:</b> {r_emoji} {character.rarity}\n\n"
-        f"👥 <b>PLAYERS WHO OWN THIS CHARACTER</b>\n"
+        f"🎦 <b>Who has this character :</b>\n"
         + format_blockquote("\n".join(lines))
     )
 
+    kb = get_check_back_keyboard(char_id)
     try:
-        await callback.message.edit_caption(caption=text, parse_mode="HTML", reply_markup=None)
+        await callback.message.edit_caption(caption=text, parse_mode="HTML", reply_markup=kb)
     except Exception:
         try:
-            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=None)
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+@router.callback_query(F.data.startswith("check_back_"))
+async def cb_check_back(callback: CallbackQuery, db: AsyncSession):
+    char_id = int(callback.data.split("_")[2])
+    
+    char_stmt = select(Character).where(Character.id == char_id)
+    char_res = await db.execute(char_stmt)
+    character = char_res.scalar_one_or_none()
+    if not character:
+        await callback.answer("❌ Character not found.", show_alert=True)
+        return
+
+    r_emoji = get_rarity_emoji(character.rarity)
+    card = (
+        f"👾 <b>Character Info</b>\n\n"
+        + format_blockquote(
+            f"🆔 <b>ID:</b> {character.id}\n"
+            f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
+            f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"🎬 <b>Rarity:</b> {r_emoji} {character.rarity}"
+        )
+    )
+    
+    kb = get_check_character_keyboard(character.id)
+    try:
+        await callback.message.edit_caption(caption=card, parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        try:
+            await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
     try:
