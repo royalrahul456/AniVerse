@@ -7,6 +7,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BotCommand
 from sqlalchemy import select
 
 import config
@@ -146,6 +147,26 @@ async def main():
 
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
+
+    # Set bot commands in Telegram menu
+    commands = [
+        BotCommand(command="start", description="Welcome & Main Menu Hub"),
+        BotCommand(command="help", description="Guide & Help Center"),
+        BotCommand(command="profile", description="View trainer profile card"),
+        BotCommand(command="harem", description="View your character collection"),
+        BotCommand(command="leaderboard", description="Global trainer rankings"),
+        BotCommand(command="check", description="Check character details & owners"),
+        BotCommand(command="search", description="Search character database"),
+        BotCommand(command="anime", description="Filter characters by anime title"),
+        BotCommand(command="claim", description="Claim a free daily character"),
+        BotCommand(command="games", description="Open Games Center"),
+        BotCommand(command="shop", description="Buy new profile themes")
+    ]
+    try:
+        await bot.set_my_commands(commands)
+        logger.info("Bot commands registered successfully in Telegram menu.")
+    except Exception as e:
+        logger.error(f"Failed to register bot commands: {e}")
 
     db_middleware = DbSessionMiddleware()
     join_middleware = JoinCheckMiddleware()
