@@ -197,6 +197,11 @@ async def main():
         BotCommand(command="scramble", description="Play word scramble puzzle"),
         BotCommand(command="spawnchance", description="View wild character spawn chances"),
         BotCommand(command="editspawnchance", description="Edit spawn weights (Admin only)"),
+        BotCommand(command="pay", description="Pay coins to another trainer"),
+        BotCommand(command="balance", description="Check your coin balance"),
+        BotCommand(command="chk", description="Quick balance check"),
+        BotCommand(command="gift", description="Gift a character to another trainer"),
+        BotCommand(command="editchar", description="Edit character details (Admin only)"),
         BotCommand(command="shop", description="Buy new profile themes")
     ]
     try:

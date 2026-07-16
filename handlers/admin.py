@@ -346,6 +346,11 @@ class AddCharStates(StatesGroup):
     waiting_for_rarity = State()
     waiting_for_media = State()
 
+class EditCharStates(StatesGroup):
+    waiting_for_new_name = State()
+    waiting_for_new_anime = State()
+    waiting_for_new_rarity = State()
+    waiting_for_new_media = State()
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -353,22 +358,40 @@ async def cmd_cancel(message: Message, state: FSMContext):
         return
     await state.clear()
     await message.reply("❌ Character registration process has been cancelled.")
-
 @router.message(Command("addchar"))
-async def cmd_addchar(message: Message, state: FSMContext):
+async def cmd_addchar(message: Message, state: FSMContext, db: AsyncSession):
     if not is_admin(message):
         await message.reply("⛔ Only bot owners can add characters!")
         return
 
+    parts = message.text.split(maxsplit=1)
+    target_id = None
+    if len(parts) > 1:
+        arg = parts[1].strip()
+        if arg.isdigit():
+            target_id = int(arg)
+            stmt = select(Character).where(Character.id == target_id)
+            res = await db.execute(stmt)
+            existing = res.scalar_one_or_none()
+            if existing:
+                await message.reply(f"❌ A character with ID <b>{target_id}</b> already exists!", parse_mode="HTML")
+                return
+
+    await state.clear()
     await state.set_state(AddCharStates.waiting_for_name)
+    if target_id is not None:
+        await state.update_data(target_id=target_id)
+        msg_id_text = f" at ID <b>#{target_id}</b>"
+    else:
+        msg_id_text = ""
+
     await message.reply(
         "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
-        "📝 <b>[Step 1/4] Character Name</b>\n\n"
+        f"📝 <b>[Step 1/4] Character Name</b>{msg_id_text}\n\n"
         "Please type the name of the character (or send `/cancel` to abort):",
         parse_mode="HTML"
     )
-
 @router.message(AddCharStates.waiting_for_name, F.text)
 async def process_name(message: Message, state: FSMContext):
     if message.text.startswith("/"):
@@ -483,16 +506,30 @@ async def process_media(message: Message, state: FSMContext, db: AsyncSession, b
     anime = data["anime"]
     rarity = data["rarity"]
 
-    # Create character in db
-    character = Character(
-        name=name,
-        anime=anime,
-        rarity=rarity,
-        image_url=file_id
-    )
+    target_id = data.get("target_id")
+    if target_id:
+        existing_stmt = select(Character).where(Character.id == target_id)
+        existing_res = await db.execute(existing_stmt)
+        if existing_res.scalar_one_or_none():
+            await message.reply(f"❌ A character with ID {target_id} was just registered! Aborted.")
+            await state.clear()
+            return
+        character = Character(
+            id=target_id,
+            name=name,
+            anime=anime,
+            rarity=rarity,
+            image_url=file_id
+        )
+    else:
+        character = Character(
+            name=name,
+            anime=anime,
+            rarity=rarity,
+            image_url=file_id
+        )
     db.add(character)
     await db.commit()
-
     await state.clear()
 
     r_emoji = get_rarity_emoji(rarity)
@@ -1031,7 +1068,257 @@ async def cmd_editspawnchance(message: Message, db: AsyncSession):
     rarity_item.weight = weight
     await db.commit()
 
-    await message.reply(
-        f"✅ Spawn chance for <b>{rarity_item.name}</b> has been updated to weight <b>{weight}</b>!",
-        parse_mode="HTML"
+# --- EDIT CHARACTER INTERACTIVE TOOL ---
+
+DEFAULT_CHAR_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
+
+@router.message(Command("editchar", "editcharacter"))
+async def cmd_editchar(message: Message, db: AsyncSession):
+    if not is_admin(message):
+        await message.reply("⛔ Only bot owners can edit characters!")
+        return
+
+    parts = message.text.strip().split()
+    if len(parts) < 2:
+        await message.reply("⚠️ <b>Usage:</b> <code>/editchar &lt;character_id&gt;</code>", parse_mode="HTML")
+        return
+
+    char_id_str = parts[1].strip()
+    if not char_id_str.isdigit():
+        await message.reply("❌ Character ID must be a valid number.")
+        return
+
+    char_id = int(char_id_str)
+    stmt = select(Character).where(Character.id == char_id)
+    res = await db.execute(stmt)
+    character = res.scalar_one_or_none()
+
+    if not character:
+        await message.reply(f"❌ Character ID #{char_id} not found in database.")
+        return
+
+    await send_edit_char_menu(message, character, db, is_callback=False)
+
+async def send_edit_char_menu(message_obj, character: Character, db: AsyncSession, is_callback: bool = False):
+    r_emoji = get_rarity_emoji(character.rarity)
+    card = (
+        "⚙️ <b>EDIT CHARACTER CONSOLE</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        + format_blockquote(
+            f"🆔 <b>ID:</b> #{character.id}\n"
+            f"👤 <b>NAME:</b> {escape_html(character.name)}\n"
+            f"🎦 <b>ANIME:</b> {escape_html(character.anime)}\n"
+            f"{r_emoji} <b>RARITY:</b> {r_emoji} {character.rarity}"
+        )
+        + "\n\nSelect which field you want to edit below:"
     )
+    
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="👤 Edit Name", callback_data=f"edit_name_{character.id}"),
+        InlineKeyboardButton(text="🎦 Edit Anime", callback_data=f"edit_anime_{character.id}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="💎 Edit Rarity", callback_data=f"edit_rarity_{character.id}"),
+        InlineKeyboardButton(text="📸 Edit Media", callback_data=f"edit_media_{character.id}")
+    )
+    builder.row(InlineKeyboardButton(text="🔙 Close Menu", callback_data="close_edit_menu"))
+    
+    photo = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
+    
+    if is_callback:
+        try:
+            await message_obj.edit_caption(caption=card, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            try:
+                await message_obj.edit_text(card, parse_mode="HTML", reply_markup=builder.as_markup())
+            except Exception:
+                pass
+    else:
+        try:
+            await message_obj.reply_photo(photo, caption=card, parse_mode="HTML", reply_markup=builder.as_markup())
+        except Exception:
+            try:
+                await message_obj.reply_video(photo, caption=card, parse_mode="HTML", reply_markup=builder.as_markup())
+            except Exception:
+                await message_obj.reply(card, parse_mode="HTML", reply_markup=builder.as_markup())
+
+@router.callback_query(F.data == "close_edit_menu")
+async def cb_close_edit_menu(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.delete()
+    await callback.answer("Edit menu closed.")
+
+@router.callback_query(F.data.startswith("edit_name_"))
+async def cb_edit_name(callback: CallbackQuery, state: FSMContext):
+    char_id = int(callback.data.split("_")[2])
+    await state.set_state(EditCharStates.waiting_for_new_name)
+    await state.update_data(edit_char_id=char_id, edit_message_id=callback.message.message_id, edit_chat_id=callback.message.chat.id)
+    
+    await callback.message.reply("📝 Please type the **new name** for the character (or send `/cancel` to abort):")
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("edit_anime_"))
+async def cb_edit_anime(callback: CallbackQuery, state: FSMContext):
+    char_id = int(callback.data.split("_")[2])
+    await state.set_state(EditCharStates.waiting_for_new_anime)
+    await state.update_data(edit_char_id=char_id, edit_message_id=callback.message.message_id, edit_chat_id=callback.message.chat.id)
+    
+    await callback.message.reply("📺 Please type the **new anime name** for the character (or send `/cancel` to abort):")
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("edit_rarity_"))
+async def cb_edit_rarity(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    char_id = int(callback.data.split("_")[2])
+    await state.set_state(EditCharStates.waiting_for_new_rarity)
+    await state.update_data(edit_char_id=char_id, edit_message_id=callback.message.message_id, edit_chat_id=callback.message.chat.id)
+    
+    default_rarities = ["Common", "Rare", "Epic", "Legendary", "Mythical"]
+    custom_stmt = select(RarityType)
+    custom_res = await db.execute(custom_stmt)
+    custom_rarities = [r.name.title() for r in custom_res.scalars().all()]
+    all_rarities = list(set(default_rarities + custom_rarities))
+
+    builder = InlineKeyboardBuilder()
+    for r in sorted(all_rarities):
+        emoji = get_rarity_emoji(r)
+        builder.add(InlineKeyboardButton(text=f"{emoji} {r}", callback_data=f"sel_new_rarity_{r.lower()}"))
+    builder.adjust(2)
+
+    await callback.message.reply("💎 Please select a new rarity tier, or type one manually:", reply_markup=builder.as_markup())
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("edit_media_"))
+async def cb_edit_media(callback: CallbackQuery, state: FSMContext):
+    char_id = int(callback.data.split("_")[2])
+    await state.set_state(EditCharStates.waiting_for_new_media)
+    await state.update_data(edit_char_id=char_id, edit_message_id=callback.message.message_id, edit_chat_id=callback.message.chat.id)
+    
+    await callback.message.reply("📸 Please upload/send the **new photo, video, or GIF** for the character:")
+    await callback.answer()
+
+@router.message(EditCharStates.waiting_for_new_name, F.text)
+async def process_edit_name(message: Message, state: FSMContext, db: AsyncSession):
+    if message.text.startswith("/"):
+        if message.text == "/cancel":
+            await state.clear()
+            await message.reply("❌ Edit cancelled.")
+            return
+        await message.reply("⚠️ Invalid name! Please type a new name:")
+        return
+
+    new_name = message.text.strip()
+    data = await state.get_data()
+    char_id = data["edit_char_id"]
+
+    stmt = select(Character).where(Character.id == char_id)
+    res = await db.execute(stmt)
+    character = res.scalar_one_or_none()
+    if character:
+        character.name = new_name
+        await db.commit()
+        await message.reply(f"✅ Character name updated to <b>{escape_html(new_name)}</b>!", parse_mode="HTML")
+        await send_edit_char_menu(message, character, db, is_callback=False)
+    else:
+        await message.reply("❌ Error: Character not found.")
+    await state.clear()
+
+@router.message(EditCharStates.waiting_for_new_anime, F.text)
+async def process_edit_anime(message: Message, state: FSMContext, db: AsyncSession):
+    if message.text.startswith("/"):
+        if message.text == "/cancel":
+            await state.clear()
+            await message.reply("❌ Edit cancelled.")
+            return
+        await message.reply("⚠️ Invalid name! Please type a new anime:")
+        return
+
+    new_anime = message.text.strip()
+    data = await state.get_data()
+    char_id = data["edit_char_id"]
+
+    stmt = select(Character).where(Character.id == char_id)
+    res = await db.execute(stmt)
+    character = res.scalar_one_or_none()
+    if character:
+        character.anime = new_anime
+        await db.commit()
+        await message.reply(f"✅ Character anime updated to <b>{escape_html(new_anime)}</b>!", parse_mode="HTML")
+        await send_edit_char_menu(message, character, db, is_callback=False)
+    else:
+        await message.reply("❌ Error: Character not found.")
+    await state.clear()
+
+@router.callback_query(EditCharStates.waiting_for_new_rarity, F.data.startswith("sel_new_rarity_"))
+async def process_edit_rarity_cb(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    new_rarity = callback.data.replace("sel_new_rarity_", "").title()
+    data = await state.get_data()
+    char_id = data["edit_char_id"]
+
+    stmt = select(Character).where(Character.id == char_id)
+    res = await db.execute(stmt)
+    character = res.scalar_one_or_none()
+    if character:
+        character.rarity = new_rarity
+        await db.commit()
+        await callback.message.reply(f"✅ Character rarity updated to <b>{new_rarity}</b>!", parse_mode="HTML")
+        await send_edit_char_menu(callback.message, character, db, is_callback=False)
+    else:
+        await callback.message.reply("❌ Error: Character not found.")
+    await state.clear()
+    await callback.answer()
+
+@router.message(EditCharStates.waiting_for_new_rarity, F.text)
+async def process_edit_rarity_text(message: Message, state: FSMContext, db: AsyncSession):
+    if message.text.startswith("/"):
+        if message.text == "/cancel":
+            await state.clear()
+            await message.reply("❌ Edit cancelled.")
+            return
+        await message.reply("⚠️ Invalid option! Please select a rarity or type one manually:")
+        return
+
+    new_rarity = message.text.strip().title()
+    data = await state.get_data()
+    char_id = data["edit_char_id"]
+
+    stmt = select(Character).where(Character.id == char_id)
+    res = await db.execute(stmt)
+    character = res.scalar_one_or_none()
+    if character:
+        character.rarity = new_rarity
+        await db.commit()
+        await message.reply(f"✅ Character rarity updated to <b>{new_rarity}</b>!", parse_mode="HTML")
+        await send_edit_char_menu(message, character, db, is_callback=False)
+    else:
+        await message.reply("❌ Error: Character not found.")
+    await state.clear()
+
+@router.message(EditCharStates.waiting_for_new_media, F.photo | F.video | F.animation)
+async def process_edit_media(message: Message, state: FSMContext, db: AsyncSession):
+    file_id = None
+    if message.photo:
+        file_id = message.photo[-1].file_id
+    elif message.video:
+        file_id = message.video.file_id
+    elif message.animation:
+        file_id = message.animation.file_id
+
+    if not file_id:
+        await message.reply("⚠️ Please send a valid photo, video, or GIF!")
+        return
+
+    data = await state.get_data()
+    char_id = data["edit_char_id"]
+
+    stmt = select(Character).where(Character.id == char_id)
+    res = await db.execute(stmt)
+    character = res.scalar_one_or_none()
+    if character:
+        character.image_url = file_id
+        await db.commit()
+        await message.reply("✅ Character media has been updated successfully!", parse_mode="HTML")
+        await send_edit_char_menu(message, character, db, is_callback=False)
+    else:
+        await message.reply("❌ Error: Character not found.")
+    await state.clear()

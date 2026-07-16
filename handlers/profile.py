@@ -1084,3 +1084,233 @@ async def cb_set_theme(callback: CallbackQuery, db: AsyncSession):
 
     cover_media = await get_user_harem_cover(user, db)
     await send_or_edit_harem(callback.message, cover_media, text, builder.as_markup(), is_callback=True)
+
+# --- COINS AND CHARACTER TRANSFER COMMANDS ---
+
+@router.message(Command("pay"))
+async def cmd_pay(message: Message, db: AsyncSession):
+    parts = message.text.strip().split()
+    
+    target_user_id = None
+    target_name = None
+    amount = 0
+    
+    if message.reply_to_message:
+        if len(parts) < 2:
+            await message.reply("⚠️ <b>Usage:</b> Reply to someone with <code>/pay &lt;amount&gt;</code>", parse_mode="HTML")
+            return
+        amount_str = parts[1]
+        if not amount_str.isdigit():
+            await message.reply("❌ Amount must be a valid positive number.")
+            return
+        amount = int(amount_str)
+        target_user_id = message.reply_to_message.from_user.id
+        target_name = message.reply_to_message.from_user.first_name
+    else:
+        if len(parts) < 3:
+            await message.reply("⚠️ <b>Usage:</b> <code>/pay &lt;@username or user_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
+            return
+        target_str = parts[1].strip()
+        amount_str = parts[2].strip()
+        if not amount_str.isdigit():
+            await message.reply("❌ Amount must be a valid positive number.")
+            return
+        amount = int(amount_str)
+        
+        if target_str.isdigit():
+            target_user_id = int(target_str)
+        elif target_str.startswith("@"):
+            username = target_str[1:]
+            stmt = select(User).where(User.username.ilike(username))
+            res = await db.execute(stmt)
+            target_user = res.scalar_one_or_none()
+            if target_user:
+                target_user_id = target_user.user_id
+                target_name = target_user.first_name
+            else:
+                await message.reply(f"❌ Trainer with username <b>{target_str}</b> not found in bot database.", parse_mode="HTML")
+                return
+        else:
+            await message.reply("❌ Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            return
+
+    if amount <= 0:
+        await message.reply("❌ Amount must be greater than 0.")
+        return
+
+    sender_id = message.from_user.id
+    if sender_id == target_user_id:
+        await message.reply("❌ You cannot pay yourself!")
+        return
+
+    sender = await get_or_create_user(db, sender_id, message.from_user.username, message.from_user.first_name)
+    if sender.coins < amount:
+        await message.reply(f"❌ You do not have enough coins! Your balance: <b>{sender.coins:,}</b> Coins.", parse_mode="HTML")
+        return
+
+    target = None
+    if target_user_id:
+        stmt = select(User).where(User.user_id == target_user_id)
+        res = await db.execute(stmt)
+        target = res.scalar_one_or_none()
+
+    if not target:
+        await message.reply("❌ Target trainer not found in bot database.")
+        return
+
+    sender.coins -= amount
+    target.coins += amount
+    await db.commit()
+
+    sender_name = escape_html(message.from_user.first_name)
+    target_first_name = escape_html(target.first_name)
+    
+    text = (
+        "💸 <b>COIN TRANSFER SUCCESSFUL!</b>\n\n"
+        + format_blockquote(
+            f"👤 <b>Sender:</b> {sender_name}\n"
+            f"👤 <b>Recipient:</b> {target_first_name}\n"
+            f"💰 <b>Amount:</b> {amount:,} Coins\n\n"
+            f"💳 <b>Your New Balance:</b> {sender.coins:,} Coins"
+        )
+    )
+    await message.reply(text, parse_mode="HTML")
+
+@router.message(Command("chk", "balance"))
+async def cmd_balance(message: Message, db: AsyncSession):
+    target_user_id = message.from_user.id
+    is_self = True
+    
+    if message.reply_to_message:
+        target_user_id = message.reply_to_message.from_user.id
+        is_self = False
+    else:
+        parts = message.text.strip().split()
+        if len(parts) > 1:
+            target_str = parts[1].strip()
+            if target_str.isdigit():
+                target_user_id = int(target_str)
+                is_self = (target_user_id == message.from_user.id)
+            elif target_str.startswith("@"):
+                username = target_str[1:]
+                stmt = select(User).where(User.username.ilike(username))
+                res = await db.execute(stmt)
+                user_obj = res.scalar_one_or_none()
+                if user_obj:
+                    target_user_id = user_obj.user_id
+                    is_self = (target_user_id == message.from_user.id)
+                else:
+                    await message.reply(f"❌ Trainer <b>{target_str}</b> not found.", parse_mode="HTML")
+                    return
+
+    user = await get_or_create_user(db, target_user_id, None, None)
+    if not user:
+        await message.reply("❌ Trainer not found in database.")
+        return
+
+    name = "Your" if is_self else f"<b>{escape_html(user.first_name)}</b>'s"
+    text = (
+        f"💳 <b>BALANCE INQUIRY</b>\n\n"
+        + format_blockquote(
+            f"👤 <b>Trainer:</b> {escape_html(user.first_name)}\n"
+            f"💰 <b>Coins:</b> {user.coins:,} Coins\n"
+            f"🏆 <b>Total Catches:</b> {user.total_catches:,} characters"
+        )
+    )
+    await message.reply(text, parse_mode="HTML")
+
+@router.message(Command("gift"))
+async def cmd_gift(message: Message, db: AsyncSession):
+    parts = message.text.strip().split()
+    
+    target_user_id = None
+    char_id = None
+    
+    if message.reply_to_message:
+        if len(parts) < 2:
+            await message.reply("⚠️ <b>Usage:</b> Reply to someone with <code>/gift &lt;character_id&gt;</code>", parse_mode="HTML")
+            return
+        char_str = parts[1]
+        if not char_str.isdigit():
+            await message.reply("❌ Character ID must be a number.")
+            return
+        char_id = int(char_str)
+        target_user_id = message.reply_to_message.from_user.id
+    else:
+        if len(parts) < 3:
+            await message.reply("⚠️ <b>Usage:</b> <code>/gift &lt;@username or user_id&gt; &lt;character_id&gt;</code>", parse_mode="HTML")
+            return
+        target_str = parts[1].strip()
+        char_str = parts[2].strip()
+        if not char_str.isdigit():
+            await message.reply("❌ Character ID must be a number.")
+            return
+        char_id = int(char_str)
+        
+        if target_str.isdigit():
+            target_user_id = int(target_str)
+        elif target_str.startswith("@"):
+            username = target_str[1:]
+            stmt = select(User).where(User.username.ilike(username))
+            res = await db.execute(stmt)
+            target_user = res.scalar_one_or_none()
+            if target_user:
+                target_user_id = target_user.user_id
+            else:
+                await message.reply(f"❌ Trainer with username <b>{target_str}</b> not found.", parse_mode="HTML")
+                return
+        else:
+            await message.reply("❌ Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            return
+
+    sender_id = message.from_user.id
+    if sender_id == target_user_id:
+        await message.reply("❌ You cannot gift a character to yourself!")
+        return
+
+    char_stmt = select(Character).where(Character.id == char_id)
+    char_res = await db.execute(char_stmt)
+    character = char_res.scalar_one_or_none()
+    if not character:
+        await message.reply(f"❌ Character ID #{char_id} not found in database.")
+        return
+
+    uc_stmt = select(UserCharacter).where(UserCharacter.user_id == sender_id, UserCharacter.character_id == char_id).limit(1)
+    uc_res = await db.execute(uc_stmt)
+    sender_uc = uc_res.scalar_one_or_none()
+    
+    if not sender_uc:
+        await message.reply(f"❌ You do not own character <b>{escape_html(character.name)}</b>!", parse_mode="HTML")
+        return
+
+    target_user = await get_or_create_user(db, target_user_id, None, None)
+    if not target_user:
+        await message.reply("❌ Target trainer not found.")
+        return
+
+    sender_uc.user_id = target_user_id
+    await db.commit()
+
+    r_emoji = get_rarity_emoji(character.rarity)
+    sender_name = escape_html(message.from_user.first_name)
+    target_name = escape_html(target_user.first_name)
+    
+    text = (
+        "🎁 <b>CHARACTER GIFTED SUCCESSFUL!</b>\n\n"
+        + format_blockquote(
+            f"👤 <b>From:</b> {sender_name}\n"
+            f"👤 <b>To:</b> {target_name}\n\n"
+            f"👾 <b>Character:</b> {escape_html(character.name)}\n"
+            f"💎 <b>Rarity:</b> {r_emoji} {character.rarity}\n"
+            f"🆔 <b>ID:</b> #{character.id}"
+        )
+    )
+    
+    photo = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
+    try:
+        await message.reply_photo(photo, caption=text, parse_mode="HTML")
+    except Exception:
+        try:
+            await message.reply_video(photo, caption=text, parse_mode="HTML")
+        except Exception:
+            await message.reply(text, parse_mode="HTML")
