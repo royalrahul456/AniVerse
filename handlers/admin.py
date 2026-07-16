@@ -1030,8 +1030,7 @@ async def cmd_spawnchance(message: Message, db: AsyncSession):
         pct = (r.weight / total_weight) * 100 if total_weight > 0 else 0
         from utils.formatters import get_rarity_emoji
         r_emoji = get_rarity_emoji(r.name)
-        lines.append(f"{r_emoji} <b>{r.name}</b>: {r.weight} weight ({pct:.2f}%)")
-        
+        lines.append(f"{r_emoji} <b>{r.name}</b>: <b>{pct:.2f}%</b>")        
     text = (
         "🎯 <b>WILD CHARACTER SPAWN CHANCES</b>\n\n"
         + format_blockquote("\n".join(lines))
@@ -1612,3 +1611,78 @@ async def cmd_adminlist(message: Message, db: AsyncSession):
         text += format_blockquote("No junior admins registered.") + "\n"
 
     await message.reply(text, parse_mode="HTML")
+
+# --- OWNER ONLY RARITY EDIT & DELETE COMMANDS ---
+
+@router.message(Command("delrarity", "deleterarity"))
+async def cmd_delrarity(message: Message, db: AsyncSession):
+    if not is_owner(message):
+        await message.reply("⛔ Only bot owners can delete custom rarities!")
+        return
+
+    parts = message.text.strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply(
+            "⚠️ <b>Usage:</b>\n"
+            "👉 <code>/delrarity &lt;rarity_name&gt;</code>\n\n"
+            "Example: <code>/delrarity Divine</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    rarity_name = parts[1].strip()
+    stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
+    res = await db.execute(stmt)
+    rarity_item = res.scalar_one_or_none()
+
+    if not rarity_item:
+        await message.reply(f"❌ Rarity tier '<b>{escape_html(rarity_name)}</b>' not found in database.", parse_mode="HTML")
+        return
+
+    actual_name = rarity_item.name
+    await db.delete(rarity_item)
+    await db.commit()
+
+    RARITY_CACHE.pop(actual_name.title(), None)
+
+    await message.reply(f"✅ Custom rarity tier '<b>{escape_html(actual_name)}</b>' has been deleted successfully and cache cleared!", parse_mode="HTML")
+
+@router.message(Command("editrarityemoji", "editrarity"))
+async def cmd_editrarityemoji(message: Message, db: AsyncSession):
+    if not is_owner(message):
+        await message.reply("⛔ Only bot owners can edit custom rarity emojis!")
+        return
+
+    parts = message.text.strip().split(maxsplit=2)
+    if len(parts) < 3:
+        await message.reply(
+            "⚠️ <b>Usage:</b>\n"
+            "👉 <code>/editrarityemoji &lt;rarity_name&gt; &lt;new_emoji&gt;</code>\n\n"
+            "Example: <code>/editrarityemoji Divine 💌</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    rarity_name = parts[1].strip()
+    new_emoji = parts[2].strip()
+
+    stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
+    res = await db.execute(stmt)
+    rarity_item = res.scalar_one_or_none()
+
+    if not rarity_item:
+        await message.reply(f"❌ Rarity tier '<b>{escape_html(rarity_name)}</b>' not found in database. Add it first using /addrarity.", parse_mode="HTML")
+        return
+
+    old_emoji = rarity_item.emoji
+    rarity_item.emoji = new_emoji
+    await db.commit()
+
+    RARITY_CACHE[rarity_item.name.title()] = {"emoji": new_emoji}
+
+    await message.reply(
+        f"✅ Emoji updated for <b>{escape_html(rarity_item.name)}</b> rarity!\n"
+        f"• <b>Old Emoji:</b> {old_emoji}\n"
+        f"• <b>New Emoji:</b> {new_emoji}",
+        parse_mode="HTML"
+    )

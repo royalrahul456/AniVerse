@@ -205,6 +205,8 @@ async def main():
         BotCommand(command="promote", description="Promote user to admin (Owner only)"),
         BotCommand(command="demote", description="Demote user from admin (Owner only)"),
         BotCommand(command="adminlist", description="List bot admin staff"),
+        BotCommand(command="delrarity", description="Delete custom rarity tier (Owner only)"),
+        BotCommand(command="editrarityemoji", description="Edit custom rarity emoji (Owner only)"),
         BotCommand(command="shop", description="Buy new profile themes")
     ]
     try:
@@ -213,8 +215,7 @@ async def main():
     except Exception as e:
         logger.error(f"Failed to register bot commands: {e}")
     db_middleware = DbSessionMiddleware()
-    join_middleware = JoinCheckMiddleware()
-    
+    join_middleware = JoinCheckMiddleware()    
     dp.message.middleware(db_middleware)
     dp.message.middleware(join_middleware)
     
