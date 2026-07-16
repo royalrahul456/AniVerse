@@ -133,6 +133,9 @@ async def cb_dm_help(callback: CallbackQuery):
         "├─➩ /xo &lt;reply&gt; — Play Tic-Tac-Toe\n"
         "╰───────────────────────────╯\n\n"
         "╭───「 🤝 Commerce & Deals 」───╮\n"
+        "├─➩ /pay &lt;user&gt; &lt;amount&gt; — Send coins\n"
+        "├─➩ /balance — Check coin balance\n"
+        "├─➩ /gift &lt;user&gt; &lt;id&gt; — Gift character\n"
         "├─➩ /shop — Buy profile themes\n"
         "├─➩ /trade &lt;your_id&gt; &lt;their_id&gt;\n"
         "├─➩ /redeem &lt;code&gt; — Claim promo code\n"
@@ -140,8 +143,7 @@ async def cb_dm_help(callback: CallbackQuery):
         "├─➩ /bid &lt;auc_id&gt; &lt;amount&gt; — Bid on active\n"
         "├─➩ /cancelauction &lt;auc_id&gt;\n"
         "├─➩ /auctions — View active/queue\n"
-        "╰───────────────────────────╯\n\n"
-        "📌 <i>Keep chatting in group chats to trigger wild character spawns, and type /guess &lt;name&gt; to collect them!</i>"
+        "╰───────────────────────────╯\n\n"        "📌 <i>Keep chatting in group chats to trigger wild character spawns, and type /guess &lt;name&gt; to collect them!</i>"
         + (f"\n\n👑 <b>Owner:</b> Since you are a bot owner, type /ownerhelp to see creator tools!" if is_admin else "")
     )
     await send_or_edit_start(callback.message, get_cover_media("help"), text, get_back_to_hub_keyboard(), is_callback=True)
@@ -174,6 +176,9 @@ async def cmd_help(message: Message):
         "├─➩ /xo &lt;reply&gt; — Play Tic-Tac-Toe\n"
         "╰───────────────────────────╯\n\n"
         "╭───「 🤝 Commerce & Deals 」───╮\n"
+        "├─➩ /pay &lt;user&gt; &lt;amount&gt; — Send coins\n"
+        "├─➩ /balance — Check coin balance\n"
+        "├─➩ /gift &lt;user&gt; &lt;id&gt; — Gift character\n"
         "├─➩ /shop — Buy profile themes\n"
         "├─➩ /trade &lt;your_id&gt; &lt;their_id&gt;\n"
         "├─➩ /redeem &lt;code&gt; — Claim promo code\n"
@@ -181,8 +186,7 @@ async def cmd_help(message: Message):
         "├─➩ /bid &lt;auc_id&gt; &lt;amount&gt; — Bid on active\n"
         "├─➩ /cancelauction &lt;auc_id&gt;\n"
         "├─➩ /auctions — View active/queue\n"
-        "╰───────────────────────────╯\n\n"
-        "📌 <i>Keep chatting in group chats to trigger wild character spawns, and type /guess &lt;name&gt; to collect them!</i>"
+        "╰───────────────────────────╯\n\n"        "📌 <i>Keep chatting in group chats to trigger wild character spawns, and type /guess &lt;name&gt; to collect them!</i>"
         + (f"\n\n👑 <b>Owner:</b> Since you are a bot owner, type /ownerhelp to see creator tools!" if is_admin else "")
     )
     
