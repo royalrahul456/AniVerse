@@ -9,7 +9,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 import config
-from database.models import User, Character, UserCharacter, GroupSettings, RarityType
+from database.models import User, Character, UserCharacter, GroupSettings, RarityType, BotAdmin
 from utils.formatters import format_blockquote, get_rarity_emoji, escape_html, RARITY_CACHE
 from utils.settings import set_cover_media, get_cover_media
 from keyboards.inline import get_back_to_hub_keyboard
@@ -21,22 +21,34 @@ router = Router()
 DEFAULT_FALLBACK_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 pending_user_media = {}
 
-def is_admin(message: Message) -> bool:
+def is_owner(message: Message) -> bool:
     if message.from_user and message.from_user.id in config.ADMIN_IDS:
         return True
     if message.sender_chat and message.sender_chat.id in config.ADMIN_IDS:
         return True
     return False
 
+async def is_admin_id(user_id: int, db: AsyncSession) -> bool:
+    if user_id in config.ADMIN_IDS:
+        return True
+    stmt = select(BotAdmin).where(BotAdmin.user_id == user_id)
+    res = await db.execute(stmt)
+    return res.scalar_one_or_none() is not None
+
+async def is_admin(message: Message, db: AsyncSession) -> bool:
+    if is_owner(message):
+        return True
+    if message.from_user:
+        return await is_admin_id(message.from_user.id, db)
+    return False
+
 class SetCoverStates(StatesGroup):
     waiting_for_media = State()
-
 @router.message(Command("setcover"))
 async def cmd_setcover(message: Message, state: FSMContext):
-    if not is_admin(message):
+    if not is_owner(message):
         await message.reply("⛔ Only bot owners can configure cover media!")
         return
-
     # Check if they already provided media directly in the message/reply
     media_value = None
     if message.photo:
@@ -141,10 +153,9 @@ async def process_setcover_media(message: Message, state: FSMContext):
 
 @router.message(Command("give", "giv", "givechar", "givecoins"))
 async def cmd_give(message: Message, db: AsyncSession):
-    if not is_admin(message):
+    if not is_owner(message):
         await message.reply(f"⛔ Only bot owners can use give commands! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
         return
-
     text = message.text.strip()
     cmd_token = text.split()[0].lower()
     raw_args = text[len(cmd_token):].strip()
@@ -244,10 +255,9 @@ async def cmd_give(message: Message, db: AsyncSession):
 
 @router.message(Command("addrarity"))
 async def cmd_addrarity(message: Message, db: AsyncSession):
-    if not is_admin(message):
-        await message.answer("⛔ Only bot owners can add custom rarity types!")
+    if not await is_admin(message, db):
+        await message.answer("⛔ Only bot owners and admins can add custom rarity types!")
         return
-
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         await message.answer(
@@ -295,8 +305,8 @@ async def cmd_addrarity(message: Message, db: AsyncSession):
 
 @router.message(Command("addtochance", "addchance"))
 async def cmd_addtochance(message: Message, db: AsyncSession):
-    if not is_admin(message):
-        await message.answer("⛔ Only bot owners can manage spawn chance!")
+    if not await is_admin(message, db):
+        await message.answer("⛔ Only bot owners and admins can manage spawn chance!")
         return
 
     parts = message.text.split(maxsplit=1)
@@ -320,8 +330,8 @@ async def cmd_addtochance(message: Message, db: AsyncSession):
 
 @router.message(Command("removefromchance", "remchance", "delchance"))
 async def cmd_removefromchance(message: Message, db: AsyncSession):
-    if not is_admin(message):
-        await message.answer("⛔ Only bot owners can manage spawn chance!")
+    if not await is_admin(message, db):
+        await message.answer("⛔ Only bot owners and admins can manage spawn chance!")
         return
 
     parts = message.text.split(maxsplit=1)
@@ -360,10 +370,9 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await message.reply("❌ Character registration process has been cancelled.")
 @router.message(Command("addchar"))
 async def cmd_addchar(message: Message, state: FSMContext, db: AsyncSession):
-    if not is_admin(message):
-        await message.reply("⛔ Only bot owners can add characters!")
+    if not await is_admin(message, db):
+        await message.reply("⛔ Only bot owners and admins can add characters!")
         return
-
     parts = message.text.split(maxsplit=1)
     target_id = None
     if len(parts) > 1:
@@ -579,12 +588,11 @@ async def process_media(message: Message, state: FSMContext, db: AsyncSession, b
             f"🆔 <b>ID</b>: #{character.id:03d}\n"
             f"📛 <b>Name</b>: {escape_html(character.name)}\n"
             f"📺 <b>Anime</b>: {escape_html(character.anime)}\n"
-            f"💎 <b>Rarity</b>: {character.rarity}\n"
+            f"💎 <b>Rarity</b>: {r_emoji} {character.rarity}\n"
             f"🖼️ <b>Image</b>: {img_check}\n"
             f"🎥 <b>Video</b>: {vid_check}\n"
             f"👤 <b>By</b>: {escape_html(by_user)}\n"
-            f"⌛️ <b>Time</b>: {time_str}"
-        )
+            f"⌛️ <b>Time</b>: {time_str}"        )
     )
 
     try:
@@ -599,10 +607,9 @@ async def process_media(message: Message, state: FSMContext, db: AsyncSession, b
 
 @router.message(Command("setimg", "updateimg", "setphoto"))
 async def cmd_setimg(message: Message, db: AsyncSession):
-    if not is_admin(message):
-        await message.answer(f"⛔ Only bot owners can use setimg! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
+    if not await is_admin(message, db):
+        await message.answer(f"⛔ Only bot owners and admins can use setimg! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
         return
-
     parts = message.text.split()[1:]
     reply = message.reply_to_message
     file_id = None
@@ -680,10 +687,9 @@ async def cmd_setimg(message: Message, db: AsyncSession):
 
 @router.message(Command("deletechar", "delchar", "removechar"))
 async def cmd_deletechar(message: Message, db: AsyncSession):
-    if not is_admin(message):
-        await message.answer(f"⛔ Only bot owners can delete characters! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
+    if not await is_admin(message, db):
+        await message.answer(f"⛔ Only bot owners and admins can delete characters! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
         return
-
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         await message.reply("⚠️ <b>Usage:</b> <code>/deletechar &lt;character_id or name&gt;</code>", parse_mode="HTML")
@@ -723,10 +729,9 @@ async def cmd_deletechar(message: Message, db: AsyncSession):
 
 @router.message(Command("setrarity"))
 async def cmd_setrarity(message: Message, db: AsyncSession):
-    if not is_admin(message):
-        await message.answer(f"⛔ Only bot owners can set rarity! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
-        return
-    
+    if not await is_admin(message, db):
+        await message.answer(f"⛔ Only bot owners and admins can set rarity! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
+        return    
     parts = message.text.split(maxsplit=2)
     if len(parts) < 3:
         await message.answer("⚠️ <b>Usage:</b> <code>/setrarity &lt;character_id&gt; &lt;new_rarity&gt;</code>", parse_mode="HTML")
@@ -751,10 +756,9 @@ async def cmd_setrarity(message: Message, db: AsyncSession):
 
 @router.message(Command("spawn"))
 async def cmd_admin_spawn(message: Message, db: AsyncSession, bot):
-    if not is_admin(message):
-        await message.answer(f"⛔ Only bot owners can spawn! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
-        return
-    
+    if not await is_admin(message, db):
+        await message.answer(f"⛔ Only bot owners and admins can spawn! (Your ID: <code>{message.from_user.id if message.from_user else 'Unknown'}</code>)", parse_mode="HTML")
+        return    
     parts = message.text.split(maxsplit=1)
     rarity_arg = parts[1].strip() if len(parts) > 1 else None
 
@@ -808,10 +812,9 @@ async def cb_admin_tools(callback: CallbackQuery):
 
 @router.message(Command("addpremium"))
 async def cmd_addpremium(message: Message, db: AsyncSession):
-    if not is_admin(message):
+    if not is_owner(message):
         await message.reply("⛔ Only bot owners can manage premium status.")
         return
-
     text = message.text.strip()
     parts = text.split(maxsplit=2)
     
@@ -849,10 +852,9 @@ async def cmd_addpremium(message: Message, db: AsyncSession):
 
 @router.message(Command("settag"))
 async def cmd_settag(message: Message, db: AsyncSession):
-    if not is_admin(message):
-        await message.reply("⛔ Only bot owners can set player tags.")
+    if not await is_admin(message, db):
+        await message.reply("⛔ Only bot owners and admins can set player tags.")
         return
-
     text = message.text.strip()
     parts = text.split(maxsplit=2)
 
@@ -890,10 +892,9 @@ async def cmd_settag(message: Message, db: AsyncSession):
 
 @router.message(Command("removepremium", "delpremium"))
 async def cmd_removepremium(message: Message, db: AsyncSession):
-    if not is_admin(message):
+    if not is_owner(message):
         await message.reply("⛔ Only bot owners can manage premium status.")
         return
-
     text = message.text.strip()
     parts = text.split(maxsplit=1)
 
@@ -914,40 +915,48 @@ async def cmd_removepremium(message: Message, db: AsyncSession):
 
     await message.reply(f"❌ <b>Premium status revoked</b> for user ID {target_id}.", parse_mode="HTML")
 
-@router.message(Command("ownerhelp", "owner"))
-async def cmd_ownerhelp(message: Message):
-    if not is_admin(message):
+@router.message(Command("ownerhelp", "owner", "adminhelp", "admin"))
+async def cmd_ownerhelp(message: Message, db: AsyncSession):
+    if not await is_admin(message, db):
         return
-
+    is_owner_user = is_owner(message)
+    console_title = "👑 AniVerse Owner Console" if is_owner_user else "⚙️ AniVerse Admin Console"
+    
     card = (
-        "╭───「 👑 AniVerse Owner Console 」───╮\n"
+        f"╭───「 {console_title} 」───╮\n"
         "│\n"
-        f"│  Welcome Creator, <b>{escape_html(message.from_user.first_name)}</b>!\n"
+        f"│  Welcome, <b>{escape_html(message.from_user.first_name)}</b>!\n"
         "│\n"
-        "│  🔧 <b>Management Commands:</b>\n"
-        "│  ├─➩ <code>/stats</code> — Server stats & DB info\n"
+        "│  ⚡ <b>ADMIN COMMANDS (You can use these):</b>\n"
+        "│  ├─➩ <code>/stats</code> — View bot stats\n"
         "│  ├─➩ <code>/spawn</code> — Force spawn wild character\n"
-        "│  ├─➩ <code>/setcover &lt;mode&gt;</code> — Set covers (start, xo, dex)\n"
-        "│  │\n"
-        "│  🎴 <b>Character Editing:</b>\n"
         "│  ├─➩ <code>/addchar &lt;details&gt;</code> — Create character\n"
+        "│  ├─➩ <code>/editchar &lt;id&gt;</code> — Edit name/anime/rarity/media\n"
         "│  ├─➩ <code>/deletechar &lt;id&gt;</code> — Delete character\n"
-        "│  ├─➩ <code>/setimg &lt;id&gt; &lt;url&gt;</code> — Update photo\n"
+        "│  ├─➩ <code>/setimg &lt;id&gt;</code> — Update character media\n"
         "│  ├─➩ <code>/setrarity &lt;id&gt; &lt;rarity&gt;</code> — Update rarity\n"
-        "│  ├─➩ <code>/settag &lt;id&gt; &lt;tag&gt;</code> — Update tag\n"
-        "│  │\n"
-        "│  💰 <b>Player & Wager controls:</b>\n"
-        "│  ├─➩ <code>/give &lt;user&gt; &lt;amount/char&gt;</code> — Give coins/chars\n"
-        "│  ├─➩ <code>/addpremium &lt;user&gt;</code> — Grant VIP status\n"
-        "│  ├─➩ <code>/removepremium &lt;user&gt;</code> — Revoke VIP status\n"
-        "│  │\n"
-        "│  📈 <b>Database Config:</b>\n"
-        "│  ├─➩ <code>/addrarity &lt;rarity&gt; &lt;chance&gt;</code>\n"
-        "│  ├─➩ <code>/addchance &lt;id&gt; &lt;chance&gt;</code>\n"
-        "│  \n"
-        "╰──────────────────────────╯"
+        "│  ├─➩ <code>/settag &lt;id&gt; &lt;tag&gt;</code> — Update player tag\n"
+        "│  ├─➩ <code>/addrarity &lt;name&gt; | &lt;emoji&gt;</code> — Add new rarity\n"
+        "│  ├─➩ <code>/addtochance &lt;rarity&gt;</code> — Enable wild spawn\n"
+        "│  ├─➩ <code>/removefromchance &lt;rarity&gt;</code> — Disable spawn\n"
+        "│  ├─➩ <code>/spawnchance</code> — View spawn percentages\n"
+        "│  ├─➩ <code>/editspawnchance &lt;rarity&gt; &lt;weight&gt;</code>\n"
+        "│  ├─➩ <code>/adminlist</code> — View all active admins\n"
     )
-
+    
+    if is_owner_user:
+        card += (
+            "│\n"
+            "│  👑 <b>OWNER ONLY COMMANDS:</b>\n"
+            "│  ├─➩ <code>/promote &lt;user&gt; &lt;role&gt;</code> — Grant admin\n"
+            "│  ├─➩ <code>/demote &lt;user&gt;</code> — Revoke admin role\n"
+            "│  ├─➩ <code>/setcover &lt;mode&gt;</code> — Set covers (start, xo, dex)\n"
+            "│  ├─➩ <code>/give &lt;user&gt; &lt;amount/char&gt;</code> — Give coins/chars\n"
+            "│  ├─➩ <code>/addpremium &lt;user&gt;</code> — Grant VIP status\n"
+            "│  ├─➩ <code>/removepremium &lt;user&gt;</code> — Revoke VIP status\n"
+        )
+        
+    card += "│  \n╰──────────────────────────╯"
     is_group = message.chat.type != "private"
     builder = InlineKeyboardBuilder()
     if is_group:
@@ -1210,15 +1219,17 @@ async def process_edit_name(message: Message, state: FSMContext, db: AsyncSessio
     new_name = message.text.strip()
     data = await state.get_data()
     char_id = data["edit_char_id"]
-
     stmt = select(Character).where(Character.id == char_id)
     res = await db.execute(stmt)
     character = res.scalar_one_or_none()
     if character:
+        old_name = character.name
         character.name = new_name
         await db.commit()
         await message.reply(f"✅ Character name updated to <b>{escape_html(new_name)}</b>!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
+        by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+        await send_character_edit_announcement(message.bot, character, "Name", old_name, new_name, by_user)
     else:
         await message.reply("❌ Error: Character not found.")
     await state.clear()
@@ -1241,10 +1252,13 @@ async def process_edit_anime(message: Message, state: FSMContext, db: AsyncSessi
     res = await db.execute(stmt)
     character = res.scalar_one_or_none()
     if character:
+        old_anime = character.anime
         character.anime = new_anime
         await db.commit()
         await message.reply(f"✅ Character anime updated to <b>{escape_html(new_anime)}</b>!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
+        by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+        await send_character_edit_announcement(message.bot, character, "Anime", old_anime, new_anime, by_user)
     else:
         await message.reply("❌ Error: Character not found.")
     await state.clear()
@@ -1259,10 +1273,13 @@ async def process_edit_rarity_cb(callback: CallbackQuery, state: FSMContext, db:
     res = await db.execute(stmt)
     character = res.scalar_one_or_none()
     if character:
+        old_rarity = character.rarity
         character.rarity = new_rarity
         await db.commit()
         await callback.message.reply(f"✅ Character rarity updated to <b>{new_rarity}</b>!", parse_mode="HTML")
         await send_edit_char_menu(callback.message, character, db, is_callback=False)
+        by_user = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
+        await send_character_edit_announcement(callback.bot, character, "Rarity", old_rarity, new_rarity, by_user)
     else:
         await callback.message.reply("❌ Error: Character not found.")
     await state.clear()
@@ -1286,10 +1303,13 @@ async def process_edit_rarity_text(message: Message, state: FSMContext, db: Asyn
     res = await db.execute(stmt)
     character = res.scalar_one_or_none()
     if character:
+        old_rarity = character.rarity
         character.rarity = new_rarity
         await db.commit()
         await message.reply(f"✅ Character rarity updated to <b>{new_rarity}</b>!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
+        by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+        await send_character_edit_announcement(message.bot, character, "Rarity", old_rarity, new_rarity, by_user)
     else:
         await message.reply("❌ Error: Character not found.")
     await state.clear()
@@ -1319,6 +1339,276 @@ async def process_edit_media(message: Message, state: FSMContext, db: AsyncSessi
         await db.commit()
         await message.reply("✅ Character media has been updated successfully!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
+        by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+        await send_character_edit_announcement(message.bot, character, "Media", "Old Media File", "New Media File", by_user)
     else:
         await message.reply("❌ Error: Character not found.")
     await state.clear()
+
+async def send_character_edit_announcement(bot, character: Character, field_name: str, old_val: str, new_val: str, by_user_str: str):
+    db_channel = "@AniVersedatabase"
+    r_emoji = get_rarity_emoji(character.rarity)
+    
+    ist_offset = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now_ist = datetime.datetime.now(tz=ist_offset)
+    time_str = now_ist.strftime("%d %b %Y, %I:%M %p IST")
+    
+    photo = character.image_url if character.image_url else "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
+    
+    if field_name == "Media":
+        announcement_text = (
+            "⚙️ <b>CHARACTER MEDIA UPDATED!</b>\n"
+            + format_blockquote(
+                f"🆔 <b>ID</b>: #{character.id:03d}\n"
+                f"📛 <b>Name</b>: {escape_html(character.name)}\n"
+                f"📺 <b>Anime</b>: {escape_html(character.anime)}\n"
+                f"💎 <b>Rarity</b>: {r_emoji} {character.rarity}\n\n"
+                f"👤 <b>By</b>: {escape_html(by_user_str)}\n"
+                f"⌛️ <b>Time</b>: {time_str}"
+            )
+        )
+    else:
+        announcement_text = (
+            "⚙️ <b>CHARACTER DETAILS EDITED / UPDATED!</b>\n"
+            + format_blockquote(
+                f"🆔 <b>ID</b>: #{character.id:03d}\n"
+                f"📛 <b>Name</b>: {escape_html(character.name)}\n"
+                f"📺 <b>Anime</b>: {escape_html(character.anime)}\n"
+                f"💎 <b>Rarity</b>: {r_emoji} {character.rarity}\n\n"
+                f"📝 <b>Edited Field</b>: {field_name}\n"
+                f"❌ <b>Old Value</b>: {escape_html(old_val)}\n"
+                f"✅ <b>New Value</b>: {escape_html(new_val)}\n\n"
+                f"👤 <b>By</b>: {escape_html(by_user_str)}\n"
+                f"⌛️ <b>Time</b>: {time_str}"
+            )
+        )
+
+    try:
+        try:
+            await bot.send_photo(chat_id=db_channel, photo=photo, caption=announcement_text, parse_mode="HTML")
+        except Exception:
+            try:
+                await bot.send_video(chat_id=db_channel, video=photo, caption=announcement_text, parse_mode="HTML")
+            except Exception:
+                try:
+                    await bot.send_animation(chat_id=db_channel, animation=photo, caption=announcement_text, parse_mode="HTML")
+                except Exception:
+                    await bot.send_message(chat_id=db_channel, text=announcement_text, parse_mode="HTML")
+    except Exception as e:
+        print(f"Failed to send character edit sync to database channel: {e}")
+# --- ROLE PROMOTION & DEMOTION SYSTEM ---
+
+@router.message(Command("promote"))
+async def cmd_promote(message: Message, db: AsyncSession, bot):
+    if not is_owner(message):
+        await message.reply("⛔ Only bot owners can promote admins!")
+        return
+
+    parts = message.text.strip().split()
+    target_user_id = None
+    target_username = None
+    target_first_name = None
+    role = None
+
+    if message.reply_to_message:
+        if len(parts) < 2:
+            await message.reply("⚠️ <b>Usage:</b> Reply to someone with <code>/promote &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
+            return
+        role = parts[1].strip().lower()
+        target_user_id = message.reply_to_message.from_user.id
+        target_username = message.reply_to_message.from_user.username
+        target_first_name = message.reply_to_message.from_user.first_name
+    else:
+        if len(parts) < 3:
+            await message.reply("⚠️ <b>Usage:</b> <code>/promote &lt;@username or user_id&gt; &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
+            return
+        target_str = parts[1].strip()
+        role = parts[2].strip().lower()
+
+        if target_str.isdigit():
+            target_user_id = int(target_str)
+        elif target_str.startswith("@"):
+            username = target_str[1:]
+            stmt = select(User).where(User.username.ilike(username))
+            res = await db.execute(stmt)
+            target_user = res.scalar_one_or_none()
+            if target_user:
+                target_user_id = target_user.user_id
+                target_username = target_user.username
+                target_first_name = target_user.first_name
+            else:
+                await message.reply(f"❌ Trainer with username <b>{target_str}</b> not found in bot database.", parse_mode="HTML")
+                return
+        else:
+            await message.reply("❌ Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            return
+
+    if role not in ["snradmin", "jradmin"]:
+        await message.reply("❌ Invalid role! Choose either <code>snradmin</code> or <code>jradmin</code>.", parse_mode="HTML")
+        return
+
+    if target_user_id in config.ADMIN_IDS:
+        await message.reply("❌ This user is a bot owner! They already have full privileges.")
+        return
+
+    if not target_first_name:
+        stmt = select(User).where(User.user_id == target_user_id)
+        res = await db.execute(stmt)
+        target_user = res.scalar_one_or_none()
+        if target_user:
+            target_first_name = target_user.first_name
+            target_username = target_user.username
+        else:
+            target_first_name = f"User {target_user_id}"
+
+    stmt = select(BotAdmin).where(BotAdmin.user_id == target_user_id)
+    res = await db.execute(stmt)
+    admin_item = res.scalar_one_or_none()
+
+    if admin_item:
+        admin_item.role = role
+    else:
+        admin_item = BotAdmin(user_id=target_user_id, role=role)
+        db.add(admin_item)
+
+    await db.commit()
+
+    text = (
+        f"✅ <b>PROMOTION SUCCESSFUL!</b>\n\n"
+        + format_blockquote(
+            f"👤 <b>Trainer:</b> <a href=\"tg://user?id={target_user_id}\">{escape_html(target_first_name)}</a>\n"
+            f"🆔 <b>ID:</b> <code>{target_user_id}</code>\n"
+            f"🛡️ <b>Assigned Role:</b> <code>{role}</code>"
+        )
+    )
+    await message.reply(text, parse_mode="HTML")
+
+    dm_text = (
+        f"🎉 <b>CONGRATULATIONS! You have been promoted to {role.upper()}!</b>\n\n"
+        + format_blockquote(
+            f"As a <b>{role}</b>, you have privileges to manage characters and database configuration!\n\n"
+            "🔧 <b>Your Privileges & Commands:</b>\n"
+            "• <code>/addchar</code> — Add a new character to database (supports custom IDs)\n"
+            "• <code>/editchar &lt;id&gt;</code> — Interactive console to edit character details\n"
+            "• <code>/deletechar &lt;id&gt;</code> — Delete a character and its user ownership instances\n"
+            "• <code>/setimg &lt;id&gt;</code> — Update character media (reply or URL)\n"
+            "• <code>/setrarity &lt;id&gt; &lt;rarity&gt;</code> — Update character rarity tier\n"
+            "• <code>/settag &lt;id&gt; &lt;tag&gt;</code> — Edit trainer premium tags\n"
+            "• <code>/addrarity Name | Emoji</code> — Register a custom rarity tier\n"
+            "• <code>/addtochance &lt;rarity&gt;</code> — Enable wild spawn for a rarity\n"
+            "• <code>/removefromchance &lt;rarity&gt;</code> — Disable spawn for a rarity\n"
+            "• <code>/spawnchance</code> — Check spawn percentages\n"
+            "• <code>/editspawnchance &lt;rarity&gt; &lt;weight&gt;</code> — Modify spawn chance weight\n"
+            "• <code>/spawn</code> — Force spawn a character\n"
+            "• <code>/adminlist</code> — View all active admins\n"
+            "• <code>/admin</code> — Open Admin Console\n\n"
+            "Thank you for keeping the AniVerse database clean and updated!"
+        )
+    )
+    try:
+        await bot.send_message(chat_id=target_user_id, text=dm_text, parse_mode="HTML")
+    except Exception as e:
+        await message.reply(f"⚠️ Promoted successfully, but could not send DM to user (they might have blocked the bot): {e}")
+
+@router.message(Command("demote"))
+async def cmd_demote(message: Message, db: AsyncSession):
+    if not is_owner(message):
+        await message.reply("⛔ Only bot owners can demote admins!")
+        return
+
+    parts = message.text.strip().split()
+    target_user_id = None
+    target_first_name = None
+
+    if message.reply_to_message:
+        target_user_id = message.reply_to_message.from_user.id
+        target_first_name = message.reply_to_message.from_user.first_name
+    else:
+        if len(parts) < 2:
+            await message.reply("⚠️ <b>Usage:</b> Reply to someone with <code>/demote</code> or type <code>/demote &lt;@username or user_id&gt;</code>", parse_mode="HTML")
+            return
+        target_str = parts[1].strip()
+
+        if target_str.isdigit():
+            target_user_id = int(target_str)
+        elif target_str.startswith("@"):
+            username = target_str[1:]
+            stmt = select(User).where(User.username.ilike(username))
+            res = await db.execute(stmt)
+            target_user = res.scalar_one_or_none()
+            if target_user:
+                target_user_id = target_user.user_id
+                target_first_name = target_user.first_name
+            else:
+                await message.reply(f"❌ Trainer with username <b>{target_str}</b> not found.", parse_mode="HTML")
+                return
+        else:
+            await message.reply("❌ Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            return
+
+    stmt = delete(BotAdmin).where(BotAdmin.user_id == target_user_id)
+    res = await db.execute(stmt)
+    
+    if res.rowcount > 0:
+        await db.commit()
+        if not target_first_name:
+            target_first_name = f"User {target_user_id}"
+        await message.reply(f"✅ Successfuly demoted <a href=\"tg://user?id={target_user_id}\">{escape_html(target_first_name)}</a>! They no longer have bot admin privileges.", parse_mode="HTML")
+    else:
+        await message.reply("❌ User is not an active admin in the database.")
+
+@router.message(Command("adminlist", "admins"))
+async def cmd_adminlist(message: Message, db: AsyncSession):
+    stmt = select(BotAdmin)
+    res = await db.execute(stmt)
+    admins = res.scalars().all()
+
+    admin_ids = [a.user_id for a in admins]
+    user_map = {}
+    if admin_ids:
+        u_stmt = select(User).where(User.user_id.in_(admin_ids))
+        u_res = await db.execute(u_stmt)
+        for u in u_res.scalars().all():
+            user_map[u.user_id] = u
+
+    owners_list = []
+    for o_id in config.ADMIN_IDS:
+        stmt_u = select(User).where(User.user_id == o_id)
+        res_u = await db.execute(stmt_u)
+        user_u = res_u.scalar_one_or_none()
+        name = escape_html(user_u.first_name) if user_u else f"Owner ID {o_id}"
+        owners_list.append(f"• {name} (<code>{o_id}</code>)")
+
+    snr_list = []
+    jr_list = []
+    for a in admins:
+        u = user_map.get(a.user_id)
+        name = escape_html(u.first_name) if u else f"User ID {a.user_id}"
+        username_text = f" (@{u.username})" if u and u.username else ""
+        line = f"• {name}{username_text} (<code>{a.user_id}</code>)"
+        if a.role == "snradmin":
+            snr_list.append(line)
+        else:
+            jr_list.append(line)
+
+    text = "👑 <b>ANIVERSE BOT ADMINISTRATIVE STAFF</b>\n\n"
+    
+    text += "🛡️ <b>Owners & Creators:</b>\n"
+    if owners_list:
+        text += format_blockquote("\n".join(owners_list)) + "\n\n"
+    else:
+        text += "• None\n\n"
+
+    text += "🛡️ <b>Senior Admins (snradmin):</b>\n"
+    if snr_list:
+        text += format_blockquote("\n".join(snr_list)) + "\n\n"
+    else:
+        text += format_blockquote("No senior admins registered.") + "\n\n"
+
+    text += "🛡️ <b>Junior Admins (jradmin):</b>\n"
+    if jr_list:
+        text += format_blockquote("\n".join(jr_list)) + "\n"
+    else:
+        text += format_blockquote("No junior admins registered.") + "\n"
+
+    await message.reply(text, parse_mode="HTML")

@@ -148,3 +148,10 @@ class UserDailyLimit(Base):
     last_spin_at = Column(BigInteger, default=0)
     dart_count = Column(Integer, default=0)
     last_dart_at = Column(BigInteger, default=0)
+
+class BotAdmin(Base):
+    __tablename__ = "bot_admins"
+
+    user_id = Column(BigInteger, primary_key=True, index=True)
+    role = Column(String(50), nullable=False)  # "snradmin" or "jradmin"
+    promoted_at = Column(DateTime, default=datetime.datetime.utcnow)

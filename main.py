@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 import config
 from database.database import init_db, AsyncSessionLocal
-from database.models import Character, RarityType, UserDailyLimit
+from database.models import Character, RarityType, UserDailyLimit, BotAdmin
 from handlers import start, profile, catch, shop, games, trade, admin, xo, inline_query, redeem, auction
 if sys.platform == "win32":
     try:
@@ -202,6 +202,9 @@ async def main():
         BotCommand(command="chk", description="Quick balance check"),
         BotCommand(command="gift", description="Gift a character to another trainer"),
         BotCommand(command="editchar", description="Edit character details (Admin only)"),
+        BotCommand(command="promote", description="Promote user to admin (Owner only)"),
+        BotCommand(command="demote", description="Demote user from admin (Owner only)"),
+        BotCommand(command="adminlist", description="List bot admin staff"),
         BotCommand(command="shop", description="Buy new profile themes")
     ]
     try:
@@ -209,7 +212,6 @@ async def main():
         logger.info("Bot commands registered successfully in Telegram menu.")
     except Exception as e:
         logger.error(f"Failed to register bot commands: {e}")
-
     db_middleware = DbSessionMiddleware()
     join_middleware = JoinCheckMiddleware()
     
