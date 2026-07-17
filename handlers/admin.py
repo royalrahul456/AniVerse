@@ -1019,23 +1019,19 @@ async def cmd_spawnchance(message: Message, db: AsyncSession):
         await message.reply("⚠️ No rarities are currently enabled for wild spawn.")
         return
         
-    total_weight = sum(r.weight for r in rarities)
-    
     lines = []
-    # Sort by weight descending
+    # Sort by percentage descending
     rarities.sort(key=lambda x: x.weight, reverse=True)
     
     for r in rarities:
-        pct = (r.weight / total_weight) * 100 if total_weight > 0 else 0
         from utils.formatters import get_rarity_emoji
         r_emoji = get_rarity_emoji(r.name)
-        lines.append(f"{r_emoji} <b>{r.name}</b>: <b>{pct:.2f}%</b>")        
+        lines.append(f"{r_emoji} <b>{r.name}</b>: <b>{r.weight}%</b>")        
     text = (
         "🎯 <b>WILD CHARACTER SPAWN CHANCES</b>\n\n"
         + format_blockquote("\n".join(lines))
     )
     await message.reply(text, parse_mode="HTML")
-
 class EditSpawnChanceStates(StatesGroup):
     waiting_for_weight = State()
 
@@ -1047,17 +1043,17 @@ async def cmd_editspawnchance(message: Message, db: AsyncSession):
 
     parts = message.text.strip().split()
     if len(parts) >= 3:
-        # Support quick command line method: /editspawnchance Rarity Weight
+        # Support quick command line method: /editspawnchance Rarity Percentage
         rarity_name = parts[1].strip()
-        weight_str = parts[2].strip()
+        pct_str = parts[2].strip()
 
-        if not weight_str.isdigit():
-            await message.reply("❌ Weight must be a valid positive number.")
+        if not pct_str.isdigit():
+            await message.reply("❌ Percentage must be a valid positive number.")
             return
 
-        weight = int(weight_str)
-        if weight < 0:
-            await message.reply("❌ Weight cannot be negative.")
+        pct = int(pct_str)
+        if pct < 0:
+            await message.reply("❌ Percentage cannot be negative.")
             return
 
         stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
@@ -1068,27 +1064,26 @@ async def cmd_editspawnchance(message: Message, db: AsyncSession):
             await message.reply(f"❌ Rarity tier '<b>{escape_html(rarity_name)}</b>' not found. Add it first using /addrarity.", parse_mode="HTML")
             return
 
-        rarity_item.weight = weight
+        rarity_item.weight = pct
         await db.commit()
 
-        await message.reply(f"✅ Updated spawn chance for <b>{escape_html(rarity_item.name)}</b> to weight <b>{weight}</b>!", parse_mode="HTML")
+        await message.reply(f"✅ Updated spawn chance for <b>{escape_html(rarity_item.name)}</b> to <b>{pct}%</b>!", parse_mode="HTML")
         return
 
-    # Show interactive menu
-    stmt = select(RarityType)
+    # Show interactive menu - ONLY show rarities where spawn_enabled == True
+    stmt = select(RarityType).where(RarityType.spawn_enabled == True)
     res = await db.execute(stmt)
     rarities = res.scalars().all()
     if not rarities:
-        await message.reply("⚠️ No rarities registered in the database.")
+        await message.reply("⚠️ No rarities are currently enabled for wild spawn.")
         return
 
     builder = InlineKeyboardBuilder()
     for r in rarities:
-        status_emoji = "🟢" if r.spawn_enabled else "🔴"
         from utils.formatters import get_rarity_emoji
         r_emoji = get_rarity_emoji(r.name)
         builder.row(InlineKeyboardButton(
-            text=f"{status_emoji} {r_emoji} {r.name} ({r.weight} wt)",
+            text=f"{r_emoji} {r.name} ({r.weight}%)",
             callback_data=f"spawn_edit_sel:{r.id}"
         ))
     builder.row(InlineKeyboardButton(text="❌ Cancel", callback_data="spawn_edit_cancel"))
@@ -1096,9 +1091,8 @@ async def cmd_editspawnchance(message: Message, db: AsyncSession):
     text = (
         "🎯 <b>ANIVERSE SPAWN CHANCE EDITOR</b>\n\n"
         + format_blockquote(
-            "Select a rarity tier below to adjust its spawn probability weight.\n\n"
-            "🟢 = Spawn Enabled\n"
-            "🔴 = Spawn Disabled (weight has no effect unless enabled)"
+            "Select a rarity tier below to adjust its spawn probability percentage.\n\n"
+            "⚠️ Only rarities enabled for wild spawns are listed here. To enable a new rarity, use <code>/addtochance &lt;rarity&gt;</code>."
         )
     )
     await message.reply(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -1108,7 +1102,6 @@ async def cb_spawn_edit_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Spawn chance editing cancelled.")
     await callback.answer()
-
 @router.callback_query(F.data.startswith("spawn_edit_sel:"))
 async def cb_spawn_edit_sel(callback: CallbackQuery, db: AsyncSession, state: FSMContext):
     if not await is_admin_id(callback.from_user.id, db):
@@ -1137,13 +1130,12 @@ async def cb_spawn_edit_sel(callback: CallbackQuery, db: AsyncSession, state: FS
         f"⚙️ <b>Adjusting Spawn Chance:</b> {r_emoji} <b>{rarity_item.name}</b>\n\n"
         + format_blockquote(
             f"👤 Administrator: {escape_html(callback.from_user.first_name)}\n"
-            f"📊 Current Weight: <code>{rarity_item.weight}</code>\n\n"
-            "👉 Please type and send the **new weight** (positive integer) in the chat."
+            f"📊 Current Chance: <code>{rarity_item.weight}%</code>\n\n"
+            "👉 Please type and send the **new percentage** (positive integer, e.g. 20 for 20%) in the chat."
         )
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
-
 @router.message(EditSpawnChanceStates.waiting_for_weight)
 async def process_spawn_edit_weight(message: Message, db: AsyncSession, state: FSMContext):
     if not await is_admin(message, db):
@@ -1154,14 +1146,14 @@ async def process_spawn_edit_weight(message: Message, db: AsyncSession, state: F
     data = await state.get_data()
     rarity_id = data.get("edit_rarity_id")
 
-    weight_str = message.text.strip()
-    if not weight_str.isdigit():
-        await message.reply("❌ Invalid input! Please send a valid positive number for weight.")
+    pct_str = message.text.strip()
+    if not pct_str.isdigit():
+        await message.reply("❌ Invalid input! Please send a valid positive number for percentage.")
         return
 
-    weight = int(weight_str)
-    if weight < 0:
-        await message.reply("❌ Weight cannot be negative. Please enter a valid positive number.")
+    pct = int(pct_str)
+    if pct < 0:
+        await message.reply("❌ Percentage cannot be negative. Please enter a valid positive number.")
         return
 
     stmt = select(RarityType).where(RarityType.id == rarity_id)
@@ -1173,39 +1165,36 @@ async def process_spawn_edit_weight(message: Message, db: AsyncSession, state: F
         await state.clear()
         return
 
-    old_weight = rarity_item.weight
-    rarity_item.weight = weight
+    old_pct = rarity_item.weight
+    rarity_item.weight = pct
     await db.commit()
     await state.clear()
 
-    # Recalculate percentages for enabled spawn chances
+    # Get direct percentages for enabled spawn chances
     stmt_all = select(RarityType).where(RarityType.spawn_enabled == True)
     res_all = await db.execute(stmt_all)
     rarities = res_all.scalars().all()
 
-    total_weight = sum(r.weight for r in rarities)
     lines = []
     rarities.sort(key=lambda x: x.weight, reverse=True)
     
     for r in rarities:
-        pct = (r.weight / total_weight) * 100 if total_weight > 0 else 0
         from utils.formatters import get_rarity_emoji
         r_emoji = get_rarity_emoji(r.name)
-        lines.append(f"{r_emoji} <b>{r.name}</b>: <b>{pct:.2f}%</b>")
+        lines.append(f"{r_emoji} <b>{r.name}</b>: <b>{r.weight}%</b>")
 
     text = (
         f"✅ <b>SPAWN CHANCE UPDATED!</b>\n\n"
         + format_blockquote(
             f"💎 <b>Rarity:</b> {escape_html(rarity_item.name)}\n"
-            f"📉 Old Weight: <code>{old_weight}</code>\n"
-            f"📈 New Weight: <code>{weight}</code>\n\n"
-            f"🎯 <b>Updated Spawn Probabilities:</b>\n"
+            f"📉 Old Chance: <code>{old_pct}%</code>\n"
+            f"📈 New Chance: <code>{pct}%</code>\n\n"
+            f"🎯 <b>Current Spawn Probabilities:</b>\n"
             + "\n".join(lines)
         )
     )
     await message.reply(text, parse_mode="HTML")
 # --- EDIT CHARACTER INTERACTIVE TOOL ---
-
 DEFAULT_CHAR_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 
 @router.message(Command("editchar", "editcharacter"))
