@@ -563,13 +563,12 @@ async def render_harem_showcase(user_id: int, mode: str, page: int, message_obj,
     kb = get_showcase_keyboard(user_id, mode, page, total_items)
     await send_or_edit_harem(message_obj, media_url, text, kb, is_callback)
 
-@router.message(Command("check", "cid"))
+@router.message(Command("check", "cid", "search"))
 async def cmd_check(message: Message, db: AsyncSession):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("⚠️ <b>Usage:</b>\n👉 <code>/check &lt;id&gt;</code> to view details\n👉 <code>/check &lt;character_name&gt;</code> (or <code>/cid &lt;name&gt;</code>) to view variants list", parse_mode="HTML")
+        await message.reply("⚠️ <b>Usage:</b>\n👉 <code>/check &lt;id&gt;</code> to view details\n👉 <code>/search &lt;name&gt;</code> (or <code>/cid &lt;name&gt;</code>) to view variants list", parse_mode="HTML")
         return
-
     query_str = parts[1].strip()
     from utils.formatters import get_clean_name
 
@@ -810,58 +809,7 @@ async def cb_check_back(callback: CallbackQuery, db: AsyncSession):
     except Exception:
         pass
 
-@router.message(Command("search"))
-async def cmd_search(message: Message, db: AsyncSession):
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        await message.reply("⚠️ <b>Usage:</b> <code>/search &lt;character_name&gt;</code>\n<i>Example: /search Goku</i>", parse_mode="HTML")
-        return
-    query_str = parts[1].strip()
-    await render_search_list(query_str, 1, message, db, is_callback=False)
 
-@router.callback_query(F.data.startswith("search_list_"))
-async def cb_search_list(callback: CallbackQuery, db: AsyncSession):
-    parts = callback.data.split("_")
-    page = int(parts[-1])
-    query_str = "_".join(parts[2:-1])
-    await render_search_list(query_str, page, callback.message, db, is_callback=True)
-    try:
-        await callback.answer()
-    except Exception:
-        pass
-
-async def render_search_list(query_str: str, page: int, message_obj, db: AsyncSession, is_callback: bool = False):
-    stmt = select(Character).where(Character.name.ilike(f"%{query_str}%")).order_by(Character.id)
-    res = await db.execute(stmt)
-    characters = res.scalars().all()
-
-    if not characters:
-        text = f"❌ No characters found matching <b>{escape_html(query_str)}</b>!"
-        if is_callback:
-            await message_obj.edit_text(text, parse_mode="HTML")
-        else:
-            await message_obj.reply(text, parse_mode="HTML")
-        return
-
-    per_page = 8
-    total_cnt = len(characters)
-    max_page = math.ceil(total_cnt / per_page)
-    page = max(1, min(page, max_page))
-
-    start_idx = (page - 1) * per_page
-    page_chars = characters[start_idx:start_idx + per_page]
-
-    lines = [f"✨ <b>Results for \"{escape_html(query_str)}\"</b>", f"Total: <b>{total_cnt}</b> — Page <b>{page}/{max_page}</b>\n"]
-    for c in page_chars:
-        r_emoji = get_rarity_emoji(c.rarity)
-        lines.append(f"• <b>{escape_html(c.name)}</b> — {escape_html(c.anime)}\n  {r_emoji} {c.rarity} | ID: {c.id}\n")
-
-    text = "\n".join(lines)
-    kb = get_list_pagination_keyboard("search_list", query_str, page, max_page)
-    if is_callback:
-        await message_obj.edit_text(text, parse_mode="HTML", reply_markup=kb)
-    else:
-        await message_obj.reply(text, parse_mode="HTML", reply_markup=kb)
 
 @router.message(Command("anime"))
 async def cmd_anime(message: Message, db: AsyncSession):

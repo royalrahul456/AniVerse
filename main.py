@@ -184,7 +184,7 @@ async def main():
         BotCommand(command="leaderboard", description="Global trainer rankings"),
         BotCommand(command="check", description="Check character details & owners"),
         BotCommand(command="cid", description="View character variants by name"),
-        BotCommand(command="search", description="Search character database"),
+        BotCommand(command="search", description="View character variants by name"),
         BotCommand(command="anime", description="Filter characters by anime title"),
         BotCommand(command="claim", description="Claim a free daily character"),
         BotCommand(command="games", description="Open Games Center"),
@@ -216,8 +216,7 @@ async def main():
     except Exception as e:
         logger.error(f"Failed to register bot commands: {e}")
     db_middleware = DbSessionMiddleware()
-    join_middleware = JoinCheckMiddleware()
-    
+    join_middleware = JoinCheckMiddleware()    
     dp.message.middleware(db_middleware)
     dp.message.middleware(join_middleware)    
     dp.callback_query.middleware(db_middleware)
