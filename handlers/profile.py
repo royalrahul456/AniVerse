@@ -552,7 +552,7 @@ async def render_harem_showcase(user_id: int, mode: str, page: int, message_obj,
         f"{title_header} ({page}/{total_items})\n"
         f"👤 <b>Owner:</b> <a href=\"tg://user?id={user_id}\">{owner_name}</a>\n\n"
         + format_blockquote(
-            f"🌟 <b>Name:</b> {escape_html(get_clean_name(char.name))}\n"
+            f"🌟 <b>Name:</b> {escape_html(char.name)}\n"
             f"🆔 <b>ID:</b> #{char.id}\n"
             f"📺 <b>Anime:</b> {escape_html(char.anime)}\n"
             f"🎬 <b>Rarity:</b> {r_emoji} {char.rarity}\n"
@@ -562,7 +562,6 @@ async def render_harem_showcase(user_id: int, mode: str, page: int, message_obj,
     media_url = char.image_url if char.image_url else DEFAULT_CHAR_PHOTO
     kb = get_showcase_keyboard(user_id, mode, page, total_items)
     await send_or_edit_harem(message_obj, media_url, text, kb, is_callback)
-
 @router.message(Command("check", "cid", "search"))
 async def cmd_check(message: Message, db: AsyncSession):
     parts = message.text.split(maxsplit=1)
@@ -583,18 +582,16 @@ async def cmd_check(message: Message, db: AsyncSession):
             return
 
         r_emoji = get_rarity_emoji(character.rarity)
-        clean_name = get_clean_name(character.name)
-        
+
         card = (
             f"👾 <b>Character Info</b>\n\n"
             + format_blockquote(
                 f"🆔 <b>ID:</b> {character.id}\n"
-                f"⛔ <b>Name:</b> {escape_html(clean_name)}\n"
+                f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
                 f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
                 f"🎬 <b>Rarity:</b> {r_emoji} {character.rarity}"
             )
         )
-
         photo_to_send = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
         kb = get_check_character_keyboard(character.id)
         try:

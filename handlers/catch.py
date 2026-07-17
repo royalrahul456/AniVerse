@@ -174,20 +174,18 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
     await message.reply(f"🎉 <b>+{coins_won} coins!</b> Balance: <code>{user.coins:,}</code>", parse_mode="HTML")
 
     r_emoji = get_rarity_emoji(character.rarity)
-    clean_name = get_clean_name(character.name)
     card_text = (
-        f"💥 🌟 <b>{nickname}</b> collected <b>{escape_html(clean_name)}</b>!\n\n"
+        f"💥 🌟 <b>{nickname}</b> collected <b>{escape_html(character.name)}</b>!\n\n"
         + format_blockquote(
-            f"⛔ <b>NAME:</b> {escape_html(clean_name)}\n"
+            f"⛔ <b>NAME:</b> {escape_html(character.name)}\n"
             f"🎦 <b>ANIME:</b> {escape_html(character.anime)}\n"
             f"{r_emoji} <b>RARITY:</b> {r_emoji} {character.rarity}\n"
             f"⏱️ <b>TIME:</b> {seconds_taken}s"
         )
-    )    
+    )
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="📖 View Harem", callback_data="dm_bag_1"))
     await message.reply(card_text, parse_mode="HTML", reply_markup=builder.as_markup())
-
 async def is_user_allowed(message: Message, bot) -> bool:
     if message.from_user.id in config.ADMIN_IDS:
         return True
