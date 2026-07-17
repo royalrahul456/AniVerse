@@ -432,15 +432,17 @@ async def handle_trivia_answer(callback: CallbackQuery, db: AsyncSession):
     question_data = TRIVIA_QUESTIONS[q_idx]
     user = await get_or_create_user(db, play_id, callback.from_user.username, callback.from_user.first_name)
     
-    is_correct = opt_idx == question_data["ans"]
+    is_correct = (opt_idx == question_data["ans"])
     chosen_opt = question_data["opts"][opt_idx]
     correct_opt = question_data["opts"][question_data["ans"]]
     
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"TRIVIA: User {play_id} clicked index {opt_idx} ({chosen_opt}) for Q_{q_idx}. Correct is index {question_data['ans']} ({correct_opt}). result={is_correct}")
     if is_correct:
         reward = config.TRIVIA_REWARD
         user.coins += reward
-        await db.commit()
-        
+        await db.commit()        
         card = (
             "🧠 <b>ANIME TRIVIA CHALLENGE!</b>\n\n"
             + format_blockquote(
