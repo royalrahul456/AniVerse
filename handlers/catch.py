@@ -149,11 +149,13 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
     char_res = await db.execute(char_stmt)
     character = char_res.scalar_one()
 
-    actual_name = character.name.lower()
-    if guess != actual_name and guess not in actual_name:
+    from utils.formatters import get_clean_name
+    guess_clean = get_clean_name(guess).lower()
+    actual_name_clean = get_clean_name(character.name).lower()
+
+    if not guess_clean or (guess_clean != actual_name_clean and guess_clean not in actual_name_clean):
         await message.reply("❌ That is not the correct character name! Try again.")
         return
-
     user = await get_or_create_user(db, user_id, message.from_user.username if message.from_user else "", message.from_user.first_name if message.from_user else "")
     
     coins_won = random.randint(config.CATCH_REWARD_MIN, config.CATCH_REWARD_MAX)
@@ -172,16 +174,16 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
     await message.reply(f"🎉 <b>+{coins_won} coins!</b> Balance: <code>{user.coins:,}</code>", parse_mode="HTML")
 
     r_emoji = get_rarity_emoji(character.rarity)
+    clean_name = get_clean_name(character.name)
     card_text = (
-        f"💥 🌟 <b>{nickname}</b> collected <b>{escape_html(character.name)}</b>!\n\n"
+        f"💥 🌟 <b>{nickname}</b> collected <b>{escape_html(clean_name)}</b>!\n\n"
         + format_blockquote(
-            f"⛔ <b>NAME:</b> {escape_html(character.name)}\n"
+            f"⛔ <b>NAME:</b> {escape_html(clean_name)}\n"
             f"🎦 <b>ANIME:</b> {escape_html(character.anime)}\n"
             f"{r_emoji} <b>RARITY:</b> {r_emoji} {character.rarity}\n"
             f"⏱️ <b>TIME:</b> {seconds_taken}s"
         )
-    )
-    
+    )    
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="📖 View Harem", callback_data="dm_bag_1"))
     await message.reply(card_text, parse_mode="HTML", reply_markup=builder.as_markup())

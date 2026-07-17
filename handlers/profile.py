@@ -547,63 +547,183 @@ async def render_harem_showcase(user_id: int, mode: str, page: int, message_obj,
     r_emoji = get_rarity_emoji(char.rarity)
     title_header = "💌 <b>HAREM AMV EDIT SHOWCASE</b>" if mode == "amv" else "🖼️ <b>COLLECTION SHOWCASE</b>"
     
+    from utils.formatters import get_clean_name
     text = (
         f"{title_header} ({page}/{total_items})\n"
         f"👤 <b>Owner:</b> <a href=\"tg://user?id={user_id}\">{owner_name}</a>\n\n"
         + format_blockquote(
-            f"🌟 <b>Name:</b> {escape_html(char.name)}\n"
+            f"🌟 <b>Name:</b> {escape_html(get_clean_name(char.name))}\n"
             f"🆔 <b>ID:</b> #{char.id}\n"
             f"📺 <b>Anime:</b> {escape_html(char.anime)}\n"
             f"🎬 <b>Rarity:</b> {r_emoji} {char.rarity}\n"
             f"📦 <b>Copies Owned:</b> ×{u_cnt}"
         )
     )
-
     media_url = char.image_url if char.image_url else DEFAULT_CHAR_PHOTO
     kb = get_showcase_keyboard(user_id, mode, page, total_items)
     await send_or_edit_harem(message_obj, media_url, text, kb, is_callback)
 
-@router.message(Command("check"))
+@router.message(Command("check", "cid"))
 async def cmd_check(message: Message, db: AsyncSession):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("⚠️ <b>Usage:</b> <code>/check &lt;character_id or name&gt;</code>", parse_mode="HTML")
+        await message.reply("⚠️ <b>Usage:</b>\n👉 <code>/check &lt;id&gt;</code> to view details\n👉 <code>/check &lt;character_name&gt;</code> (or <code>/cid &lt;name&gt;</code>) to view variants list", parse_mode="HTML")
         return
 
     query_str = parts[1].strip()
+    from utils.formatters import get_clean_name
+
     if query_str.isdigit():
+        # User is checking a specific character ID -> Show details
         stmt = select(Character).where(Character.id == int(query_str))
+        res = await db.execute(stmt)
+        character = res.scalar_one_or_none()
+
+        if not character:
+            await message.reply(f"❌ No character found with ID #{query_str}!", parse_mode="HTML")
+            return
+
+        r_emoji = get_rarity_emoji(character.rarity)
+        clean_name = get_clean_name(character.name)
+        
+        card = (
+            f"👾 <b>Character Info</b>\n\n"
+            + format_blockquote(
+                f"🆔 <b>ID:</b> {character.id}\n"
+                f"⛔ <b>Name:</b> {escape_html(clean_name)}\n"
+                f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
+                f"🎬 <b>Rarity:</b> {r_emoji} {character.rarity}"
+            )
+        )
+
+        photo_to_send = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
+        kb = get_check_character_keyboard(character.id)
+        try:
+            await message.reply_photo(photo_to_send, caption=card, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            try:
+                await message.reply_video(photo_to_send, caption=card, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                await message.reply(card, parse_mode="HTML", reply_markup=kb)
     else:
+        # User is checking a name -> Show all variants paginated list
         stmt = select(Character).where(Character.name.ilike(f"%{query_str}%"))
+        res = await db.execute(stmt)
+        matches = res.scalars().all()
 
-    res = await db.execute(stmt)
-    character = res.scalar_one_or_none()
+        if not matches:
+            await message.reply(f"❌ No character found matching '{escape_html(query_str)}'!", parse_mode="HTML")
+            return
 
-    if not character:
-        await message.reply(f"❌ No character found matching {escape_html(query_str)}!", parse_mode="HTML")
+        base_name = get_clean_name(matches[0].name)
+        anime = matches[0].anime
+
+        stmt_all = select(Character)
+        res_all = await db.execute(stmt_all)
+        all_chars = res_all.scalars().all()
+
+        variants = [c for c in all_chars if get_clean_name(c.name).lower() == base_name.lower()]
+        if not variants:
+            variants = matches
+
+        variants.sort(key=lambda x: x.id)
+
+        limit = 8
+        total_variants = len(variants)
+        total_pages = (total_variants + limit - 1) // limit
+        if total_pages == 0:
+            total_pages = 1
+
+        page = 1
+        page_variants = variants[0:limit]
+
+        text = (
+            f"🚫 <b>{escape_html(base_name)}</b>\n"
+            f"├── 🎬 <i>{escape_html(anime)}</i>\n"
+            f"├── 📊 Total variants: <b>{total_variants}</b> — Page {page}/{total_pages}\n\n"
+        )
+
+        for v in page_variants:
+            r_emoji = get_rarity_emoji(v.rarity)
+            id_str = f"{v.id:02d}" if v.id < 100 else f"{v.id}"
+            text += f"├── {r_emoji} {v.rarity} | ID: {id_str}\n"
+
+        builder = InlineKeyboardBuilder()
+        buttons = []
+        buttons.append(InlineKeyboardButton(text="⏹️", callback_data="noop"))
+        buttons.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
+        if total_pages > 1:
+            buttons.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"cid_page:2:{base_name}"))
+        else:
+            buttons.append(InlineKeyboardButton(text="⏹️", callback_data="noop"))
+
+        builder.row(*buttons)
+        await message.reply(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+@router.callback_query(F.data.startswith("cid_page:"))
+async def cb_cid_page(callback: CallbackQuery, db: AsyncSession):
+    parts = callback.data.split(":", 2)
+    page = int(parts[1])
+    char_name = parts[2]
+
+    # Clean character name match
+    stmt_all = select(Character)
+    res_all = await db.execute(stmt_all)
+    all_chars = res_all.scalars().all()
+
+    from utils.formatters import get_clean_name
+    variants = [c for c in all_chars if get_clean_name(c.name).lower() == char_name.lower()]
+    variants.sort(key=lambda x: x.id)
+
+    if not variants:
+        await callback.answer("❌ No variants found.", show_alert=True)
         return
 
-    r_emoji = get_rarity_emoji(character.rarity)
-    card = (
-        f"👾 <b>Character Info</b>\n\n"
-        + format_blockquote(
-            f"🆔 <b>ID:</b> {character.id}\n"
-            f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
-            f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
-            f"🎬 <b>Rarity:</b> {r_emoji} {character.rarity}"
-        )
+    anime = variants[0].anime
+    limit = 8
+    total_variants = len(variants)
+    total_pages = (total_variants + limit - 1) // limit
+    if total_pages == 0:
+        total_pages = 1
+
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    page_variants = variants[start_idx:end_idx]
+
+    text = (
+        f"🚫 <b>{escape_html(char_name)}</b>\n"
+        f"├── 🎬 <i>{escape_html(anime)}</i>\n"
+        f"├── 📊 Total variants: <b>{total_variants}</b> — Page {page}/{total_pages}\n\n"
     )
 
-    photo_to_send = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
-    kb = get_check_character_keyboard(character.id)
-    try:
-        await message.reply_photo(photo_to_send, caption=card, parse_mode="HTML", reply_markup=kb)
-    except Exception:
-        try:
-            await message.reply_video(photo_to_send, caption=card, parse_mode="HTML", reply_markup=kb)
-        except Exception:
-            await message.reply(card, parse_mode="HTML", reply_markup=kb)
+    for v in page_variants:
+        r_emoji = get_rarity_emoji(v.rarity)
+        id_str = f"{v.id:02d}" if v.id < 100 else f"{v.id}"
+        text += f"├── {r_emoji} {v.rarity} | ID: {id_str}\n"
 
+    builder = InlineKeyboardBuilder()
+    buttons = []
+    
+    if page > 1:
+        buttons.append(InlineKeyboardButton(text="⬅️ Prev", callback_data=f"cid_page:{page-1}:{char_name}"))
+    else:
+        buttons.append(InlineKeyboardButton(text="⏹️", callback_data="noop"))
+
+    buttons.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
+
+    if page < total_pages:
+        buttons.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"cid_page:{page+1}:{char_name}"))
+    else:
+        buttons.append(InlineKeyboardButton(text="⏹️", callback_data="noop"))
+
+    builder.row(*buttons)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
 @router.callback_query(F.data.startswith("who_has_"))
 async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
     char_id = int(callback.data.split("_")[2])

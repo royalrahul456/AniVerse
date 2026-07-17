@@ -59,3 +59,10 @@ def escape_html(text: str) -> str:
     if not text:
         return ""
     return html.escape(str(text))
+
+import re
+def get_clean_name(name: str) -> str:
+    if not name:
+        return ""
+    # Strip any [bracketed content]
+    return re.sub(r'\[.*?\]', '', name).strip()

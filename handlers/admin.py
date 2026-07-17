@@ -938,7 +938,7 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
         "│  ├─➩ <code>/addtochance &lt;rarity&gt;</code> — Enable wild spawn\n"
         "│  ├─➩ <code>/removefromchance &lt;rarity&gt;</code> — Disable spawn\n"
         "│  ├─➩ <code>/spawnchance</code> — View spawn percentages\n"
-        "│  ├─➩ <code>/editspawnchance &lt;rarity&gt; &lt;weight&gt;</code>\n"
+        "│  ├─➩ <code>/editspawnchance</code> — Adjust spawn chance (%)\n"
         "│  ├─➩ <code>/adminlist</code> — View all active admins\n"
     )
     
@@ -948,12 +948,13 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
             "│  👑 <b>OWNER ONLY COMMANDS:</b>\n"
             "│  ├─➩ <code>/promote &lt;user&gt; &lt;role&gt;</code> — Grant admin\n"
             "│  ├─➩ <code>/demote &lt;user&gt;</code> — Revoke admin role\n"
+            "│  ├─➩ <code>/delrarity &lt;rarity&gt;</code> — Delete custom rarity\n"
+            "│  ├─➩ <code>/editrarityemoji &lt;rarity&gt; &lt;emoji&gt;</code> — Edit emoji\n"
             "│  ├─➩ <code>/setcover &lt;mode&gt;</code> — Set covers (start, xo, dex)\n"
             "│  ├─➩ <code>/give &lt;user&gt; &lt;amount/char&gt;</code> — Give coins/chars\n"
             "│  ├─➩ <code>/addpremium &lt;user&gt;</code> — Grant VIP status\n"
             "│  ├─➩ <code>/removepremium &lt;user&gt;</code> — Revoke VIP status\n"
-        )
-        
+        )        
     card += "│  \n╰──────────────────────────╯"
     is_group = message.chat.type != "private"
     builder = InlineKeyboardBuilder()
