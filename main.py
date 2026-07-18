@@ -197,6 +197,7 @@ async def main():
         BotCommand(command="trivia", description="Play anime quiz trivia"),
         BotCommand(command="scramble", description="Play word scramble puzzle"),
         BotCommand(command="spawnchance", description="View wild character spawn chances"),
+        BotCommand(command="claimchance", description="View daily free character claim chances"),
         BotCommand(command="editspawnchance", description="Edit spawn weights (Admin only)"),
         BotCommand(command="pay", description="Pay coins to another trainer"),
         BotCommand(command="balance", description="Check your coin balance"),
@@ -216,12 +217,11 @@ async def main():
     except Exception as e:
         logger.error(f"Failed to register bot commands: {e}")
     db_middleware = DbSessionMiddleware()
-    join_middleware = JoinCheckMiddleware()    
+    join_middleware = JoinCheckMiddleware()
     dp.message.middleware(db_middleware)
-    dp.message.middleware(join_middleware)    
+    dp.message.middleware(join_middleware)
     dp.callback_query.middleware(db_middleware)
     dp.callback_query.middleware(join_middleware)
-
     dp.include_router(start.router)
     dp.include_router(admin.router)
     dp.include_router(profile.router)

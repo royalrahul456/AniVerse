@@ -960,6 +960,57 @@ async def cmd_claim(message: Message, db: AsyncSession):
             await message.reply_video(photo_to_send, caption=card, parse_mode="HTML")
         except Exception:
             await message.reply(card, parse_mode="HTML")
+@router.message(Command("claimchance", "claimchances"))
+async def cmd_claimchance(message: Message, db: AsyncSession):
+    from sqlalchemy import func
+    from collections import Counter
+    
+    stmt = select(Character).join(
+        RarityType,
+        func.lower(Character.rarity) == func.lower(RarityType.name)
+    ).where(RarityType.spawn_enabled == True)
+    res = await db.execute(stmt)
+    characters = res.scalars().all()
+    
+    if not characters:
+        await message.reply("⚠️ No characters with active spawn rarities are currently available in the database.")
+        return
+
+    stmt_rarities = select(RarityType).where(RarityType.spawn_enabled == True)
+    res_rarities = await db.execute(stmt_rarities)
+    rarity_list = res_rarities.scalars().all()
+    
+    rarity_weights = {r.name.lower(): r.weight for r in rarity_list}
+    rarity_counts = Counter(c.rarity.lower() for c in characters)
+    
+    total_weight = sum(rarity_counts.get(r.name.lower(), 0) * r.weight for r in rarity_list)
+    
+    if total_weight <= 0:
+        await message.reply("⚠️ Total rarity weight is 0. Cannot compute claim chances.")
+        return
+        
+    lines = []
+    for r in rarity_list:
+        count = rarity_counts.get(r.name.lower(), 0)
+        if count == 0:
+            continue
+        weight = r.weight
+        rarity_total_weight = count * weight
+        pct = (rarity_total_weight / total_weight) * 100
+        
+        from utils.formatters import get_rarity_emoji
+        r_emoji = get_rarity_emoji(r.name)
+        lines.append((pct, f"{r_emoji} <b>{r.name}</b>: <b>{pct:.2f}%</b> (Count: {count})"))
+        
+    lines.sort(key=lambda x: x[0], reverse=True)
+    
+    formatted_lines = [item[1] for item in lines]
+    text = (
+        "🎲 <b>DAILY CLAIM CHARACTER CHANCES</b>\n\n"
+        + format_blockquote("\n".join(formatted_lines))
+    )
+    await message.reply(text, parse_mode="HTML")
+
 @router.message(Command("leaderboard"))
 async def cmd_leaderboard(message: Message, db: AsyncSession):
     parts = message.text.strip().split()
@@ -971,7 +1022,6 @@ async def cmd_leaderboard(message: Message, db: AsyncSession):
         elif "prem" in arg:
             category = "premium"
     await render_leaderboard(category, message, db, is_callback=False)
-
 @router.callback_query(F.data.startswith("dm_leaderboard"))
 async def cb_leaderboard(callback: CallbackQuery, db: AsyncSession):
     parts = callback.data.split("_")
