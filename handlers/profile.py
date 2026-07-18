@@ -1029,12 +1029,11 @@ async def render_leaderboard(category: str, message_obj, db: AsyncSession, is_ca
     text = (
         f"{header}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{body_content}\n\n"
+        + format_blockquote(body_content) + "\n\n"
         f"━━━━━━━━━━━━━━━━━━━━"
     )
     cover_media = get_cover_media("leaderboard")
     kb = get_leaderboard_keyboard(category)
-
     if is_callback:
         try:
             await message_obj.edit_media(InputMediaPhoto(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=kb)
