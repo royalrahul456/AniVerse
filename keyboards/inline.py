@@ -141,9 +141,12 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 def get_leaderboard_keyboard(current_category: str) -> InlineKeyboardMarkup:
+    import config
     builder = InlineKeyboardBuilder()
+    currency_name = getattr(config, "CURRENCY_NAME", "Gold")
+    currency_emoji = getattr(config, "CURRENCY_EMOJI", "🪙")
     categories = [
-        ("coins", "💰 Top Coins"),
+        ("coins", f"{currency_emoji} Top {currency_name}"),
         ("catches", "⚡ Top Snatches"),
         ("premium", "👑 Premium")
     ]

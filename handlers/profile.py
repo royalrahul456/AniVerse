@@ -986,19 +986,22 @@ async def render_leaderboard(category: str, message_obj, db: AsyncSession, is_ca
     category = category.lower()
     medals = ["🥇", "🥈", "🥉"]
     lines = []
+    
+    currency_name = getattr(config, "CURRENCY_NAME", "Gold")
+    currency_emoji = getattr(config, "CURRENCY_EMOJI", "🪙")
 
     if category == "catches":
-        border_top = "╭───「 ⚡ Top Snatches 」───╮"
+        header = "⚡ <b>TOP SNATCHES LEADERBOARD</b> ⚡"
         stmt = select(User).order_by(desc(User.total_catches)).limit(10)
         res = await db.execute(stmt)
         top_users = res.scalars().all()
         for idx, u in enumerate(top_users):
             icon = medals[idx] if idx < 3 else f"<b>#{idx+1}</b>"
             name_str = f"@{u.username}" if u.username else u.first_name
-            lines.append(f"│  {icon} <b>{escape_html(name_str)}</b> - {u.total_catches:,} catches")
+            lines.append(f"{icon} <b>{escape_html(name_str)}</b> — <code>{u.total_catches:,} catches</code>")
         
     elif category == "premium":
-        border_top = "╭───「 👑 Premium Members 」───╮"
+        header = "👑 <b>PREMIUM MEMBERS LEADERBOARD</b> 👑"
         now = datetime.datetime.utcnow()
         stmt = select(User).where(User.premium_until > now).order_by(User.premium_until).limit(10)
         res = await db.execute(stmt)
@@ -1008,30 +1011,27 @@ async def render_leaderboard(category: str, message_obj, db: AsyncSession, is_ca
             name_str = f"@{u.username}" if u.username else u.first_name
             delta = u.premium_until - now
             tag_str = f" [{escape_html(u.premium_tag)}]" if u.premium_tag else ""
-            lines.append(f"│  {icon} <b>{escape_html(name_str)}</b>{tag_str} - {delta.days}d left")
+            lines.append(f"{icon} <b>{escape_html(name_str)}</b>{tag_str} — <code>{delta.days}d left</code>")
         
     else:
         category = "coins"
-        border_top = "╭───「 💰 Rich Leaderboard 」───╮"
+        header = f"{currency_emoji} <b>RICH LEADERBOARD</b> {currency_emoji}"
         stmt = select(User).order_by(desc(User.coins)).limit(10)
         res = await db.execute(stmt)
         top_users = res.scalars().all()
         for idx, u in enumerate(top_users):
             icon = medals[idx] if idx < 3 else f"<b>#{idx+1}</b>"
             name_str = f"@{u.username}" if u.username else u.first_name
-            lines.append(f"│  {icon} <b>{escape_html(name_str)}</b> - {format_coins(u.coins)}")
+            lines.append(f"{icon} <b>{escape_html(name_str)}</b> — <code>{format_coins(u.coins)} {currency_name}</code>")
 
-    border_bottom = "╰──────────────────────────╯"
-    body_content = "\n".join(lines) if lines else "│  No players ranked yet!"
+    body_content = "\n".join(lines) if lines else "No players ranked yet!"
     
     text = (
-        f"{border_top}\n"
-        f"│\n"
-        f"{body_content}\n"
-        f"│\n"
-        f"{border_bottom}"
+        f"{header}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{body_content}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━"
     )
-
     cover_media = get_cover_media("leaderboard")
     kb = get_leaderboard_keyboard(category)
 
