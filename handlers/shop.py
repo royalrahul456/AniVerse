@@ -70,16 +70,15 @@ async def cmd_shop(event, db: AsyncSession):
         "🎨 <b>AniVerse Custom Profile Themes</b>\n\n"
         + format_blockquote(
             "Give your trainer profile card a premium aesthetic makeover! Once purchased, you can apply themes using the <code>/settheme</code> command or from your profile.\n\n"
-            "🌸 <b>Sakura Theme:</b> 50,000 coins (50k)\n"
-            "🌌 <b>Cosmic Theme:</b> 75,000 coins (75k)\n"
-            "👑 <b>Gold VIP Theme:</b> 100,000 coins (100k)\n"
-            "🦇 <b>Dark Knight Theme:</b> 120,000 coins (120k)\n"
-            "👾 <b>Neon Cyber Theme:</b> 150,000 coins (150k)\n"
-            "🐦‍🔥 <b>Phoenix Theme:</b> 200,000 coins (200k)\n\n"
-            f"💰 <b>Your Coins:</b> {user.coins:,} coins"
+            f"🌸 <b>Sakura Theme:</b> 50,000 {config.CURRENCY_NAME} (50k)\n"
+            f"🌌 <b>Cosmic Theme:</b> 75,000 {config.CURRENCY_NAME} (75k)\n"
+            f"👑 <b>Gold VIP Theme:</b> 100,000 {config.CURRENCY_NAME} (100k)\n"
+            f"🦇 <b>Dark Knight Theme:</b> 120,000 {config.CURRENCY_NAME} (120k)\n"
+            f"👾 <b>Neon Cyber Theme:</b> 150,000 {config.CURRENCY_NAME} (150k)\n"
+            f"🐦‍🔥 <b>Phoenix Theme:</b> 200,000 {config.CURRENCY_NAME} (200k)\n\n"
+            f"{config.CURRENCY_EMOJI} <b>Your {config.CURRENCY_NAME}:</b> {user.coins:,} {config.CURRENCY_NAME}"
         )
     )
-
     message_obj = event.message if is_callback else event
     is_group = message_obj.chat.type != "private"
 
@@ -121,9 +120,9 @@ async def cb_buy_theme(callback: CallbackQuery, db: AsyncSession):
         return
 
     if user.coins < theme_info["price"]:
-        await callback.answer(f"❌ You need {theme_info['price']:,} coins! Balance: {user.coins:,}", show_alert=True)
+        from utils.formatters import format_currency
+        await callback.answer(f"❌ You need {format_currency(theme_info['price'])}! Balance: {format_currency(user.coins)}", show_alert=True)
         return
-
     user.coins -= theme_info["price"]
     unlocked.append(theme_key)
     user.unlocked_themes = ",".join(unlocked)

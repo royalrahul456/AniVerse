@@ -38,8 +38,9 @@ def get_rarity_emoji(rarity: str) -> str:
     return "✨"
 
 def format_blockquote(text: str) -> str:
-    return f"<blockquote>{text}</blockquote>"
-
+    # On mobile screens, Telegram blockquotes squeeze and wrap the text awkwardly.
+    # Returning standard clean text prevents this and matches mobile screens perfectly.
+    return text
 def get_progress_bar(current: int, total: int, length: int = 10) -> str:
     if total <= 0:
         return "░" * length
@@ -55,6 +56,10 @@ def format_coins(coins: int) -> str:
         return f"{coins / 1_000:.1f}k"
     return str(coins)
 
+def format_currency(amount: int) -> str:
+    currency_emoji = getattr(config, "CURRENCY_EMOJI", "🪙")
+    currency_name = getattr(config, "CURRENCY_NAME", "Gold")
+    return f"{amount:,} {currency_emoji} {currency_name}"
 def escape_html(text: str) -> str:
     if not text:
         return ""

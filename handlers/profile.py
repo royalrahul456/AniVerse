@@ -865,32 +865,61 @@ async def render_anime_list(query_str: str, page: int, message_obj, db: AsyncSes
 @router.message(Command("claim"))
 async def cmd_claim(message: Message, db: AsyncSession):
     user_id = message.from_user.id
-    can_claim, time_remaining = await check_claim_cooldown(db, user_id)    
-    if not can_claim:
-        hours = time_remaining // 3600
-        minutes = (time_remaining % 3600) // 60
-        text = (
-            f"⏳ <b>Daily Free Roll Cooldown!</b>\n\n"
-            + format_blockquote(f"You must wait <b>{hours}h {minutes}m</b> before claiming your next random free character!\n\n<i>Resets daily at 5:30 AM IST</i>")
-        )
-        cover = get_cover_media("start")
-        try:
-            await message.reply_photo(cover, caption=text, parse_mode="HTML")
-        except Exception:
+    
+    # 1. Owner privileges: unlimited claims and claim anywhere
+    is_owner_user = user_id in config.ADMIN_IDS
+    
+    # 2. Check chat restriction for non-owners
+    if not is_owner_user:
+        official_chat_id = getattr(config, "OFFICIAL_CHAT_ID", None)
+        if official_chat_id and message.chat.id != official_chat_id:
+            await message.reply(
+                "❌ <b>Daily Free Roll Restriction</b>\n\n"
+                "You can only use the <code>/claim</code> command in our <b>Official Group Chat</b>!",
+                parse_mode="HTML"
+            )
+            return
+            
+    # 3. Check claim cooldown (only for non-owners)
+    if not is_owner_user:
+        can_claim, time_remaining = await check_claim_cooldown(db, user_id)    
+        if not can_claim:
+            hours = time_remaining // 3600
+            minutes = (time_remaining % 3600) // 60
+            text = (
+                f"⏳ <b>Daily Free Roll Cooldown!</b>\n\n"
+                + format_blockquote(f"You must wait <b>{hours}h {minutes}m</b> before claiming your next random free character!\n\n<i>Resets daily at 5:30 AM IST</i>")
+            )
+            cover = get_cover_media("start")
             try:
-                await message.reply_video(cover, caption=text, parse_mode="HTML")
+                await message.reply_photo(cover, caption=text, parse_mode="HTML")
             except Exception:
-                await message.reply(text, parse_mode="HTML")
-        return
+                try:
+                    await message.reply_video(cover, caption=text, parse_mode="HTML")
+                except Exception:
+                    await message.reply(text, parse_mode="HTML")
+            return
 
-    stmt = select(Character)
+    # 4. Fetch characters belonging only to rarities where spawn_enabled == True
+    from sqlalchemy import func
+    stmt = select(Character).join(
+        RarityType,
+        func.lower(Character.rarity) == func.lower(RarityType.name)
+    ).where(RarityType.spawn_enabled == True)
     res = await db.execute(stmt)
     characters = res.scalars().all()
+    
     if not characters:
-        await message.reply("⚠️ No characters available in database right now.")
+        await message.reply("⚠️ No characters with active spawn rarities are currently available in the database.")
         return
 
-    weights = [config.RARITY_CONFIG.get(c.rarity, {"weight": 10})["weight"] for c in characters]
+    # 5. Fetch weights of active rarities from RarityType
+    stmt_rarities = select(RarityType).where(RarityType.spawn_enabled == True)
+    res_rarities = await db.execute(stmt_rarities)
+    rarity_list = res_rarities.scalars().all()
+    rarity_weights = {r.name.lower(): r.weight for r in rarity_list}
+
+    weights = [rarity_weights.get(c.rarity.lower(), 10) for c in characters]
     character = random.choices(characters, weights=weights, k=1)[0]
 
     user = await get_or_create_user(db, user_id, message.from_user.username, message.from_user.first_name)
@@ -899,11 +928,17 @@ async def cmd_claim(message: Message, db: AsyncSession):
     user_char = UserCharacter(user_id=user_id, character_id=character.id, nickname=character.name)
     db.add(user_char)
     await db.commit()
-    await record_claim(db, user_id)
+    
+    # Only record claim timestamp for regular users
+    if not is_owner_user:
+        await record_claim(db, user_id)
+        
     r_emoji = get_rarity_emoji(character.rarity)
-    total_weight = sum(config.RARITY_CONFIG.get(c.rarity, {"weight": 10})["weight"] for c in characters)
-    char_weight = config.RARITY_CONFIG.get(character.rarity, {"weight": 10})["weight"]
-    chance_pct = (char_weight / total_weight) * 100
+    
+    # Relative percentage chance calculation
+    total_weight = sum(rarity_weights.get(c.rarity.lower(), 10) for c in characters)
+    char_weight = rarity_weights.get(character.rarity.lower(), 10)
+    chance_pct = (char_weight / total_weight) * 100 if total_weight > 0 else 0
 
     card = (
         f"✨ <b>CONGRATS {escape_html(message.from_user.first_name.upper())}!</b>\n\n"
@@ -925,7 +960,6 @@ async def cmd_claim(message: Message, db: AsyncSession):
             await message.reply_video(photo_to_send, caption=card, parse_mode="HTML")
         except Exception:
             await message.reply(card, parse_mode="HTML")
-
 @router.message(Command("leaderboard"))
 async def cmd_leaderboard(message: Message, db: AsyncSession):
     parts = message.text.strip().split()

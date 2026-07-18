@@ -20,8 +20,14 @@ ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "6593485710").split(",") if 
 
 # Gameplay Rewards Configuration
 DAILY_REWARD_MIN = 250
-DAILY_REWARD_MAX = 550
 
+# Currency Configuration
+CURRENCY_NAME = "Gold"
+CURRENCY_EMOJI = "🪙"
+
+# Official Group Chat ID (Daily claim restriction)
+OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1002447935748"))
+DAILY_REWARD_MAX = 550
 CATCH_REWARD_MIN = 80
 CATCH_REWARD_MAX = 130
 

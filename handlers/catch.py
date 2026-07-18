@@ -153,11 +153,21 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
     guess_clean = get_clean_name(guess).lower()
     actual_name_clean = get_clean_name(character.name).lower()
 
-    if not guess_clean or (guess_clean != actual_name_clean and guess_clean not in actual_name_clean):
+    is_correct = False
+    if '&' in actual_name_clean:
+        name_parts = [p.strip() for p in actual_name_clean.split('&') if p.strip()]
+        for part in name_parts:
+            if guess_clean == part or (len(guess_clean) >= 3 and guess_clean in part):
+                is_correct = True
+                break
+    else:
+        if guess_clean == actual_name_clean or (guess_clean and guess_clean in actual_name_clean):
+            is_correct = True
+
+    if not guess_clean or not is_correct:
         await message.reply("❌ That is not the correct character name! Try again.")
         return
-    user = await get_or_create_user(db, user_id, message.from_user.username if message.from_user else "", message.from_user.first_name if message.from_user else "")
-    
+    user = await get_or_create_user(db, user_id, message.from_user.username if message.from_user else "", message.from_user.first_name if message.from_user else "")    
     coins_won = random.randint(config.CATCH_REWARD_MIN, config.CATCH_REWARD_MAX)
     user.coins += coins_won
     user.total_catches += 1
@@ -171,8 +181,8 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
     await db.delete(spawn)
     await db.commit()
 
-    await message.reply(f"🎉 <b>+{coins_won} coins!</b> Balance: <code>{user.coins:,}</code>", parse_mode="HTML")
-
+    from utils.formatters import format_currency
+    await message.reply(f"🎉 <b>+{coins_won} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!</b> Balance: <code>{format_currency(user.coins)}</code>", parse_mode="HTML")
     r_emoji = get_rarity_emoji(character.rarity)
     card_text = (
         f"💥 🌟 <b>{nickname}</b> collected <b>{escape_html(character.name)}</b>!\n\n"

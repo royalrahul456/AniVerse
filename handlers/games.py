@@ -67,8 +67,8 @@ async def cmd_spin(event, db: AsyncSession):
         "🎰 <b>LUCKY WHEEL SPIN!</b> 🎰\n\n"
         + format_blockquote(
             f"🌀 <i>*The wheel spins rapidly...*</i>\n\n"
-            f"🎉 <b>Land:</b> +{won_coins} Coins!\n"
-            f"💰 <b>Total Balance:</b> {user.coins:,} Coins\n"
+            f"🎉 <b>Land:</b> +{won_coins} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
+            f"💰 <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}\n"
             f"🎯 <b>Remaining spins today:</b> {2 - current_count}/3"
         )
     )
@@ -103,10 +103,9 @@ async def cmd_daily(message: Message, db: AsyncSession):
     text = (
         f"🔥 <b>{user.daily_streak}-Day Streak Claimed!</b>\n\n"
         + format_blockquote(
-            f"🎉 <b>Reward:</b> +{reward} Coins!\n"
+            f"🎉 <b>Reward:</b> +{reward} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
             f"🎯 <b>Keep your streak going tomorrow!</b>\n"
-            f"💰 <b>Total Balance:</b> {user.coins:,} Coins"
-        )
+            f"💰 <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"        )
     )
     await message.answer(text, parse_mode="HTML")
 
@@ -138,7 +137,7 @@ async def cmd_coinflip(event, db: AsyncSession):
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
     bet = 100
     if user.coins < bet:
-        text = "❌ You need at least 100 coins to flip a coin!"
+        text = f"❌ You need at least 100 {config.CURRENCY_NAME} to flip a coin!"
         if is_callback:
             await event.answer(text, show_alert=True)
         else:
@@ -149,10 +148,10 @@ async def cmd_coinflip(event, db: AsyncSession):
     outcome = "Heads" if win else "Tails"
     if win:
         user.coins += bet
-        res_text = f"🎉 <b>WIN!</b> It landed on {outcome}! You won +{bet} coins!"
+        res_text = f"🎉 <b>WIN!</b> It landed on {outcome}! You won +{bet} {config.CURRENCY_NAME}!"
     else:
         user.coins -= bet
-        res_text = f"💀 <b>LOSS!</b> It landed on {outcome}! You lost {bet} coins."
+        res_text = f"💀 <b>LOSS!</b> It landed on {outcome}! You lost {bet} {config.CURRENCY_NAME}."
 
     await db.commit()
     await record_game_play(db, user_id, "coinflip")
@@ -161,7 +160,7 @@ async def cmd_coinflip(event, db: AsyncSession):
         f"🪙 <b>COIN FLIP CHALLENGE</b>\n\n" 
         + format_blockquote(
             f"{res_text}\n"
-            f"💰 <b>Balance:</b> {user.coins:,} Coins\n"
+            f"💰 <b>Balance:</b> {user.coins:,} {config.CURRENCY_NAME}\n"
             f"🎯 <b>Remaining flips today:</b> {1 - current_count}/2"
         )
     )
@@ -170,7 +169,6 @@ async def cmd_coinflip(event, db: AsyncSession):
         await event.answer()
     else:
         await message_obj.reply(card, parse_mode="HTML")
-
 @router.callback_query(F.data == "game_dice")
 @router.message(Command("dice"))
 async def cmd_dice(event, db: AsyncSession):
