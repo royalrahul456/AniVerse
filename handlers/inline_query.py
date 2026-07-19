@@ -1,6 +1,9 @@
 from aiogram import Router, F
 from aiogram.types import (
     InlineQuery, 
+    InlineQueryResultPhoto, 
+    InlineQueryResultCachedPhoto, 
+    InlineQueryResultCachedVideo, 
     InlineQueryResultArticle, 
     InputTextMessageContent
 )
@@ -108,25 +111,70 @@ async def handle_inline_query(inline_query: InlineQuery):
                     title = f"{clean_rarity} — {clean_name}"
 
                 item_id = f"item_{char.id}_{offset}_{idx}"
-                thumb_url = img_val if img_val.startswith("http") else DEFAULT_THUMB
-                
-                # Zero-width space link to character image URL triggers a rich media preview
-                message_content = caption
-                if img_val.startswith("http"):
-                    message_content = f'<a href="{img_val}">&#8203;</a>' + caption
 
-                results.append(
-                    InlineQueryResultArticle(
-                        id=item_id,
-                        title=title,
-                        description=clean_anime,
-                        thumbnail_url=thumb_url,
-                        input_message_content=InputTextMessageContent(
-                            message_text=message_content,
+                if img_val.startswith("http"):
+                    results.append(
+                        InlineQueryResultPhoto(
+                            id=item_id,
+                            photo_url=img_val,
+                            thumbnail_url=img_val,
+                            title=title,
+                            description=clean_anime,
+                            caption=caption,
                             parse_mode="HTML"
                         )
                     )
-                )
+                else:
+                    if filter_mode == "AMV" or char.rarity.lower() == "amv":
+                        try:
+                            results.append(
+                                InlineQueryResultCachedVideo(
+                                    id=item_id,
+                                    video_file_id=img_val,
+                                    title=title,
+                                    description=clean_anime,
+                                    caption=caption,
+                                    parse_mode="HTML"
+                                )
+                            )
+                        except Exception:
+                            results.append(
+                                InlineQueryResultArticle(
+                                    id=item_id,
+                                    title=title,
+                                    description=clean_anime,
+                                    thumbnail_url=DEFAULT_THUMB,
+                                    input_message_content=InputTextMessageContent(
+                                        message_text=caption,
+                                        parse_mode="HTML"
+                                    )
+                                )
+                            )
+                    else:
+                        try:
+                            results.append(
+                                InlineQueryResultCachedPhoto(
+                                    id=item_id,
+                                    photo_file_id=img_val,
+                                    title=title,
+                                    description=clean_anime,
+                                    caption=caption,
+                                    parse_mode="HTML"
+                                )
+                            )
+                        except Exception:
+                            results.append(
+                                InlineQueryResultArticle(
+                                    id=item_id,
+                                    title=title,
+                                    description=clean_anime,
+                                    thumbnail_url=DEFAULT_THUMB,
+                                    input_message_content=InputTextMessageContent(
+                                        message_text=caption,
+                                        parse_mode="HTML"
+                                    )
+                                )
+                            )
         else:
             # Query Bot's Global Character Database (Show all if empty, filter AMV if 'amv', otherwise search)
             if search_query == "":
@@ -161,23 +209,69 @@ async def handle_inline_query(inline_query: InlineQuery):
                 title = f"{clean_rarity} — {clean_name}"
                 item_id = f"search_{char.id}_{offset}_{idx}"
 
-                thumb_url = img_val if img_val.startswith("http") else DEFAULT_THUMB
-                message_content = caption
                 if img_val.startswith("http"):
-                    message_content = f'<a href="{img_val}">&#8203;</a>' + caption
-
-                results.append(
-                    InlineQueryResultArticle(
-                        id=item_id,
-                        title=title,
-                        description=clean_anime,
-                        thumbnail_url=thumb_url,
-                        input_message_content=InputTextMessageContent(
-                            message_text=message_content,
+                    results.append(
+                        InlineQueryResultPhoto(
+                            id=item_id,
+                            photo_url=img_val,
+                            thumbnail_url=img_val,
+                            title=title,
+                            description=clean_anime,
+                            caption=caption,
                             parse_mode="HTML"
                         )
                     )
-                )
+                else:
+                    if char.rarity.lower() == "amv":
+                        try:
+                            results.append(
+                                InlineQueryResultCachedVideo(
+                                    id=item_id,
+                                    video_file_id=img_val,
+                                    title=title,
+                                    description=clean_anime,
+                                    caption=caption,
+                                    parse_mode="HTML"
+                                )
+                            )
+                        except Exception:
+                            results.append(
+                                InlineQueryResultArticle(
+                                    id=item_id,
+                                    title=title,
+                                    description=clean_anime,
+                                    thumbnail_url=DEFAULT_THUMB,
+                                    input_message_content=InputTextMessageContent(
+                                        message_text=caption,
+                                        parse_mode="HTML"
+                                    )
+                                )
+                            )
+                    else:
+                        try:
+                            results.append(
+                                InlineQueryResultCachedPhoto(
+                                    id=item_id,
+                                    photo_file_id=img_val,
+                                    title=title,
+                                    description=clean_anime,
+                                    caption=caption,
+                                    parse_mode="HTML"
+                                )
+                            )
+                        except Exception:
+                            results.append(
+                                InlineQueryResultArticle(
+                                    id=item_id,
+                                    title=title,
+                                    description=clean_anime,
+                                    thumbnail_url=DEFAULT_THUMB,
+                                    input_message_content=InputTextMessageContent(
+                                        message_text=caption,
+                                        parse_mode="HTML"
+                                    )
+                                )
+                            )
 
     # Set next_offset if there are potentially more results
     next_offset = str(offset + limit) if len(results) == limit else ""
