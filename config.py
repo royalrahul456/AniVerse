@@ -24,9 +24,8 @@ DAILY_REWARD_MIN = 250
 # Currency Configuration
 CURRENCY_NAME = "Gold"
 CURRENCY_EMOJI = "🪙"
-
 # Official Group Chat ID (Daily claim restriction)
-OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1002447935748"))
+OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1003616974453"))
 DAILY_REWARD_MAX = 550
 CATCH_REWARD_MIN = 80
 CATCH_REWARD_MAX = 130
