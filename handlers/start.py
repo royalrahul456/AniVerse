@@ -1,5 +1,6 @@
 import time
 from aiogram import Router, F
+from aiogram.fsm.context import FSMContext
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -35,9 +36,21 @@ async def get_or_create_user(session: AsyncSession, user_id: int, username: str 
     return user
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, db: AsyncSession):
+async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     # Ensure user is registered in db
     await get_or_create_user(db, message.from_user.id, message.from_user.username, message.from_user.first_name)
+    
+    parts = message.text.strip().split()
+    if len(parts) > 1:
+        start_arg = parts[1].strip()
+        if start_arg == "addchar":
+            from handlers.admin import cmd_addchar
+            await cmd_addchar(message, state, db)
+            return
+        elif start_arg == "editchar":
+            from handlers.admin import cmd_editchar
+            await cmd_editchar(message, state, db)
+            return
     
     cover_media = get_cover_media("start")
     bot_info = await message.bot.get_me()

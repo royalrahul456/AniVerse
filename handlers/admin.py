@@ -396,6 +396,11 @@ async def cmd_removefromclaim(message: Message, db: AsyncSession):
     stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
     res = await db.execute(stmt)
     rarity_item = res.scalar_one_or_none()
+    if rarity_item:
+        rarity_item.claim_enabled = False
+        await db.commit()
+    await message.reply(f"🚫 <b>{rarity_name.title()}</b> has been removed from daily free claim pool!", parse_mode="HTML")
+
 class AddCharStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_anime = State()
@@ -417,11 +422,10 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await message.reply("❌ Character registration process has been cancelled.")
 
 async def find_existing_character_anime(name: str, db: AsyncSession) -> str | None:
-    stmt = select(Character).where(Character.name.ilike(name)).limit(1)
+    stmt = select(Character).where(Character.name.ilike(name))
     res = await db.execute(stmt)
-    char = res.scalar_one_or_none()
+    char = res.scalars().first()
     return char.anime if (char and char.anime) else None
-
 async def send_rarity_keyboard(message: Message, name: str, anime: str, state_data: dict, db: AsyncSession, is_callback: bool = False, callback_query: CallbackQuery = None):
     # Fetch available rarities
     default_rarities = ["Common", "Rare", "Epic", "Legendary", "Mythical"]
@@ -583,6 +587,18 @@ async def cmd_addchar(message: Message, state: FSMContext, db: AsyncSession):
         await message.reply("⛔ Only bot owners and admins can add characters!")
         return
 
+    if message.chat.type != "private":
+        bot_info = await message.bot.get_me()
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="💬 Start in Private Chat", url=f"https://t.me/{bot_info.username}?start=addchar"))
+        await message.reply(
+            "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n\n"
+            "⚠️ Character registration requires text input steps. To prevent chat clutter and conflicts in groups, please complete this in my **Private Chat (DM)**!\n\n"
+            "Click the button below to start:",
+            reply_markup=builder.as_markup(),
+            parse_mode="HTML"
+        )
+        return
     parts = message.text.split(maxsplit=1)
     target_id = None
     cmd_arg_name = None
@@ -1642,15 +1658,27 @@ async def process_claim_edit_weight(message: Message, db: AsyncSession, state: F
 DEFAULT_CHAR_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 
 @router.message(Command("editchar", "editcharacter"))
-async def cmd_editchar(message: Message, db: AsyncSession):
+async def cmd_editchar(message: Message, state: FSMContext, db: AsyncSession):
     if not await is_admin(message, db):
         await message.reply("⛔ Only bot owners and admins can edit characters!")
+        return
+
+    if message.chat.type != "private":
+        bot_info = await message.bot.get_me()
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="📝 Edit in Private Chat", url=f"https://t.me/{bot_info.username}?start=editchar"))
+        await message.reply(
+            "⛩️ <b>EDIT ANIME CHARACTER CONSOLE</b>\n\n"
+            "⚠️ Character editing requires multiple interaction steps. To prevent group chat clutter, please complete this in my **Private Chat (DM)**!\n\n"
+            "Click the button below to edit:",
+            reply_markup=builder.as_markup(),
+            parse_mode="HTML"
+        )
         return
     parts = message.text.strip().split()
     if len(parts) < 2:
         await message.reply("⚠️ <b>Usage:</b> <code>/editchar &lt;character_id&gt;</code>", parse_mode="HTML")
         return
-
     char_id_str = parts[1].strip()
     if not char_id_str.isdigit():
         await message.reply("❌ Character ID must be a valid number.")
