@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import text
 import config
 
 # Supports both SQLite (local dev) and PostgreSQL (Railway production)
@@ -22,27 +23,28 @@ async def init_db():
     # Safely alter tables to add new columns if they do not exist
     async with engine.begin() as conn:
         try:
-            await conn.execute("ALTER TABLE rarity_types ADD COLUMN claim_enabled BOOLEAN DEFAULT FALSE")
+            await conn.execute(text("ALTER TABLE rarity_types ADD COLUMN claim_enabled BOOLEAN DEFAULT FALSE"))
         except Exception:
             pass
         try:
-            await conn.execute("ALTER TABLE rarity_types ADD COLUMN claim_weight INTEGER DEFAULT 10")
+            await conn.execute(text("ALTER TABLE rarity_types ADD COLUMN claim_weight INTEGER DEFAULT 10"))
         except Exception:
             pass
         try:
-            await conn.execute("CREATE INDEX IF NOT EXISTS ix_user_characters_user_id ON user_characters (user_id)")
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_user_id ON user_characters (user_id)"))
         except Exception:
             pass
         try:
-            await conn.execute("CREATE INDEX IF NOT EXISTS ix_user_characters_character_id ON user_characters (character_id)")
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_character_id ON user_characters (character_id)"))
         except Exception:
             pass
         try:
             if "sqlite" in str(engine.url):
-                await conn.execute("PRAGMA journal_mode=WAL;")
-                await conn.execute("PRAGMA synchronous=NORMAL;")
+                await conn.execute(text("PRAGMA journal_mode=WAL;"))
+                await conn.execute(text("PRAGMA synchronous=NORMAL;"))
         except Exception:
             pass
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
