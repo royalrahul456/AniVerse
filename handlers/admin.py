@@ -21,6 +21,12 @@ router = Router()
 DEFAULT_FALLBACK_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 pending_user_media = {}
 
+def clear_character_cache():
+    try:
+        from handlers.catch import character_cache
+        character_cache.clear()
+    except Exception:
+        pass
 def is_owner(message: Message) -> bool:
     if message.from_user and message.from_user.id in config.ADMIN_IDS:
         return True
@@ -491,7 +497,7 @@ async def save_character_to_db(message: Message, data: dict, db: AsyncSession, b
         )
     db.add(character)
     await db.commit()
-
+    clear_character_cache()
     r_emoji = get_rarity_emoji(rarity)
     card = (
         "⛩️ <b>CHARACTER FULLY REGISTERED!</b> ⛩️\n"
@@ -942,7 +948,7 @@ async def cmd_setimg(message: Message, db: AsyncSession):
 
     character.image_url = media_to_set
     await db.commit()
-
+    clear_character_cache()
     r_emoji = get_rarity_emoji(character.rarity)
     card = (
         f"✅ <b>CHARACTER IMAGE UPDATED!</b>\n\n"
@@ -991,7 +997,7 @@ async def cmd_deletechar(message: Message, db: AsyncSession):
     await db.execute(delete(UserCharacter).where(UserCharacter.character_id == char_id))
     await db.delete(character)
     await db.commit()
-
+    clear_character_cache()
     card = (
         f"🗑️ <b>CHARACTER DELETED FROM BOT!</b>\n\n"
         + format_blockquote(
@@ -1779,6 +1785,7 @@ async def process_edit_name(message: Message, state: FSMContext, db: AsyncSessio
         old_name = character.name
         character.name = new_name
         await db.commit()
+        clear_character_cache()
         await message.reply(f"✅ Character name updated to <b>{escape_html(new_name)}</b>!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
         by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
@@ -1808,6 +1815,7 @@ async def process_edit_anime(message: Message, state: FSMContext, db: AsyncSessi
         old_anime = character.anime
         character.anime = new_anime
         await db.commit()
+        clear_character_cache()
         await message.reply(f"✅ Character anime updated to <b>{escape_html(new_anime)}</b>!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
         by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
@@ -1834,6 +1842,7 @@ async def process_edit_rarity_cb(callback: CallbackQuery, state: FSMContext, db:
         old_rarity = character.rarity
         character.rarity = new_rarity
         await db.commit()
+        clear_character_cache()
         await callback.message.reply(f"✅ Character rarity updated to <b>{new_rarity}</b>!", parse_mode="HTML")
         await send_edit_char_menu(callback.message, character, db, is_callback=False)
         by_user = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
@@ -1864,6 +1873,7 @@ async def process_edit_rarity_text(message: Message, state: FSMContext, db: Asyn
         old_rarity = character.rarity
         character.rarity = new_rarity
         await db.commit()
+        clear_character_cache()
         await message.reply(f"✅ Character rarity updated to <b>{new_rarity}</b>!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
         by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
@@ -1895,6 +1905,7 @@ async def process_edit_media(message: Message, state: FSMContext, db: AsyncSessi
     if character:
         character.image_url = file_id
         await db.commit()
+        clear_character_cache()
         await message.reply("✅ Character media has been updated successfully!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
         by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
