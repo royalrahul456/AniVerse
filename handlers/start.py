@@ -44,17 +44,18 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     if len(parts) > 1:
         start_arg = parts[1].strip()
         if start_arg == "addchar":
+            message.text = "/addchar"
             from handlers.admin import cmd_addchar
             await cmd_addchar(message, state, db)
             return
         elif start_arg == "editchar":
+            message.text = "/editchar"
             from handlers.admin import cmd_editchar
             await cmd_editchar(message, state, db)
             return
     
     cover_media = get_cover_media("start")
-    bot_info = await message.bot.get_me()
-    
+    bot_info = await message.bot.get_me()    
     caption = (
         "🎉 <b>Welcome to AniVerse Universe!</b>\n\n"
         + format_blockquote(
