@@ -685,223 +685,243 @@ async def cmd_addchar(message: Message, state: FSMContext, db: AsyncSession):
 
 @router.message(AddCharStates.waiting_for_name)
 async def process_name(message: Message, state: FSMContext, db: AsyncSession):
-    if message.text and message.text.strip() == "/cancel":
-        await state.clear()
-        await message.reply("❌ Character registration process has been cancelled.")
-        return
-
-    # In group chats, ignore messages that are NOT replies to the bot's prompt
-    # unless the message itself is a reply to another message (which contains the name)
-    if message.chat.type in ["group", "supergroup"]:
-        is_reply_to_bot = (
-            message.reply_to_message 
-            and message.reply_to_message.from_user 
-            and message.reply_to_message.from_user.is_bot
-        )
-        is_reply_to_other = (
-            message.reply_to_message 
-            and not is_reply_to_bot
-        )
-        if not is_reply_to_bot and not is_reply_to_other:
+    try:
+        if message.text and message.text.strip() == "/cancel":
+            await state.clear()
+            await message.reply("❌ Character registration process has been cancelled.")
             return
 
-    name = None
-    media_file_id = None
-    media_type = None
+        if message.chat.type in ["group", "supergroup"]:
+            is_reply_to_bot = (
+                message.reply_to_message 
+                and message.reply_to_message.from_user 
+                and message.reply_to_message.from_user.is_bot
+            )
+            is_reply_to_other = (
+                message.reply_to_message 
+                and not is_reply_to_bot
+            )
+            if not is_reply_to_bot and not is_reply_to_other:
+                return
 
-    if message.reply_to_message:
-        reply = message.reply_to_message
-        if reply.photo:
-            media_file_id = reply.photo[-1].file_id
-            media_type = "photo"
-        elif reply.video:
-            media_file_id = reply.video.file_id
-            media_type = "video"
-        elif reply.animation:
-            media_file_id = reply.animation.file_id
-            media_type = "animation"
-        
-        is_reply_to_bot = (
-            reply.from_user 
-            and reply.from_user.is_bot
-        )
-        if not is_reply_to_bot:
-            name = (reply.text or reply.caption or "").strip()
+        name = None
+        media_file_id = None
+        media_type = None
 
-    if not name and message.text:
-        if message.text.startswith("/"):
-            await message.reply("⚠️ Invalid name! Please type a text name for the character:")
+        if message.reply_to_message:
+            reply = message.reply_to_message
+            if reply.photo:
+                media_file_id = reply.photo[-1].file_id
+                media_type = "photo"
+            elif reply.video:
+                media_file_id = reply.video.file_id
+                media_type = "video"
+            elif reply.animation:
+                media_file_id = reply.animation.file_id
+                media_type = "animation"
+            
+            is_reply_to_bot = (
+                reply.from_user 
+                and reply.from_user.is_bot
+            )
+            if not is_reply_to_bot:
+                name = (reply.text or reply.caption or "").strip()
+
+        if not name:
+            text_source = message.text or message.caption
+            if text_source:
+                if text_source.startswith("/"):
+                    await message.reply("⚠️ Invalid name! Please type a text name for the character:")
+                    return
+                name = text_source.strip()
+
+        if not name:
+            await message.reply("⚠️ Could not extract a character name. Please type the name of the character:")
             return
-        name = message.text.strip()
 
-    if not name:
-        await message.reply("⚠️ Could not extract a character name. Please type the name of the character:")
-        return
-
-    state_data = await state.get_data()
-    state_data["name"] = name
-    if media_file_id:
-        state_data["media_file_id"] = media_file_id
-        state_data["media_type"] = media_type
-    await state.update_data(**state_data)
-
-    anime = await find_existing_character_anime(name, db)
-    if anime:
-        state_data["anime"] = anime
-        state_data["anime_autofilled"] = True
+        state_data = await state.get_data()
+        state_data["name"] = name
+        if media_file_id:
+            state_data["media_file_id"] = media_file_id
+            state_data["media_type"] = media_type
         await state.update_data(**state_data)
-        await state.set_state(AddCharStates.waiting_for_rarity)
-        await send_rarity_keyboard(message, name, anime, state_data, db)
-    else:
-        await state.set_state(AddCharStates.waiting_for_anime)
-        await message.reply(
-            "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "📺 <b>[Step 2/4] Anime Series</b>\n\n"
-            "Please type the name of the anime series this character belongs to:",
-            parse_mode="HTML"
-        )
+
+        anime = await find_existing_character_anime(name, db)
+        if anime:
+            state_data["anime"] = anime
+            state_data["anime_autofilled"] = True
+            await state.update_data(**state_data)
+            await state.set_state(AddCharStates.waiting_for_rarity)
+            await send_rarity_keyboard(message, name, anime, state_data, db)
+        else:
+            await state.set_state(AddCharStates.waiting_for_anime)
+            await message.reply(
+                "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "📺 <b>[Step 2/4] Anime Series</b>\n\n"
+                "Please type the name of the anime series this character belongs to:",
+                parse_mode="HTML"
+            )
+    except Exception as e:
+        logger.error(f"Error in process_name: {e}", exc_info=True)
+        await message.reply(f"❌ An error occurred in process_name: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
 
 @router.message(AddCharStates.waiting_for_anime)
 async def process_anime(message: Message, state: FSMContext, db: AsyncSession):
-    if message.text and message.text.strip() == "/cancel":
-        await state.clear()
-        await message.reply("❌ Character registration process has been cancelled.")
-        return
-
-    if message.chat.type in ["group", "supergroup"]:
-        is_reply_to_bot = (
-            message.reply_to_message 
-            and message.reply_to_message.from_user 
-            and message.reply_to_message.from_user.is_bot
-        )
-        if not is_reply_to_bot:
+    try:
+        if message.text and message.text.strip() == "/cancel":
+            await state.clear()
+            await message.reply("❌ Character registration process has been cancelled.")
             return
 
-    if not message.text or message.text.startswith("/"):
-        await message.reply("⚠️ Invalid anime! Please type the name of the anime series:")
-        return
+        if message.chat.type in ["group", "supergroup"]:
+            is_reply_to_bot = (
+                message.reply_to_message 
+                and message.reply_to_message.from_user 
+                and message.reply_to_message.from_user.is_bot
+            )
+            if not is_reply_to_bot:
+                return
 
-    anime_name = message.text.strip()
-    await state.update_data(anime=anime_name)
-    await state.set_state(AddCharStates.waiting_for_rarity)
+        if not message.text or message.text.startswith("/"):
+            await message.reply("⚠️ Invalid anime! Please type the name of the anime series:")
+            return
 
-    state_data = await state.get_data()
-    name = state_data["name"]
-    await send_rarity_keyboard(message, name, anime_name, state_data, db)
+        anime_name = message.text.strip()
+        await state.update_data(anime=anime_name)
+        await state.set_state(AddCharStates.waiting_for_rarity)
+
+        state_data = await state.get_data()
+        name = state_data["name"]
+        await send_rarity_keyboard(message, name, anime_name, state_data, db)
+    except Exception as e:
+        logger.error(f"Error in process_anime: {e}", exc_info=True)
+        await message.reply(f"❌ An error occurred in process_anime: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
 
 @router.callback_query(F.data.startswith("sel_rarity_"))
 async def process_rarity_callback(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
-    current_state = await state.get_state()
-    if current_state != AddCharStates.waiting_for_rarity.state:
-        await callback.answer("⚠️ This menu is no longer active.", show_alert=True)
-        return
-
-    rarity_val = callback.data.replace("sel_rarity_", "").title()
-    await state.update_data(rarity=rarity_val)
-    
-    state_data = await state.get_data()
-    
-    if state_data.get("media_file_id"):
-        await save_character_to_db(callback.message, state_data, db, bot=callback.bot, from_user=callback.from_user)
-        await state.clear()
-        await callback.answer("✅ Character registered successfully!")
-        try:
-            await callback.message.delete()
-        except Exception:
-            pass
-        return
-
-    await state.set_state(AddCharStates.waiting_for_media)
-    
-    text = (
-        "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "📸 <b>[Step 4/4] Media Upload</b>\n\n"
-        f"Selected Rarity: <b>{rarity_val}</b>\n"
-        "Please upload a photo, video, or GIF for the character (or send `/cancel` to abort):"
-    )
     try:
-        await callback.message.edit_text(text, parse_mode="HTML")
-    except Exception:
-        await callback.message.reply(text, parse_mode="HTML")
-    await callback.answer()
+        current_state = await state.get_state()
+        if current_state != AddCharStates.waiting_for_rarity.state:
+            await callback.answer("⚠️ This menu is no longer active.", show_alert=True)
+            return
+
+        rarity_val = callback.data.replace("sel_rarity_", "").title()
+        await state.update_data(rarity=rarity_val)
+        
+        state_data = await state.get_data()
+        
+        if state_data.get("media_file_id"):
+            await save_character_to_db(callback.message, state_data, db, bot=callback.bot, from_user=callback.from_user)
+            await state.clear()
+            await callback.answer("✅ Character registered successfully!")
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            return
+
+        await state.set_state(AddCharStates.waiting_for_media)
+        
+        text = (
+            "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "📸 <b>[Step 4/4] Media Upload</b>\n\n"
+            f"Selected Rarity: <b>{rarity_val}</b>\n"
+            "Please upload a photo, video, or GIF for the character (or send `/cancel` to abort):"
+        )
+        try:
+            await callback.message.edit_text(text, parse_mode="HTML")
+        except Exception:
+            await callback.message.reply(text, parse_mode="HTML")
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in process_rarity_callback: {e}", exc_info=True)
+        await callback.answer(f"❌ Error: {str(e)}", show_alert=True)
 
 @router.message(AddCharStates.waiting_for_rarity)
 async def process_rarity_text(message: Message, state: FSMContext, db: AsyncSession, bot):
-    if message.text and message.text.strip() == "/cancel":
-        await state.clear()
-        await message.reply("❌ Character registration process has been cancelled.")
-        return
-
-    if message.chat.type in ["group", "supergroup"]:
-        is_reply_to_bot = (
-            message.reply_to_message 
-            and message.reply_to_message.from_user 
-            and message.reply_to_message.from_user.is_bot
-        )
-        if not is_reply_to_bot:
+    try:
+        if message.text and message.text.strip() == "/cancel":
+            await state.clear()
+            await message.reply("❌ Character registration process has been cancelled.")
             return
 
-    if not message.text or message.text.startswith("/"):
-        await message.reply("⚠️ Invalid option! Please select a rarity tier or type one manually:")
-        return
+        if message.chat.type in ["group", "supergroup"]:
+            is_reply_to_bot = (
+                message.reply_to_message 
+                and message.reply_to_message.from_user 
+                and message.reply_to_message.from_user.is_bot
+            )
+            if not is_reply_to_bot:
+                return
 
-    rarity_val = message.text.strip().title()
-    await state.update_data(rarity=rarity_val)
-    
-    state_data = await state.get_data()
-    
-    if state_data.get("media_file_id"):
-        await save_character_to_db(message, state_data, db, bot, message.from_user)
-        await state.clear()
-        return
+        if not message.text or message.text.startswith("/"):
+            await message.reply("⚠️ Invalid option! Please select a rarity tier or type one manually:")
+            return
 
-    await state.set_state(AddCharStates.waiting_for_media)
-    await message.reply(
-        "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "📸 <b>[Step 4/4] Media Upload</b>\n\n"
-        f"Selected: <b>{rarity_val}</b>\n"
-        "Please upload a photo, video, or GIF for the character:",
-        parse_mode="HTML"
-    )
+        rarity_val = message.text.strip().title()
+        await state.update_data(rarity=rarity_val)
+        
+        state_data = await state.get_data()
+        
+        if state_data.get("media_file_id"):
+            await save_character_to_db(message, state_data, db, bot, message.from_user)
+            await state.clear()
+            return
+
+        await state.set_state(AddCharStates.waiting_for_media)
+        await message.reply(
+            "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "📸 <b>[Step 4/4] Media Upload</b>\n\n"
+            f"Selected: <b>{rarity_val}</b>\n"
+            "Please upload a photo, video, or GIF for the character:",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"Error in process_rarity_text: {e}", exc_info=True)
+        await message.reply(f"❌ An error occurred in process_rarity_text: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
 
 @router.message(AddCharStates.waiting_for_media, F.photo | F.video | F.animation)
 async def process_media(message: Message, state: FSMContext, db: AsyncSession, bot):
-    if message.chat.type in ["group", "supergroup"]:
-        is_reply_to_bot = (
-            message.reply_to_message 
-            and message.reply_to_message.from_user 
-            and message.reply_to_message.from_user.is_bot
-        )
-        if not is_reply_to_bot:
+    try:
+        if message.chat.type in ["group", "supergroup"]:
+            is_reply_to_bot = (
+                message.reply_to_message 
+                and message.reply_to_message.from_user 
+                and message.reply_to_message.from_user.is_bot
+            )
+            if not is_reply_to_bot:
+                return
+
+        file_id = None
+        media_type = None
+
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            media_type = "photo"
+        elif message.video:
+            file_id = message.video.file_id
+            media_type = "video"
+        elif message.animation:
+            file_id = message.animation.file_id
+            media_type = "animation"
+
+        if not file_id:
+            await message.reply("⚠️ Please send a valid photo, video, or GIF!")
             return
 
-    file_id = None
-    media_type = None
+        data = await state.get_data()
+        data["media_file_id"] = file_id
+        data["media_type"] = media_type
 
-    if message.photo:
-        file_id = message.photo[-1].file_id
-        media_type = "photo"
-    elif message.video:
-        file_id = message.video.file_id
-        media_type = "video"
-    elif message.animation:
-        file_id = message.animation.file_id
-        media_type = "animation"
-
-    if not file_id:
-        await message.reply("⚠️ Please send a valid photo, video, or GIF!")
-        return
-
-    data = await state.get_data()
-    data["media_file_id"] = file_id
-    data["media_type"] = media_type
-
-    success = await save_character_to_db(message, data, db, bot, message.from_user)
-    if success:
-        await state.clear()
+        success = await save_character_to_db(message, data, db, bot, message.from_user)
+        if success:
+            await state.clear()
+    except Exception as e:
+        logger.error(f"Error in process_media: {e}", exc_info=True)
+        await message.reply(f"❌ An error occurred in process_media: <code>{escape_html(str(e))}</code>", parse_mode="HTML")
 
 @router.message(Command("setimg", "updateimg", "setphoto"))
 async def cmd_setimg(message: Message, db: AsyncSession):
