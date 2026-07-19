@@ -18,6 +18,16 @@ router = Router()
 
 DEFAULT_THUMB = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 
+def clean_html_entities(val: str) -> str:
+    """Recursively unescapes HTML entities to handle double-escaped strings like &amp;amp; or &#x27;"""
+    if not val:
+        return ""
+    prev = ""
+    while prev != val:
+        prev = val
+        val = html.unescape(val)
+    return val
+
 @router.inline_query()
 async def handle_inline_query(inline_query: InlineQuery):
     query = inline_query.query.strip()
@@ -41,6 +51,10 @@ async def handle_inline_query(inline_query: InlineQuery):
         is_collection = False
         search_query = query
 
+    # Pagination: Telegram passes offset as a string
+    offset = int(inline_query.offset) if inline_query.offset and inline_query.offset.isdigit() else 0
+    limit = 50
+
     async with AsyncSessionLocal() as db:
         if is_collection:
             # Query specific User's Harem Collection
@@ -60,20 +74,22 @@ async def handle_inline_query(inline_query: InlineQuery):
                 stmt = stmt.where(Character.rarity.ilike("AMV"))
 
             stmt = stmt.group_by(Character.id).order_by(Character.id)
+            stmt = stmt.offset(offset).limit(limit)
             res = await db.execute(stmt)
             rows = res.all()
 
-            if filter_mode == "AMV" and not rows:
+            if filter_mode == "AMV" and not rows and offset == 0:
                 fallback_stmt = (
                     select(Character, func.count(UserCharacter.id).label("cnt"))
                     .join(UserCharacter, UserCharacter.character_id == Character.id)
                     .where(UserCharacter.user_id == user_id)
                     .group_by(Character.id)
                     .order_by(Character.id)
+                    .limit(limit)
                 )
                 rows = (await db.execute(fallback_stmt)).all()
 
-            for idx, (char, cnt) in enumerate(rows[:50]):
+            for idx, (char, cnt) in enumerate(rows):
                 r_emoji = get_rarity_emoji(char.rarity)
                 img_val = char.image_url if char.image_url else DEFAULT_THUMB
 
@@ -85,16 +101,16 @@ async def handle_inline_query(inline_query: InlineQuery):
                     f"👑 <b>Owner:</b> {owner_mention}"
                 )
 
-                clean_name = html.unescape(char.name)
-                clean_anime = html.unescape(char.anime)
-                clean_rarity = html.unescape(char.rarity)
+                clean_name = clean_html_entities(char.name)
+                clean_anime = clean_html_entities(char.anime)
+                clean_rarity = clean_html_entities(char.rarity)
 
                 if filter_mode == "AMV":
                     title = f"AMV — {clean_name}"
                 else:
                     title = f"{clean_rarity} — {clean_name}"
 
-                item_id = f"item_{char.id}_{idx}"
+                item_id = f"item_{char.id}_{offset}_{idx}"
 
                 if img_val.startswith("http"):
                     results.append(
@@ -103,6 +119,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                             photo_url=img_val,
                             thumbnail_url=img_val,
                             title=title,
+                            description=clean_anime,
                             caption=caption,
                             parse_mode="HTML"
                         )
@@ -115,6 +132,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                                     id=item_id,
                                     video_file_id=img_val,
                                     title=title,
+                                    description=clean_anime,
                                     caption=caption,
                                     parse_mode="HTML"
                                 )
@@ -139,6 +157,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                                     id=item_id,
                                     photo_file_id=img_val,
                                     title=title,
+                                    description=clean_anime,
                                     caption=caption,
                                     parse_mode="HTML"
                                 )
@@ -159,15 +178,16 @@ async def handle_inline_query(inline_query: InlineQuery):
         else:
             # Query Bot's Global Character Database (Show all if empty, filter AMV if 'amv', otherwise search)
             if search_query == "":
-                stmt = select(Character).order_by(Character.id).limit(50)
+                stmt = select(Character).order_by(Character.id)
             elif search_query.lower() == "amv":
-                stmt = select(Character).where(Character.rarity.ilike("AMV")).limit(50)
+                stmt = select(Character).where(Character.rarity.ilike("AMV"))
             else:
                 stmt = select(Character).where(
                     (Character.name.ilike(f"%{search_query}%")) |
                     (Character.anime.ilike(f"%{search_query}%"))
-                ).limit(50)
+                ).order_by(Character.id)
                 
+            stmt = stmt.offset(offset).limit(limit)
             res = await db.execute(stmt)
             chars = res.scalars().all()
 
@@ -183,11 +203,11 @@ async def handle_inline_query(inline_query: InlineQuery):
                     f"🤖 <b>Bot:</b> @AniVerse1bot"
                 )
 
-                clean_name = html.unescape(char.name)
-                clean_anime = html.unescape(char.anime)
-                clean_rarity = html.unescape(char.rarity)
+                clean_name = clean_html_entities(char.name)
+                clean_anime = clean_html_entities(char.anime)
+                clean_rarity = clean_html_entities(char.rarity)
                 title = f"{clean_rarity} — {clean_name}"
-                item_id = f"search_{char.id}_{idx}"
+                item_id = f"search_{char.id}_{offset}_{idx}"
 
                 if img_val.startswith("http"):
                     results.append(
@@ -196,6 +216,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                             photo_url=img_val,
                             thumbnail_url=img_val,
                             title=title,
+                            description=clean_anime,
                             caption=caption,
                             parse_mode="HTML"
                         )
@@ -208,6 +229,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                                     id=item_id,
                                     video_file_id=img_val,
                                     title=title,
+                                    description=clean_anime,
                                     caption=caption,
                                     parse_mode="HTML"
                                 )
@@ -232,6 +254,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                                     id=item_id,
                                     photo_file_id=img_val,
                                     title=title,
+                                    description=clean_anime,
                                     caption=caption,
                                     parse_mode="HTML"
                                 )
@@ -250,7 +273,9 @@ async def handle_inline_query(inline_query: InlineQuery):
                                 )
                             )
 
+    # Set next_offset if there are potentially more results
+    next_offset = str(offset + limit) if len(results) == limit else ""
     try:
-        await inline_query.answer(results, cache_time=5, is_personal=True)
+        await inline_query.answer(results, cache_time=5, is_personal=True, next_offset=next_offset)
     except Exception:
         pass
