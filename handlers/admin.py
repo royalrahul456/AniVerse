@@ -1816,8 +1816,13 @@ async def process_edit_anime(message: Message, state: FSMContext, db: AsyncSessi
         await message.reply("❌ Error: Character not found.")
     await state.clear()
 
-@router.callback_query(EditCharStates.waiting_for_new_rarity, F.data.startswith("sel_new_rarity_"))
+@router.callback_query(F.data.startswith("sel_new_rarity_"))
 async def process_edit_rarity_cb(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    current_state = await state.get_state()
+    if current_state != EditCharStates.waiting_for_new_rarity.state:
+        await callback.answer("⚠️ This edit menu is no longer active.", show_alert=True)
+        return
+
     new_rarity = callback.data.replace("sel_new_rarity_", "").title()
     data = await state.get_data()
     char_id = data["edit_char_id"]
