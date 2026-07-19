@@ -913,16 +913,32 @@ async def cmd_claim(message: Message, db: AsyncSession):
     if not characters:
         await message.reply("⚠️ No characters with active claim rarities are currently available in the database.")
         return
-
+ 
     # 5. Fetch weights of active rarities from RarityType
     stmt_rarities = select(RarityType).where(RarityType.claim_enabled == True)
     res_rarities = await db.execute(stmt_rarities)
     rarity_list = res_rarities.scalars().all()
-    rarity_weights = {r.name.lower(): r.claim_weight for r in rarity_list}
-
-    weights = [rarity_weights.get(c.rarity.lower(), 10) for c in characters]
-    character = random.choices(characters, weights=weights, k=1)[0]
-
+ 
+    # Filter out rarities that don't have any registered characters
+    char_rarity_set = {c.rarity.lower() for c in characters}
+    active_rarities = [r for r in rarity_list if r.name.lower() in char_rarity_set]
+ 
+    if not active_rarities:
+        await message.reply("⚠️ No characters are currently available for any active claim rarities.")
+        return
+ 
+    total_weight = sum(r.claim_weight for r in active_rarities)
+    if total_weight <= 0:
+        await message.reply("⚠️ Total claim probability weight is 0. Cannot claim.")
+        return
+ 
+    # Select rarity first based strictly on claim weights
+    chosen_rarity = random.choices(active_rarities, weights=[r.claim_weight for r in active_rarities], k=1)[0]
+    
+    # Select random character of that rarity
+    candidates = [c for c in characters if c.rarity.lower() == chosen_rarity.name.lower()]
+    character = random.choice(candidates)
+ 
     user = await get_or_create_user(db, user_id, message.from_user.username, message.from_user.first_name)
     user.total_catches += 1
     
@@ -936,11 +952,9 @@ async def cmd_claim(message: Message, db: AsyncSession):
         
     r_emoji = get_rarity_emoji(character.rarity)
     
-    # Relative percentage chance calculation
-    total_weight = sum(rarity_weights.get(c.rarity.lower(), 10) for c in characters)
-    char_weight = rarity_weights.get(character.rarity.lower(), 10)
-    chance_pct = (char_weight / total_weight) * 100 if total_weight > 0 else 0
-
+    # Chance percentage calculation based strictly on weights, not character count
+    chance_pct = (chosen_rarity.claim_weight / total_weight) * 100
+ 
     card = (
         f"✨ <b>CONGRATS {escape_html(message.from_user.first_name.upper())}!</b>\n\n"
         + format_blockquote(
@@ -961,10 +975,10 @@ async def cmd_claim(message: Message, db: AsyncSession):
             await message.reply_video(photo_to_send, caption=card, parse_mode="HTML")
         except Exception:
             await message.reply(card, parse_mode="HTML")
+ 
 @router.message(Command("claimchance", "claimchances"))
 async def cmd_claimchance(message: Message, db: AsyncSession):
     from sqlalchemy import func
-    from collections import Counter
     
     stmt = select(Character).join(
         RarityType,
@@ -976,39 +990,37 @@ async def cmd_claimchance(message: Message, db: AsyncSession):
     if not characters:
         await message.reply("⚠️ No characters with active claim rarities are currently available in the database.")
         return
-
+ 
     stmt_rarities = select(RarityType).where(RarityType.claim_enabled == True)
     res_rarities = await db.execute(stmt_rarities)
     rarity_list = res_rarities.scalars().all()
     
-    rarity_weights = {r.name.lower(): r.claim_weight for r in rarity_list}
-    rarity_counts = Counter(c.rarity.lower() for c in characters)
-    
-    total_weight = sum(rarity_counts.get(r.name.lower(), 0) * r.claim_weight for r in rarity_list)
-    
+    # Filter only rarities that actually contain characters
+    char_rarity_set = {c.rarity.lower() for c in characters}
+    active_rarities = [r for r in rarity_list if r.name.lower() in char_rarity_set]
+ 
+    if not active_rarities:
+        await message.reply("⚠️ No characters are currently available for any active claim rarities.")
+        return
+ 
+    total_weight = sum(r.claim_weight for r in active_rarities)
     if total_weight <= 0:
-        await message.reply("⚠️ Total rarity weight is 0. Cannot compute claim chances.")
+        await message.reply("⚠️ Total claim probability weight is 0. Cannot compute claim chances.")
         return
         
     lines = []
-    for r in rarity_list:
-        count = rarity_counts.get(r.name.lower(), 0)
-        if count == 0:
-            continue
-        weight = r.claim_weight
-        rarity_total_weight = count * weight
-        pct = (rarity_total_weight / total_weight) * 100
-        
+    # Sort by weight descending
+    active_rarities.sort(key=lambda x: x.claim_weight, reverse=True)
+ 
+    for r in active_rarities:
+        pct = (r.claim_weight / total_weight) * 100
         from utils.formatters import get_rarity_emoji
         r_emoji = get_rarity_emoji(r.name)
-        lines.append((pct, f"{r_emoji} <b>{r.name}</b>: <b>{pct:.2f}%</b> (Count: {count})"))
+        lines.append(f"{r_emoji} <b>{r.name}</b>: <b>{pct:.2f}%</b>")
         
-    lines.sort(key=lambda x: x[0], reverse=True)
-    
-    formatted_lines = [item[1] for item in lines]
     text = (
-        "🎲 <b>DAILY CLAIM CHARACTER CHANCES</b>\n\n"
-        + format_blockquote("\n".join(formatted_lines))
+        "🎲 <b>DAILY FREE CLAIM CHANCES</b>\n\n"
+        + format_blockquote("\n".join(lines))
     )
     await message.reply(text, parse_mode="HTML")
 
