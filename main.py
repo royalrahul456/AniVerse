@@ -58,10 +58,15 @@ class DbSessionMiddleware:
             data["db"] = session
             return await handler(event, data)
 
+# In-memory cache for join status checks to avoid hitting Telegram API rate limits and causing lag
+# Format: user_id -> (timestamp, is_joined)
+_join_check_cache = {}
+
 class JoinCheckMiddleware:
     async def __call__(self, handler, event, data):
         from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
         from aiogram.utils.keyboard import InlineKeyboardBuilder
+        import time
         
         user_id = None
         if isinstance(event, Message):
@@ -80,6 +85,19 @@ class JoinCheckMiddleware:
             if config.ADMIN_IDS and user_id in config.ADMIN_IDS:
                 return await handler(event, data)
 
+            current_time = time.time()
+            if user_id in _join_check_cache:
+                cached_time, cached_joined = _join_check_cache[user_id]
+                # If they are already joined, cache for 5 minutes (300s)
+                # If not joined, cache for 10 seconds to allow quick retry
+                expiry = 300 if cached_joined else 10
+                if current_time - cached_time < expiry:
+                    if cached_joined:
+                        return await handler(event, data)
+                    else:
+                        # Deny access directly using cached status
+                        return await self._send_denied_response(event)
+
             bot = data["bot"]
             is_joined = False
             try:
@@ -94,30 +112,41 @@ class JoinCheckMiddleware:
                     # Let pass if bot is not in group chat or public username is not setup yet
                     is_joined = True
 
+            # Save check status to cache
+            _join_check_cache[user_id] = (current_time, is_joined)
+
             if not is_joined:
-                builder = InlineKeyboardBuilder()
-                builder.row(InlineKeyboardButton(text="💬 Join Official GC", url="https://t.me/AniVerseUnion"))
-                
-                caption = (
-                    "⚠️ <b>Access Denied!</b>\n\n"
-                    "You must join our official group chat to use this bot:\n"
-                    "👉 https://t.me/AniVerseUnion"
-                )
-                
-                if isinstance(event, Message):
-                    await event.reply(caption, reply_markup=builder.as_markup(), parse_mode="HTML")
-                elif isinstance(event, CallbackQuery):
-                    try:
-                        await event.message.reply(caption, reply_markup=builder.as_markup(), parse_mode="HTML")
-                    except Exception:
-                        pass
-                    try:
-                        await event.answer("⚠️ You must join our official GC first!", show_alert=True)
-                    except Exception:
-                        pass
-                return
+                return await self._send_denied_response(event)
 
         return await handler(event, data)
+
+    async def _send_denied_response(self, event):
+        from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="💬 Join Official GC", url="https://t.me/AniVerseUnion"))
+        
+        caption = (
+            "⚠️ <b>Access Denied!</b>\n\n"
+            "You must join our official group chat to use this bot:\n"
+            "👉 https://t.me/AniVerseUnion"
+        )
+        
+        if isinstance(event, Message):
+            try:
+                await event.reply(caption, reply_markup=builder.as_markup(), parse_mode="HTML")
+            except Exception:
+                pass
+        elif isinstance(event, CallbackQuery):
+            try:
+                await event.message.reply(caption, reply_markup=builder.as_markup(), parse_mode="HTML")
+            except Exception:
+                pass
+            try:
+                await event.answer("⚠️ You must join our official GC first!", show_alert=True)
+            except Exception:
+                pass
+        return
 
 async def start_health_server():
     """Lightweight HTTP server for Render health checks — keeps the service alive."""
@@ -199,6 +228,9 @@ async def main():
         BotCommand(command="spawnchance", description="View wild character spawn chances"),
         BotCommand(command="claimchance", description="View daily free character claim chances"),
         BotCommand(command="editspawnchance", description="Edit spawn weights (Admin only)"),
+        BotCommand(command="editclaimchance", description="Edit daily claim weights (Admin only)"),
+        BotCommand(command="addtoclaim", description="Add a rarity to claim pool (Admin only)"),
+        BotCommand(command="removefromclaim", description="Remove a rarity from claim pool (Admin only)"),
         BotCommand(command="pay", description="Pay coins to another trainer"),
         BotCommand(command="balance", description="Check your coin balance"),
         BotCommand(command="chk", description="Quick balance check"),
@@ -233,7 +265,6 @@ async def main():
     dp.include_router(inline_query.router)
     dp.include_router(redeem.router)
     dp.include_router(auction.router)
-
     async def auction_background_loop():
         from handlers.auction import process_auctions_tick
         while True:

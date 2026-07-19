@@ -350,6 +350,53 @@ async def cmd_removefromchance(message: Message, db: AsyncSession):
 
     await message.reply(f"🚫 <b>{rarity_name.title()}</b> has been removed from wild spawn chance!", parse_mode="HTML")
 
+@router.message(Command("addtoclaim", "addclaim"))
+async def cmd_addtoclaim(message: Message, db: AsyncSession):
+    if not await is_admin(message, db):
+        await message.answer("⛔ Only bot owners and admins can manage claim chance!")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply("⚠️ <b>Usage:</b> <code>/addtoclaim &lt;rarity_name&gt;</code>", parse_mode="HTML")
+        return
+
+    rarity_name = parts[1].strip()
+    stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
+    res = await db.execute(stmt)
+    rarity_item = res.scalar_one_or_none()
+
+    if not rarity_item:
+        rarity_item = RarityType(name=rarity_name.title(), emoji="✨", claim_enabled=True)
+        db.add(rarity_item)
+    else:
+        rarity_item.claim_enabled = True
+
+    await db.commit()
+    await message.reply(f"🎲 <b>{rarity_item.name}</b> [{rarity_item.emoji}] has been added to daily free claim pool!", parse_mode="HTML")
+
+@router.message(Command("removefromclaim", "remclaim", "delclaim"))
+async def cmd_removefromclaim(message: Message, db: AsyncSession):
+    if not await is_admin(message, db):
+        await message.answer("⛔ Only bot owners and admins can manage claim pool!")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply("⚠️ <b>Usage:</b> <code>/removefromclaim &lt;rarity_name&gt;</code>", parse_mode="HTML")
+        return
+
+    rarity_name = parts[1].strip()
+    stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
+    res = await db.execute(stmt)
+    rarity_item = res.scalar_one_or_none()
+
+    if rarity_item:
+        rarity_item.claim_enabled = False
+        await db.commit()
+
+    await message.reply(f"🚫 <b>{rarity_name.title()}</b> has been removed from daily free claim pool!", parse_mode="HTML")
+
 class AddCharStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_anime = State()
@@ -1035,6 +1082,8 @@ async def cmd_spawnchance(message: Message, db: AsyncSession):
 class EditSpawnChanceStates(StatesGroup):
     waiting_for_weight = State()
 
+class EditClaimChanceStates(StatesGroup):
+    waiting_for_claim_weight = State()
 @router.message(Command("editspawnchance", "setspawnchance"))
 async def cmd_editspawnchance(message: Message, db: AsyncSession):
     if not await is_admin(message, db):

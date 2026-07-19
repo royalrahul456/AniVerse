@@ -38,8 +38,8 @@ class UserCharacter(Base):
     __tablename__ = "user_characters"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False)
-    character_id = Column(Integer, ForeignKey("characters.id"), nullable=False)
+    user_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
+    character_id = Column(Integer, ForeignKey("characters.id"), nullable=False, index=True)
     nickname = Column(String(255), nullable=True)
     caught_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -55,7 +55,8 @@ class RarityType(Base):
     weight = Column(Integer, default=10)
     color = Column(String(50), default="Gray")
     spawn_enabled = Column(Boolean, default=False)
-
+    claim_enabled = Column(Boolean, default=False)
+    claim_weight = Column(Integer, default=10)
 class ActiveSpawn(Base):
     __tablename__ = "active_spawns"
 
