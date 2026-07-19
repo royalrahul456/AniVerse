@@ -390,13 +390,6 @@ async def cmd_removefromclaim(message: Message, db: AsyncSession):
     stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
     res = await db.execute(stmt)
     rarity_item = res.scalar_one_or_none()
-
-    if rarity_item:
-        rarity_item.claim_enabled = False
-        await db.commit()
-
-    await message.reply(f"🚫 <b>{rarity_name.title()}</b> has been removed from daily free claim pool!", parse_mode="HTML")
-
 class AddCharStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_anime = State()
@@ -408,6 +401,7 @@ class EditCharStates(StatesGroup):
     waiting_for_new_anime = State()
     waiting_for_new_rarity = State()
     waiting_for_new_media = State()
+
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -415,68 +409,14 @@ async def cmd_cancel(message: Message, state: FSMContext):
         return
     await state.clear()
     await message.reply("❌ Character registration process has been cancelled.")
-@router.message(Command("addchar"))
-async def cmd_addchar(message: Message, state: FSMContext, db: AsyncSession):
-    if not await is_admin(message, db):
-        await message.reply("⛔ Only bot owners and admins can add characters!")
-        return
-    parts = message.text.split(maxsplit=1)
-    target_id = None
-    if len(parts) > 1:
-        arg = parts[1].strip()
-        if arg.isdigit():
-            target_id = int(arg)
-            stmt = select(Character).where(Character.id == target_id)
-            res = await db.execute(stmt)
-            existing = res.scalar_one_or_none()
-            if existing:
-                await message.reply(f"❌ A character with ID <b>{target_id}</b> already exists!", parse_mode="HTML")
-                return
 
-    await state.clear()
-    await state.set_state(AddCharStates.waiting_for_name)
-    if target_id is not None:
-        await state.update_data(target_id=target_id)
-        msg_id_text = f" at ID <b>#{target_id}</b>"
-    else:
-        msg_id_text = ""
+async def find_existing_character_anime(name: str, db: AsyncSession) -> str | None:
+    stmt = select(Character).where(Character.name.ilike(name)).limit(1)
+    res = await db.execute(stmt)
+    char = res.scalar_one_or_none()
+    return char.anime if (char and char.anime) else None
 
-    await message.reply(
-        "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        f"📝 <b>[Step 1/4] Character Name</b>{msg_id_text}\n\n"
-        "Please type the name of the character (or send `/cancel` to abort):",
-        parse_mode="HTML"
-    )
-@router.message(AddCharStates.waiting_for_name, F.text)
-async def process_name(message: Message, state: FSMContext):
-    if message.text.startswith("/"):
-        if message.text == "/cancel":
-            return
-        await message.reply("⚠️ Invalid name! Please type a text name for the character:")
-        return
-
-    await state.update_data(name=message.text.strip())
-    await state.set_state(AddCharStates.waiting_for_anime)
-    await message.reply(
-        "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "📺 <b>[Step 2/4] Anime Series</b>\n\n"
-        "Please type the name of the anime series this character belongs to:",
-        parse_mode="HTML"
-    )
-
-@router.message(AddCharStates.waiting_for_anime, F.text)
-async def process_anime(message: Message, state: FSMContext, db: AsyncSession):
-    if message.text.startswith("/"):
-        if message.text == "/cancel":
-            return
-        await message.reply("⚠️ Invalid anime! Please type the name of the anime series:")
-        return
-
-    await state.update_data(anime=message.text.strip())
-    await state.set_state(AddCharStates.waiting_for_rarity)
-
+async def send_rarity_keyboard(message: Message, name: str, anime: str, state_data: dict, db: AsyncSession, is_callback: bool = False, callback_query: CallbackQuery = None):
     # Fetch available rarities
     default_rarities = ["Common", "Rare", "Epic", "Legendary", "Mythical"]
     custom_stmt = select(RarityType)
@@ -490,19 +430,366 @@ async def process_anime(message: Message, state: FSMContext, db: AsyncSession):
         builder.add(InlineKeyboardButton(text=f"{emoji} {r}", callback_data=f"sel_rarity_{r.lower()}"))
     builder.adjust(2)
 
-    await message.reply(
+    has_media = state_data.get("media_file_id") is not None
+    media_status_str = " (Pre-loaded from reply) ✅" if has_media else ""
+
+    text = (
         "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Name:</b> {escape_html(name)}\n"
+        f"🎦 <b>Anime:</b> {escape_html(anime)} (Auto-filled)\n" if state_data.get("anime_autofilled") else
+        f"👤 <b>Name:</b> {escape_html(name)}\n"
+        f"🎦 <b>Anime:</b> {escape_html(anime)}\n"
+    )
+    # Deduplicate fields
+    text = (
+        "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>Name:</b> {escape_html(name)}\n"
+        f"🎦 <b>Anime:</b> {escape_html(anime)}" + (" (Auto-filled)\n" if state_data.get("anime_autofilled") else "\n") +
+        f"📸 <b>Media:</b>{media_status_str}\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
         "💎 <b>[Step 3/4] Rarity Tier</b>\n\n"
-        "Please select a rarity tier below, or type one manually:",
-        reply_markup=builder.as_markup(),
-        parse_mode="HTML"
+        "Please select a rarity tier below, or type one manually:"
     )
 
-@router.callback_query(AddCharStates.waiting_for_rarity, F.data.startswith("sel_rarity_"))
-async def process_rarity_callback(callback: CallbackQuery, state: FSMContext):
+    if is_callback and callback_query:
+        try:
+            await callback_query.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+        except Exception:
+            await callback_query.message.reply(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+    else:
+        await message.reply(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+
+async def save_character_to_db(message: Message, data: dict, db: AsyncSession, bot, from_user) -> bool:
+    name = data["name"]
+    anime = data["anime"]
+    rarity = data["rarity"]
+    file_id = data.get("media_file_id")
+    media_type = data.get("media_type", "photo")
+
+    target_id = data.get("target_id")
+    if target_id:
+        existing_stmt = select(Character).where(Character.id == target_id)
+        existing_res = await db.execute(existing_stmt)
+        if existing_res.scalar_one_or_none():
+            await message.reply(f"❌ A character with ID {target_id} was just registered! Aborted.", parse_mode="HTML")
+            return False
+        character = Character(
+            id=target_id,
+            name=name,
+            anime=anime,
+            rarity=rarity,
+            image_url=file_id
+        )
+    else:
+        character = Character(
+            name=name,
+            anime=anime,
+            rarity=rarity,
+            image_url=file_id
+        )
+    db.add(character)
+    await db.commit()
+
+    r_emoji = get_rarity_emoji(rarity)
+    card = (
+        "⛩️ <b>CHARACTER FULLY REGISTERED!</b> ⛩️\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        + format_blockquote(
+            f"🆔 <b>ID:</b> #{character.id}\n"
+            f"👤 <b>NAME:</b> {escape_html(character.name)}\n"
+            f"🎦 <b>ANIME:</b> {escape_html(character.anime)}\n"
+            f"{r_emoji} <b>RARITY:</b> {r_emoji} {character.rarity}"
+        )
+    )
+
+    try:
+        if file_id:
+            if media_type == "photo":
+                await bot.send_photo(chat_id=message.chat.id, photo=file_id, caption=card, parse_mode="HTML")
+            elif media_type == "video":
+                await bot.send_video(chat_id=message.chat.id, video=file_id, caption=card, parse_mode="HTML")
+            elif media_type == "animation":
+                await bot.send_animation(chat_id=message.chat.id, animation=file_id, caption=card, parse_mode="HTML")
+            else:
+                await bot.send_message(chat_id=message.chat.id, text=card, parse_mode="HTML")
+        else:
+            await bot.send_message(chat_id=message.chat.id, text=card, parse_mode="HTML")
+    except Exception:
+        try:
+            await bot.send_message(chat_id=message.chat.id, text=card, parse_mode="HTML")
+        except Exception:
+            pass
+
+    # DM Showcase
+    if message.chat.type != "private" and from_user and file_id:
+        try:
+            if media_type in ["video", "animation"]:
+                await bot.send_video(from_user.id, file_id, caption=f"📬 <b>Character Showcase (Sent to DM):</b>\n\n{card}", parse_mode="HTML")
+            else:
+                await bot.send_photo(from_user.id, file_id, caption=f"📬 <b>Character Showcase (Sent to DM):</b>\n\n{card}", parse_mode="HTML")
+        except Exception:
+            pass
+
+    # Database Channel Announcement Sync
+    db_channel = "@AniVersedatabase"
+    img_check = "✅" if media_type == "photo" else "❌"
+    vid_check = "✅" if media_type in ["video", "animation"] else "❌"
+    by_user = "Unknown Admin"
+    if from_user:
+        by_user = f"@{from_user.username}" if from_user.username else from_user.first_name
+
+    ist_offset = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now_ist = datetime.datetime.now(tz=ist_offset)
+    time_str = now_ist.strftime("%d %b %Y, %I:%M %p IST")
+
+    announcement_text = (
+        "✨ <b>NEW CHARACTER MEDIA ADDED!</b>\n"
+        + format_blockquote(
+            f"🆔 <b>ID</b>: #{character.id:03d}\n"
+            f"📛 <b>Name</b>: {escape_html(character.name)}\n"
+            f"📺 <b>Anime</b>: {escape_html(character.anime)}\n"
+            f"💎 <b>Rarity</b>: {r_emoji} {character.rarity}\n"
+            f"🖼️ <b>Image</b>: {img_check}\n"
+            f"🎥 <b>Video</b>: {vid_check}\n"
+            f"👤 <b>By</b>: {escape_html(by_user)}\n"
+            f"⌛️ <b>Time</b>: {time_str}"
+        )
+    )
+
+    try:
+        if file_id:
+            if media_type == "photo":
+                await bot.send_photo(chat_id=db_channel, photo=file_id, caption=announcement_text, parse_mode="HTML")
+            elif media_type == "video":
+                await bot.send_video(chat_id=db_channel, video=file_id, caption=announcement_text, parse_mode="HTML")
+            elif media_type == "animation":
+                await bot.send_animation(chat_id=db_channel, animation=file_id, caption=announcement_text, parse_mode="HTML")
+    except Exception as e:
+        print(f"Failed to send character sync to database channel: {e}")
+
+    return True
+
+@router.message(Command("addchar"))
+async def cmd_addchar(message: Message, state: FSMContext, db: AsyncSession):
+    if not await is_admin(message, db):
+        await message.reply("⛔ Only bot owners and admins can add characters!")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    target_id = None
+    cmd_arg_name = None
+
+    if len(parts) > 1:
+        arg = parts[1].strip()
+        subparts = arg.split(maxsplit=1)
+        if subparts[0].isdigit():
+            target_id = int(subparts[0])
+            stmt = select(Character).where(Character.id == target_id)
+            res = await db.execute(stmt)
+            existing = res.scalar_one_or_none()
+            if existing:
+                await message.reply(f"❌ A character with ID <b>{target_id}</b> already exists!", parse_mode="HTML")
+                return
+            if len(subparts) > 1:
+                cmd_arg_name = subparts[1].strip()
+        else:
+            cmd_arg_name = arg
+
+    name = cmd_arg_name
+    media_file_id = None
+    media_type = None
+
+    if message.reply_to_message:
+        reply = message.reply_to_message
+        if reply.photo:
+            media_file_id = reply.photo[-1].file_id
+            media_type = "photo"
+        elif reply.video:
+            media_file_id = reply.video.file_id
+            media_type = "video"
+        elif reply.animation:
+            media_file_id = reply.animation.file_id
+            media_type = "animation"
+        
+        if not name:
+            name = (reply.text or reply.caption or "").strip()
+
+    await state.clear()
+    
+    state_data = {}
+    if target_id is not None:
+        state_data["target_id"] = target_id
+    if media_file_id:
+        state_data["media_file_id"] = media_file_id
+        state_data["media_type"] = media_type
+    
+    msg_id_text = f" at ID <b>#{target_id}</b>" if target_id is not None else ""
+
+    if name:
+        state_data["name"] = name
+        
+        anime = await find_existing_character_anime(name, db)
+        if anime:
+            state_data["anime"] = anime
+            state_data["anime_autofilled"] = True
+            await state.update_data(**state_data)
+            await state.set_state(AddCharStates.waiting_for_rarity)
+            await send_rarity_keyboard(message, name, anime, state_data, db)
+        else:
+            await state.update_data(**state_data)
+            await state.set_state(AddCharStates.waiting_for_anime)
+            await message.reply(
+                "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 <b>Name:</b> {escape_html(name)}\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "📺 <b>[Step 2/4] Anime Series</b>\n\n"
+                "Please type the name of the anime series this character belongs to:",
+                parse_mode="HTML"
+            )
+    else:
+        if state_data:
+            await state.update_data(**state_data)
+        await state.set_state(AddCharStates.waiting_for_name)
+        await message.reply(
+            "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            f"📝 <b>[Step 1/4] Character Name</b>{msg_id_text}\n\n"
+            "Please type the name of the character (or send `/cancel` to abort):",
+            parse_mode="HTML"
+        )
+
+@router.message(AddCharStates.waiting_for_name)
+async def process_name(message: Message, state: FSMContext, db: AsyncSession):
+    if message.text and message.text.strip() == "/cancel":
+        await state.clear()
+        await message.reply("❌ Character registration process has been cancelled.")
+        return
+
+    # In group chats, ignore messages that are NOT replies to the bot's prompt
+    # unless the message itself is a reply to another message (which contains the name)
+    if message.chat.type in ["group", "supergroup"]:
+        is_reply_to_bot = (
+            message.reply_to_message 
+            and message.reply_to_message.from_user 
+            and message.reply_to_message.from_user.is_bot
+        )
+        is_reply_to_other = (
+            message.reply_to_message 
+            and not is_reply_to_bot
+        )
+        if not is_reply_to_bot and not is_reply_to_other:
+            return
+
+    name = None
+    media_file_id = None
+    media_type = None
+
+    if message.reply_to_message:
+        reply = message.reply_to_message
+        if reply.photo:
+            media_file_id = reply.photo[-1].file_id
+            media_type = "photo"
+        elif reply.video:
+            media_file_id = reply.video.file_id
+            media_type = "video"
+        elif reply.animation:
+            media_file_id = reply.animation.file_id
+            media_type = "animation"
+        
+        is_reply_to_bot = (
+            reply.from_user 
+            and reply.from_user.is_bot
+        )
+        if not is_reply_to_bot:
+            name = (reply.text or reply.caption or "").strip()
+
+    if not name and message.text:
+        if message.text.startswith("/"):
+            await message.reply("⚠️ Invalid name! Please type a text name for the character:")
+            return
+        name = message.text.strip()
+
+    if not name:
+        await message.reply("⚠️ Could not extract a character name. Please type the name of the character:")
+        return
+
+    state_data = await state.get_data()
+    state_data["name"] = name
+    if media_file_id:
+        state_data["media_file_id"] = media_file_id
+        state_data["media_type"] = media_type
+    await state.update_data(**state_data)
+
+    anime = await find_existing_character_anime(name, db)
+    if anime:
+        state_data["anime"] = anime
+        state_data["anime_autofilled"] = True
+        await state.update_data(**state_data)
+        await state.set_state(AddCharStates.waiting_for_rarity)
+        await send_rarity_keyboard(message, name, anime, state_data, db)
+    else:
+        await state.set_state(AddCharStates.waiting_for_anime)
+        await message.reply(
+            "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "📺 <b>[Step 2/4] Anime Series</b>\n\n"
+            "Please type the name of the anime series this character belongs to:",
+            parse_mode="HTML"
+        )
+
+@router.message(AddCharStates.waiting_for_anime)
+async def process_anime(message: Message, state: FSMContext, db: AsyncSession):
+    if message.text and message.text.strip() == "/cancel":
+        await state.clear()
+        await message.reply("❌ Character registration process has been cancelled.")
+        return
+
+    if message.chat.type in ["group", "supergroup"]:
+        is_reply_to_bot = (
+            message.reply_to_message 
+            and message.reply_to_message.from_user 
+            and message.reply_to_message.from_user.is_bot
+        )
+        if not is_reply_to_bot:
+            return
+
+    if not message.text or message.text.startswith("/"):
+        await message.reply("⚠️ Invalid anime! Please type the name of the anime series:")
+        return
+
+    anime_name = message.text.strip()
+    await state.update_data(anime=anime_name)
+    await state.set_state(AddCharStates.waiting_for_rarity)
+
+    state_data = await state.get_data()
+    name = state_data["name"]
+    await send_rarity_keyboard(message, name, anime_name, state_data, db)
+
+@router.callback_query(F.data.startswith("sel_rarity_"))
+async def process_rarity_callback(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    current_state = await state.get_state()
+    if current_state != AddCharStates.waiting_for_rarity.state:
+        await callback.answer("⚠️ This menu is no longer active.", show_alert=True)
+        return
+
     rarity_val = callback.data.replace("sel_rarity_", "").title()
     await state.update_data(rarity=rarity_val)
+    
+    state_data = await state.get_data()
+    
+    if state_data.get("media_file_id"):
+        await save_character_to_db(callback.message, state_data, db, bot=callback.bot, from_user=callback.from_user)
+        await state.clear()
+        await callback.answer("✅ Character registered successfully!")
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        return
+
     await state.set_state(AddCharStates.waiting_for_media)
     
     text = (
@@ -518,16 +805,36 @@ async def process_rarity_callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.reply(text, parse_mode="HTML")
     await callback.answer()
 
-@router.message(AddCharStates.waiting_for_rarity, F.text)
-async def process_rarity_text(message: Message, state: FSMContext):
-    if message.text.startswith("/"):
-        if message.text == "/cancel":
+@router.message(AddCharStates.waiting_for_rarity)
+async def process_rarity_text(message: Message, state: FSMContext, db: AsyncSession, bot):
+    if message.text and message.text.strip() == "/cancel":
+        await state.clear()
+        await message.reply("❌ Character registration process has been cancelled.")
+        return
+
+    if message.chat.type in ["group", "supergroup"]:
+        is_reply_to_bot = (
+            message.reply_to_message 
+            and message.reply_to_message.from_user 
+            and message.reply_to_message.from_user.is_bot
+        )
+        if not is_reply_to_bot:
             return
+
+    if not message.text or message.text.startswith("/"):
         await message.reply("⚠️ Invalid option! Please select a rarity tier or type one manually:")
         return
 
     rarity_val = message.text.strip().title()
     await state.update_data(rarity=rarity_val)
+    
+    state_data = await state.get_data()
+    
+    if state_data.get("media_file_id"):
+        await save_character_to_db(message, state_data, db, bot, message.from_user)
+        await state.clear()
+        return
+
     await state.set_state(AddCharStates.waiting_for_media)
     await message.reply(
         "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
@@ -540,6 +847,15 @@ async def process_rarity_text(message: Message, state: FSMContext):
 
 @router.message(AddCharStates.waiting_for_media, F.photo | F.video | F.animation)
 async def process_media(message: Message, state: FSMContext, db: AsyncSession, bot):
+    if message.chat.type in ["group", "supergroup"]:
+        is_reply_to_bot = (
+            message.reply_to_message 
+            and message.reply_to_message.from_user 
+            and message.reply_to_message.from_user.is_bot
+        )
+        if not is_reply_to_bot:
+            return
+
     file_id = None
     media_type = None
 
@@ -558,99 +874,12 @@ async def process_media(message: Message, state: FSMContext, db: AsyncSession, b
         return
 
     data = await state.get_data()
-    name = data["name"]
-    anime = data["anime"]
-    rarity = data["rarity"]
+    data["media_file_id"] = file_id
+    data["media_type"] = media_type
 
-    target_id = data.get("target_id")
-    if target_id:
-        existing_stmt = select(Character).where(Character.id == target_id)
-        existing_res = await db.execute(existing_stmt)
-        if existing_res.scalar_one_or_none():
-            await message.reply(f"❌ A character with ID {target_id} was just registered! Aborted.")
-            await state.clear()
-            return
-        character = Character(
-            id=target_id,
-            name=name,
-            anime=anime,
-            rarity=rarity,
-            image_url=file_id
-        )
-    else:
-        character = Character(
-            name=name,
-            anime=anime,
-            rarity=rarity,
-            image_url=file_id
-        )
-    db.add(character)
-    await db.commit()
-    await state.clear()
-
-    r_emoji = get_rarity_emoji(rarity)
-    card = (
-        "⛩️ <b>CHARACTER FULLY REGISTERED!</b> ⛩️\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        + format_blockquote(
-            f"🆔 <b>ID:</b> #{character.id}\n"
-            f"👤 <b>NAME:</b> {escape_html(character.name)}\n"
-            f"🎦 <b>ANIME:</b> {escape_html(character.anime)}\n"
-            f"{r_emoji} <b>RARITY:</b> {r_emoji} {character.rarity}"
-        )
-    )
-
-    try:
-        if media_type == "photo":
-            await message.reply_photo(file_id, caption=card, parse_mode="HTML")
-        elif media_type == "video":
-            await message.reply_video(file_id, caption=card, parse_mode="HTML")
-        elif media_type == "animation":
-            await message.reply_animation(file_id, caption=card, parse_mode="HTML")
-    except Exception:
-        await message.reply(card, parse_mode="HTML")
-
-    if message.chat.type != "private":
-        try:
-            if media_type in ["video", "animation"]:
-                await bot.send_video(message.from_user.id, file_id, caption=f"📬 <b>Character Showcase (Sent to DM):</b>\n\n{card}", parse_mode="HTML")
-            else:
-                await bot.send_photo(message.from_user.id, file_id, caption=f"📬 <b>Character Showcase (Sent to DM):</b>\n\n{card}", parse_mode="HTML")
-        except Exception:
-            pass
-
-    # Database Channel Announcement Sync
-    db_channel = "@AniVersedatabase"
-    img_check = "✅" if media_type == "photo" else "❌"
-    vid_check = "✅" if media_type in ["video", "animation"] else "❌"
-    by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
-
-    ist_offset = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
-    now_ist = datetime.datetime.now(tz=ist_offset)
-    time_str = now_ist.strftime("%d %b %Y, %I:%M %p IST")
-
-    announcement_text = (
-        "✨ <b>NEW CHARACTER MEDIA ADDED!</b>\n"
-        + format_blockquote(
-            f"🆔 <b>ID</b>: #{character.id:03d}\n"
-            f"📛 <b>Name</b>: {escape_html(character.name)}\n"
-            f"📺 <b>Anime</b>: {escape_html(character.anime)}\n"
-            f"💎 <b>Rarity</b>: {r_emoji} {character.rarity}\n"
-            f"🖼️ <b>Image</b>: {img_check}\n"
-            f"🎥 <b>Video</b>: {vid_check}\n"
-            f"👤 <b>By</b>: {escape_html(by_user)}\n"
-            f"⌛️ <b>Time</b>: {time_str}"        )
-    )
-
-    try:
-        if media_type == "photo":
-            await bot.send_photo(chat_id=db_channel, photo=file_id, caption=announcement_text, parse_mode="HTML")
-        elif media_type == "video":
-            await bot.send_video(chat_id=db_channel, video=file_id, caption=announcement_text, parse_mode="HTML")
-        elif media_type == "animation":
-            await bot.send_animation(chat_id=db_channel, animation=file_id, caption=announcement_text, parse_mode="HTML")
-    except Exception as e:
-        print(f"Failed to send character sync to database channel: {e}")
+    success = await save_character_to_db(message, data, db, bot, message.from_user)
+    if success:
+        await state.clear()
 
 @router.message(Command("setimg", "updateimg", "setphoto"))
 async def cmd_setimg(message: Message, db: AsyncSession):
@@ -1243,6 +1472,166 @@ async def process_spawn_edit_weight(message: Message, db: AsyncSession, state: F
         )
     )
     await message.reply(text, parse_mode="HTML")
+
+@router.message(Command("editclaimchance", "setclaimchance"))
+async def cmd_editclaimchance(message: Message, db: AsyncSession):
+    if not await is_admin(message, db):
+        await message.answer("⛔ Only bot owners and admins can edit claim weight!")
+        return
+
+    parts = message.text.strip().split()
+    if len(parts) >= 3:
+        rarity_name = parts[1].strip()
+        weight_str = parts[2].strip()
+
+        if not weight_str.isdigit():
+            await message.reply("❌ Weight must be a valid positive number.")
+            return
+
+        weight = int(weight_str)
+        if weight < 0:
+            await message.reply("❌ Weight cannot be negative.")
+            return
+
+        stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
+        res = await db.execute(stmt)
+        rarity_item = res.scalar_one_or_none()
+
+        if not rarity_item:
+            await message.reply(f"❌ Rarity tier '<b>{escape_html(rarity_name)}</b>' not found.", parse_mode="HTML")
+            return
+
+        rarity_item.claim_weight = weight
+        await db.commit()
+
+        await message.reply(f"✅ Updated daily claim weight for <b>{escape_html(rarity_item.name)}</b> to <b>{weight}</b>!", parse_mode="HTML")
+        return
+
+    stmt = select(RarityType).where(RarityType.claim_enabled == True)
+    res = await db.execute(stmt)
+    rarities = res.scalars().all()
+    if not rarities:
+        await message.reply("⚠️ No rarities are currently enabled for daily claim pool.")
+        return
+
+    builder = InlineKeyboardBuilder()
+    for r in rarities:
+        from utils.formatters import get_rarity_emoji
+        r_emoji = get_rarity_emoji(r.name)
+        builder.row(InlineKeyboardButton(
+            text=f"{r_emoji} {r.name} (Weight: {r.claim_weight})",
+            callback_data=f"claim_edit_sel:{r.id}"
+        ))
+    builder.row(InlineKeyboardButton(text="❌ Cancel", callback_data="claim_edit_cancel"))
+
+    text = (
+        "🎲 <b>ANIVERSE CLAIM CHANCE EDITOR</b>\n\n"
+        + format_blockquote(
+            "Select a rarity tier below to adjust its daily claim probability weight.\n\n"
+            "⚠️ Only rarities enabled for daily claims are listed here. To enable a new rarity, use <code>/addtoclaim &lt;rarity&gt;</code>."
+        )
+    )
+    await message.reply(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+@router.callback_query(F.data == "claim_edit_cancel")
+async def cb_claim_edit_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("❌ Claim weight editing cancelled.")
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("claim_edit_sel:"))
+async def cb_claim_edit_sel(callback: CallbackQuery, db: AsyncSession, state: FSMContext):
+    if not await is_admin_id(callback.from_user.id, db):
+        await callback.answer("Unauthorized!", show_alert=True)
+        return
+
+    rarity_id = int(callback.data.split(":")[1])
+    stmt = select(RarityType).where(RarityType.id == rarity_id)
+    res = await db.execute(stmt)
+    rarity_item = res.scalar_one_or_none()
+
+    if not rarity_item:
+        await callback.answer("❌ Rarity not found.", show_alert=True)
+        return
+
+    await state.set_state(EditClaimChanceStates.waiting_for_claim_weight)
+    await state.update_data(edit_claim_rarity_id=rarity_id)
+
+    from utils.formatters import get_rarity_emoji
+    r_emoji = get_rarity_emoji(rarity_item.name)
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="❌ Cancel", callback_data="claim_edit_cancel"))
+
+    text = (
+        f"⚙️ <b>Adjusting Claim Weight:</b> {r_emoji} <b>{rarity_item.name}</b>\n\n"
+        + format_blockquote(
+            f"👤 Administrator: {escape_html(callback.from_user.first_name)}\n"
+            f"📊 Current Claim Weight: <code>{rarity_item.claim_weight}</code>\n\n"
+            "👉 Please type and send the **new weight** (positive integer) in the chat."
+        )
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
+
+@router.message(EditClaimChanceStates.waiting_for_claim_weight)
+async def process_claim_edit_weight(message: Message, db: AsyncSession, state: FSMContext):
+    if not await is_admin(message, db):
+        await message.reply("⛔ Unauthorized!")
+        await state.clear()
+        return
+
+    data = await state.get_data()
+    rarity_id = data.get("edit_claim_rarity_id")
+
+    weight_str = message.text.strip()
+    if not weight_str.isdigit():
+        await message.reply("❌ Invalid input! Please send a valid positive number for weight.")
+        return
+
+    weight = int(weight_str)
+    if weight < 0:
+        await message.reply("❌ Weight cannot be negative.")
+        return
+
+    stmt = select(RarityType).where(RarityType.id == rarity_id)
+    res = await db.execute(stmt)
+    rarity_item = res.scalar_one_or_none()
+
+    if not rarity_item:
+        await message.reply("❌ Rarity not found. State cleared.")
+        await state.clear()
+        return
+
+    old_weight = rarity_item.claim_weight
+    rarity_item.claim_weight = weight
+    await db.commit()
+    await state.clear()
+
+    stmt_all = select(RarityType).where(RarityType.claim_enabled == True)
+    res_all = await db.execute(stmt_all)
+    rarities = res_all.scalars().all()
+
+    lines = []
+    rarities.sort(key=lambda x: x.claim_weight, reverse=True)
+    
+    for r in rarities:
+        from utils.formatters import get_rarity_emoji
+        r_emoji = get_rarity_emoji(r.name)
+        lines.append(f"{r_emoji} <b>{r.name}</b>: Weight <b>{r.claim_weight}</b>")
+
+    text = (
+        f"✅ <b>DAILY CLAIM WEIGHT UPDATED!</b>\n\n"
+        + format_blockquote(
+            f"💎 <b>Rarity:</b> {escape_html(rarity_item.name)}\n"
+            f"📉 Old Weight: <code>{old_weight}</code>\n"
+            f"📈 New Weight: <code>{weight}</code>\n\n"
+            f"🎯 <b>Current Daily Claim Weights:</b>\n"
+            + "\n".join(lines)
+        )
+    )
+    await message.reply(text, parse_mode="HTML")
+
 # --- EDIT CHARACTER INTERACTIVE TOOL ---
 DEFAULT_CHAR_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 

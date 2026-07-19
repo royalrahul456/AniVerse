@@ -875,7 +875,8 @@ async def cmd_claim(message: Message, db: AsyncSession):
         if official_chat_id and message.chat.id != official_chat_id:
             await message.reply(
                 "❌ <b>Daily Free Roll Restriction</b>\n\n"
-                "You can only use the <code>/claim</code> command in our <b>Official Group Chat</b>!",
+                "You can only use the <code>/claim</code> command in our <b>Official Group Chat</b>!\n"
+                f"<i>(Current Chat ID: <code>{message.chat.id}</code>, Expected: <code>{official_chat_id}</code>)</i>",
                 parse_mode="HTML"
             )
             return
@@ -900,24 +901,24 @@ async def cmd_claim(message: Message, db: AsyncSession):
                     await message.reply(text, parse_mode="HTML")
             return
 
-    # 4. Fetch characters belonging only to rarities where spawn_enabled == True
+    # 4. Fetch characters belonging only to rarities where claim_enabled == True
     from sqlalchemy import func
     stmt = select(Character).join(
         RarityType,
         func.lower(Character.rarity) == func.lower(RarityType.name)
-    ).where(RarityType.spawn_enabled == True)
+    ).where(RarityType.claim_enabled == True)
     res = await db.execute(stmt)
     characters = res.scalars().all()
     
     if not characters:
-        await message.reply("⚠️ No characters with active spawn rarities are currently available in the database.")
+        await message.reply("⚠️ No characters with active claim rarities are currently available in the database.")
         return
 
     # 5. Fetch weights of active rarities from RarityType
-    stmt_rarities = select(RarityType).where(RarityType.spawn_enabled == True)
+    stmt_rarities = select(RarityType).where(RarityType.claim_enabled == True)
     res_rarities = await db.execute(stmt_rarities)
     rarity_list = res_rarities.scalars().all()
-    rarity_weights = {r.name.lower(): r.weight for r in rarity_list}
+    rarity_weights = {r.name.lower(): r.claim_weight for r in rarity_list}
 
     weights = [rarity_weights.get(c.rarity.lower(), 10) for c in characters]
     character = random.choices(characters, weights=weights, k=1)[0]
@@ -968,22 +969,22 @@ async def cmd_claimchance(message: Message, db: AsyncSession):
     stmt = select(Character).join(
         RarityType,
         func.lower(Character.rarity) == func.lower(RarityType.name)
-    ).where(RarityType.spawn_enabled == True)
+    ).where(RarityType.claim_enabled == True)
     res = await db.execute(stmt)
     characters = res.scalars().all()
     
     if not characters:
-        await message.reply("⚠️ No characters with active spawn rarities are currently available in the database.")
+        await message.reply("⚠️ No characters with active claim rarities are currently available in the database.")
         return
 
-    stmt_rarities = select(RarityType).where(RarityType.spawn_enabled == True)
+    stmt_rarities = select(RarityType).where(RarityType.claim_enabled == True)
     res_rarities = await db.execute(stmt_rarities)
     rarity_list = res_rarities.scalars().all()
     
-    rarity_weights = {r.name.lower(): r.weight for r in rarity_list}
+    rarity_weights = {r.name.lower(): r.claim_weight for r in rarity_list}
     rarity_counts = Counter(c.rarity.lower() for c in characters)
     
-    total_weight = sum(rarity_counts.get(r.name.lower(), 0) * r.weight for r in rarity_list)
+    total_weight = sum(rarity_counts.get(r.name.lower(), 0) * r.claim_weight for r in rarity_list)
     
     if total_weight <= 0:
         await message.reply("⚠️ Total rarity weight is 0. Cannot compute claim chances.")
@@ -994,7 +995,7 @@ async def cmd_claimchance(message: Message, db: AsyncSession):
         count = rarity_counts.get(r.name.lower(), 0)
         if count == 0:
             continue
-        weight = r.weight
+        weight = r.claim_weight
         rarity_total_weight = count * weight
         pct = (rarity_total_weight / total_weight) * 100
         
