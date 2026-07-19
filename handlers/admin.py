@@ -1518,7 +1518,7 @@ async def process_spawn_edit_weight(message: Message, db: AsyncSession, state: F
 @router.message(Command("editclaimchance", "setclaimchance"))
 async def cmd_editclaimchance(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
-        await message.answer("⛔ Only bot owners and admins can edit claim weight!")
+        await message.answer("⛔ Only bot owners and admins can edit claim chances!")
         return
 
     parts = message.text.strip().split()
@@ -1527,12 +1527,12 @@ async def cmd_editclaimchance(message: Message, db: AsyncSession):
         weight_str = parts[2].strip()
 
         if not weight_str.isdigit():
-            await message.reply("❌ Weight must be a valid positive number.")
+            await message.reply("❌ Chance value must be a valid positive number.")
             return
 
         weight = int(weight_str)
         if weight < 0:
-            await message.reply("❌ Weight cannot be negative.")
+            await message.reply("❌ Chance value cannot be negative.")
             return
 
         stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
@@ -1546,7 +1546,7 @@ async def cmd_editclaimchance(message: Message, db: AsyncSession):
         rarity_item.claim_weight = weight
         await db.commit()
 
-        await message.reply(f"✅ Updated daily claim weight for <b>{escape_html(rarity_item.name)}</b> to <b>{weight}</b>!", parse_mode="HTML")
+        await message.reply(f"✅ Updated daily claim chance for <b>{escape_html(rarity_item.name)}</b> to <b>{weight}</b>!", parse_mode="HTML")
         return
 
     stmt = select(RarityType).where(RarityType.claim_enabled == True)
@@ -1561,7 +1561,7 @@ async def cmd_editclaimchance(message: Message, db: AsyncSession):
         from utils.formatters import get_rarity_emoji
         r_emoji = get_rarity_emoji(r.name)
         builder.row(InlineKeyboardButton(
-            text=f"{r_emoji} {r.name} (Weight: {r.claim_weight})",
+            text=f"{r_emoji} {r.name} ({r.claim_weight})",
             callback_data=f"claim_edit_sel:{r.id}"
         ))
     builder.row(InlineKeyboardButton(text="❌ Cancel", callback_data="claim_edit_cancel"))
@@ -1569,7 +1569,7 @@ async def cmd_editclaimchance(message: Message, db: AsyncSession):
     text = (
         "🎲 <b>ANIVERSE CLAIM CHANCE EDITOR</b>\n\n"
         + format_blockquote(
-            "Select a rarity tier below to adjust its daily claim probability weight.\n\n"
+            "Select a rarity tier below to adjust its daily claim probability chance value.\n\n"
             "⚠️ Only rarities enabled for daily claims are listed here. To enable a new rarity, use <code>/addtoclaim &lt;rarity&gt;</code>."
         )
     )
@@ -1606,11 +1606,11 @@ async def cb_claim_edit_sel(callback: CallbackQuery, db: AsyncSession, state: FS
     builder.row(InlineKeyboardButton(text="❌ Cancel", callback_data="claim_edit_cancel"))
 
     text = (
-        f"⚙️ <b>Adjusting Claim Weight:</b> {r_emoji} <b>{rarity_item.name}</b>\n\n"
+        f"⚙️ <b>Adjusting Claim Chance:</b> {r_emoji} <b>{rarity_item.name}</b>\n\n"
         + format_blockquote(
             f"👤 Administrator: {escape_html(callback.from_user.first_name)}\n"
-            f"📊 Current Claim Weight: <code>{rarity_item.claim_weight}</code>\n\n"
-            "👉 Please type and send the **new weight** (positive integer) in the chat."
+            f"📊 Current Claim Value: <code>{rarity_item.claim_weight}</code>\n\n"
+            "👉 Please type and send the **new chance value** (positive integer) in the chat."
         )
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -1628,12 +1628,12 @@ async def process_claim_edit_weight(message: Message, db: AsyncSession, state: F
 
     weight_str = message.text.strip()
     if not weight_str.isdigit():
-        await message.reply("❌ Invalid input! Please send a valid positive number for weight.")
+        await message.reply("❌ Invalid input! Please send a valid positive number for chance value.")
         return
 
     weight = int(weight_str)
     if weight < 0:
-        await message.reply("❌ Weight cannot be negative.")
+        await message.reply("❌ Value cannot be negative.")
         return
 
     stmt = select(RarityType).where(RarityType.id == rarity_id)
@@ -1660,15 +1660,15 @@ async def process_claim_edit_weight(message: Message, db: AsyncSession, state: F
     for r in rarities:
         from utils.formatters import get_rarity_emoji
         r_emoji = get_rarity_emoji(r.name)
-        lines.append(f"{r_emoji} <b>{r.name}</b>: Weight <b>{r.claim_weight}</b>")
+        lines.append(f"{r_emoji} <b>{r.name}</b>: <b>{r.claim_weight}</b>")
 
     text = (
-        f"✅ <b>DAILY CLAIM WEIGHT UPDATED!</b>\n\n"
+        f"✅ <b>DAILY CLAIM CHANCE UPDATED!</b>\n\n"
         + format_blockquote(
             f"💎 <b>Rarity:</b> {escape_html(rarity_item.name)}\n"
-            f"📉 Old Weight: <code>{old_weight}</code>\n"
-            f"📈 New Weight: <code>{weight}</code>\n\n"
-            f"🎯 <b>Current Daily Claim Weights:</b>\n"
+            f"📉 Old Value: <code>{old_weight}</code>\n"
+            f"📈 New Value: <code>{weight}</code>\n\n"
+            f"🎯 <b>Current Daily Claim Chances:</b>\n"
             + "\n".join(lines)
         )
     )
