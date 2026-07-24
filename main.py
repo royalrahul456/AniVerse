@@ -275,20 +275,7 @@ async def main():
             await asyncio.sleep(5)
     asyncio.create_task(auction_background_loop())
 
-    # API Setup
-    from handlers.api import get_user_profile_api, get_user_harem_api, options_handler
-    api_app = web.Application()
-    api_app.router.add_options("/api/profile/{user_id}", options_handler)
-    api_app.router.add_get("/api/profile/{user_id}", get_user_profile_api)
-    api_app.router.add_options("/api/harem/{user_id}", options_handler)
-    api_app.router.add_get("/api/harem/{user_id}", get_user_harem_api)
 
-    runner = web.AppRunner(api_app)
-    await runner.setup()
-    port = int(os.getenv("PORT", 8080))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    logger.info(f"API Server listening on port {port}")
 
     logger.info("AniVerse Anime Collection Bot started successfully!")
     try:
