@@ -49,7 +49,7 @@ async def get_user_profile_api(request):
                 "username": user.username or "",
                 "coins": user.coins,
                 "total_catches": user.total_catches,
-                "custom_tag": user.custom_tag or "Novice Trainer",
+                "custom_tag": user.premium_tag or "Novice Trainer",
                 "total_owned": total_owned
             }
             return cors_json_response(data)
