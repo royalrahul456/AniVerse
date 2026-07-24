@@ -2,11 +2,10 @@
 const tg = window.Telegram.WebApp;
 tg.expand(); // Open in full screen height
 
-// API Server configuration (Change this to your actual Render URL when deploying!)
+// API Server configuration
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:8080'
-    : 'https://aniverse-bot.onrender.com'; // Put your live Render URL here
-
+    : 'https://aniverse-bot-cjvr.onrender.com';
 // Fallback user ID for previewing in desktop browsers
 let userId = 6593485710; // Default fallback to Admin ID
 if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
