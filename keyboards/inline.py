@@ -1,16 +1,18 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from typing import List, Tuple
-
+import config
 def get_dm_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     """Generates the primary Hub menu keyboard for DMs in AniVerse."""
     builder = InlineKeyboardBuilder()
     builder.row(
+        InlineKeyboardButton(text="🎮 Launch Harem App", web_app=WebAppInfo(url=config.MINI_APP_URL))
+    )
+    builder.row(
         InlineKeyboardButton(text="👤 Profile", callback_data="dm_profile"),
         InlineKeyboardButton(text="🏆 AnimeDex", callback_data="dm_dex_All_1")
     )
-    builder.row(
-        InlineKeyboardButton(text="🎒 Harem / Bag", callback_data="dm_bag_All_1"),
+    builder.row(        InlineKeyboardButton(text="🎒 Harem / Bag", callback_data="dm_bag_All_1"),
         InlineKeyboardButton(text="📊 Leaderboard", callback_data="dm_leaderboard")
     )
     builder.row(
@@ -142,8 +144,10 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🎨 Themes", callback_data="cb_themes_menu"),
         InlineKeyboardButton(text="🎒 Harem", callback_data="dm_bag_All_1")
     )
+    builder.row(
+        InlineKeyboardButton(text="🎮 Launch Harem App", web_app=WebAppInfo(url=config.MINI_APP_URL))
+    )
     return builder.as_markup()
-
 def get_leaderboard_keyboard(current_category: str) -> InlineKeyboardMarkup:
     import config
     builder = InlineKeyboardBuilder()

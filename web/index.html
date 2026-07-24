@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AniVerse Harem Showcase</title>
+    <!-- Outfit Font for clean typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Telegram Web App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div id="app-container">
+        <!-- Profile & Stats Section -->
+        <header id="profile-header">
+            <div class="user-info">
+                <h1 id="user-name">Trainer</h1>
+                <span id="user-tag" class="badge">Novice Trainer</span>
+            </div>
+            <div class="stats-row">
+                <div class="stat-card">
+                    <span class="stat-icon">🪙</span>
+                    <div class="stat-details">
+                        <span class="stat-value" id="stat-coins">0</span>
+                        <span class="stat-label">Coins</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-icon">🌟</span>
+                    <div class="stat-details">
+                        <span class="stat-value" id="stat-catches">0</span>
+                        <span class="stat-label">Catches</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Controls Section -->
+        <section id="controls-section">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="search-input" placeholder="Search characters...">
+            </div>
+            <div class="filters-row">
+                <select id="filter-rarity">
+                    <option value="ALL">All Rarities</option>
+                </select>
+                <select id="sort-order">
+                    <option value="id_asc">ID: Low to High</option>
+                    <option value="id_desc">ID: High to Low</option>
+                    <option value="count_desc">Owned Count (Max)</option>
+                    <option value="name_asc">Name: A-Z</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- Gallery Grid -->
+        <main id="gallery-section">
+            <div id="loading-indicator">
+                <div class="spinner"></div>
+                <p>Loading your harem collection...</p>
+            </div>
+            <div id="no-results" class="hidden">
+                <span class="empty-icon">⛩️</span>
+                <p>No characters found in your collection.</p>
+            </div>
+            <div id="cards-grid" class="cards-grid"></div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

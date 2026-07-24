@@ -46,3 +46,6 @@ RARITY_CONFIG = {
     "Amv": {"emoji": "🎬", "weight": 10, "color": "Purple"},
     "Video": {"emoji": "📹", "weight": 10, "color": "Purple"}
 }
+
+# Telegram Mini App URL (Frontend hosted link)
+MINI_APP_URL = os.getenv("MINI_APP_URL", "https://royalrahul456.github.io/AniVerse/")
