@@ -21,6 +21,82 @@ let gameScore = 0;
 let gameTimeLeft = 0;
 let pendingClaimCoins = 0;
 
+// Lazy Web Audio API Synthesizer (Zero assets download required)
+let audioCtx = null;
+function playSound(type) {
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        if (type === 'score') {
+            // High-pitched 8-bit Ding sound
+            osc.frequency.setValueAtTime(850, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1300, audioCtx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + 0.12);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.12);
+        } else if (type === 'jump') {
+            // Sweep up sound (Jump action)
+            osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(700, audioCtx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + 0.12);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.12);
+        } else if (type === 'hit') {
+            // Flat noise explosion / crash sound
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 0.25);
+            gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + 0.25);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.25);
+        } else if (type === 'success') {
+            // Happy triumphant arpeggio
+            const now = audioCtx.currentTime;
+            osc.frequency.setValueAtTime(523.25, now); // C5
+            osc.frequency.setValueAtTime(659.25, now + 0.07); // E5
+            osc.frequency.setValueAtTime(783.99, now + 0.14); // G5
+            osc.frequency.setValueAtTime(1046.50, now + 0.21); // C6
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.005, now + 0.35);
+            osc.start();
+            osc.stop(now + 0.35);
+        }
+    } catch (e) {
+        console.error("Synthesizer error:", e);
+    }
+}
+
+// Trigger haptic pulses
+function triggerHaptic(type) {
+    if (!tg.HapticFeedback) return;
+    try {
+        if (type === 'light') {
+            tg.HapticFeedback.impactOccurred("light");
+        } else if (type === 'medium') {
+            tg.HapticFeedback.impactOccurred("medium");
+        } else if (type === 'warning') {
+            tg.HapticFeedback.notificationOccurred("warning");
+        } else if (type === 'success') {
+            tg.HapticFeedback.notificationOccurred("success");
+        }
+    } catch (e) {
+        console.error("Haptic error:", e);
+    }
+}
+
 // DOM Elements
 const userNameEl = document.getElementById("user-name");
 const userTagEl = document.getElementById("user-tag");
@@ -110,9 +186,7 @@ function openGame(gameType) {
             break;
     }
     
-    if (tg.HapticFeedback) {
-        tg.HapticFeedback.notificationOccurred("success");
-    }
+    triggerHaptic('light');
 }
 
 // Close Game Overlay
@@ -122,16 +196,15 @@ function closeGame() {
     currentActiveGame = null;
 }
 
-// Triggers the Victory claim popup
+// Triggers the Victory screen
 function triggerVictoryScreen(score, coins) {
     pendingClaimCoins = coins;
     rewardMessage.textContent = `You scored ${score} points!`;
     earnedCoinsValue.textContent = coins;
     rewardModal.classList.remove("hidden");
     
-    if (tg.HapticFeedback) {
-        tg.HapticFeedback.notificationOccurred("success");
-    }
+    playSound('success');
+    triggerHaptic('success');
 }
 
 // Send earned coins to backend database
@@ -162,10 +235,7 @@ async function claimReward() {
         const data = await response.json();
         // Update live balance counter
         statCoinsEl.textContent = data.coins.toLocaleString();
-        
-        if (tg.HapticFeedback) {
-            tg.HapticFeedback.notificationOccurred("success");
-        }
+        triggerHaptic('success');
     } catch (err) {
         alert(err.message || "Failed to sync coins to bot account. Cooldown might be active!");
     }
@@ -198,6 +268,9 @@ function setupMemoryGame() {
             cell.style.background = "var(--accent)";
             flipped.push({ cell, val });
             
+            playSound('score');
+            triggerHaptic('light');
+            
             if (flipped.length === 2) {
                 setTimeout(() => {
                     if (flipped[0].val === flipped[1].val) {
@@ -207,8 +280,11 @@ function setupMemoryGame() {
                         gameScore += 10;
                         liveScore.textContent = `Score: ${gameScore}`;
                         
+                        playSound('success');
+                        triggerHaptic('medium');
+                        
                         if (matches === items.length) {
-                            const reward = Math.min(50, gameScore / 2);
+                            const reward = Math.min(100, gameScore / 2);
                             triggerVictoryScreen(gameScore, Math.floor(reward));
                         }
                     } else {
@@ -216,6 +292,9 @@ function setupMemoryGame() {
                         flipped[0].cell.style.background = "#1c1f35";
                         flipped[1].cell.textContent = "❓";
                         flipped[1].cell.style.background = "#1c1f35";
+                        
+                        playSound('hit');
+                        triggerHaptic('light');
                     }
                     flipped = [];
                 }, 600);
@@ -245,6 +324,8 @@ function setupNinjaGame() {
         if (!isJumping) {
             ninjaVY = -12;
             isJumping = true;
+            playSound('jump');
+            triggerHaptic('light');
         }
     });
     
@@ -264,11 +345,15 @@ function setupNinjaGame() {
             gameScore += 10;
             liveScore.textContent = `Score: ${gameScore}`;
             obstacleSpeed = 4 + Math.floor(gameScore / 50);
+            playSound('score');
+            triggerHaptic('light');
         }
         
         // Collisions
         if (obstacleX > 30 && obstacleX < 50 && ninjaY >= 250) {
             clearInterval(gameInterval);
+            playSound('hit');
+            triggerHaptic('warning');
             const reward = Math.min(100, Math.floor(gameScore / 3));
             triggerVictoryScreen(gameScore, reward);
         }
@@ -282,7 +367,8 @@ function setupNinjaGame() {
         ctx.fillText("🎋", obstacleX - 4, 286); // Obstacle spike
         
         ctx.font = "28px Outfit";
-        ctx.fillText("🥷", 24, ninjaY + 8); // Player Ninja    }, 1000 / 60);
+        ctx.fillText("🥷", 24, ninjaY + 8); // Player Ninja
+    }, 1000 / 60);
 }
 
 // ----------------------------------------------------
@@ -304,10 +390,10 @@ function setupSnakeGame() {
     let dir = {x: 16, y: 0};
     let apple = {x: 80, y: 80};
     
-    document.getElementById("snake-l").onclick = () => { if (dir.x === 0) dir = {x: -16, y: 0}; };
-    document.getElementById("snake-r").onclick = () => { if (dir.x === 0) dir = {x: 16, y: 0}; };
-    document.getElementById("snake-u").onclick = () => { if (dir.y === 0) dir = {x: 0, y: -16}; };
-    document.getElementById("snake-d").onclick = () => { if (dir.y === 0) dir = {x: 0, y: 16}; };
+    document.getElementById("snake-l").onclick = () => { if (dir.x === 0) { dir = {x: -16, y: 0}; playSound('jump'); triggerHaptic('light'); } };
+    document.getElementById("snake-r").onclick = () => { if (dir.x === 0) { dir = {x: 16, y: 0}; playSound('jump'); triggerHaptic('light'); } };
+    document.getElementById("snake-u").onclick = () => { if (dir.y === 0) { dir = {x: 0, y: -16}; playSound('jump'); triggerHaptic('light'); } };
+    document.getElementById("snake-d").onclick = () => { if (dir.y === 0) { dir = {x: 0, y: 16}; playSound('jump'); triggerHaptic('light'); } };
     
     gameInterval = setInterval(() => {
         // Move Snake
@@ -322,6 +408,8 @@ function setupSnakeGame() {
                 x: Math.floor(Math.random() * 20) * 16,
                 y: Math.floor(Math.random() * 20) * 16
             };
+            playSound('score');
+            triggerHaptic('medium');
         } else {
             snake.pop();
         }
@@ -330,6 +418,8 @@ function setupSnakeGame() {
         if (head.x < 0 || head.x >= 320 || head.y < 0 || head.y >= 320 || 
             snake.slice(1).some(seg => seg.x === head.x && seg.y === head.y)) {
             clearInterval(gameInterval);
+            playSound('hit');
+            triggerHaptic('warning');
             const reward = Math.min(100, Math.floor(gameScore / 2));
             triggerVictoryScreen(gameScore, reward);
         }
@@ -341,7 +431,8 @@ function setupSnakeGame() {
         
         snake.forEach((seg, index) => {
             ctx.fillText(index === 0 ? "🐍" : "🟢", seg.x, seg.y + 14); // Snake head and body
-        });    }, 150);
+        });
+    }, 150);
 }
 
 // ----------------------------------------------------
@@ -361,19 +452,21 @@ function setupCatchGame() {
     let basketWidth = 60;
     let items = [];
     
-    document.getElementById("catch-l").addEventListener("mousedown", () => basketX = Math.max(0, basketX - 25));
-    document.getElementById("catch-r").addEventListener("mousedown", () => basketX = Math.min(320 - basketWidth, basketX + 25));
-    // Support click tapping too
-    document.getElementById("catch-l").onclick = () => basketX = Math.max(0, basketX - 25);
-    document.getElementById("catch-r").onclick = () => basketX = Math.min(320 - basketWidth, basketX + 25);
+    function moveLeft() { basketX = Math.max(0, basketX - 25); playSound('jump'); triggerHaptic('light'); }
+    function moveRight() { basketX = Math.min(320 - basketWidth, basketX + 25); playSound('jump'); triggerHaptic('light'); }
+    
+    document.getElementById("catch-l").addEventListener("mousedown", moveLeft);
+    document.getElementById("catch-r").addEventListener("mousedown", moveRight);
+    document.getElementById("catch-l").onclick = moveLeft;
+    document.getElementById("catch-r").onclick = moveRight;
     
     gameInterval = setInterval(() => {
         // Spawn item
-        if (Math.random() < 0.03) {
+        if (Math.random() < 0.035) {
             items.push({
                 x: Math.random() * 300,
                 y: 0,
-                type: Math.random() < 0.75 ? 'coin' : 'bomb',
+                type: Math.random() < 0.78 ? 'coin' : 'bomb',
                 speed: 3 + Math.random() * 2
             });
         }
@@ -387,9 +480,13 @@ function setupCatchGame() {
                 if (items[i].type === 'coin') {
                     gameScore += 10;
                     liveScore.textContent = `Score: ${gameScore}`;
+                    playSound('score');
+                    triggerHaptic('light');
                 } else {
                     // Bomb hit! Game Over
                     clearInterval(gameInterval);
+                    playSound('hit');
+                    triggerHaptic('warning');
                     const reward = Math.min(100, Math.floor(gameScore / 3));
                     triggerVictoryScreen(gameScore, reward);
                     return;
@@ -408,7 +505,8 @@ function setupCatchGame() {
         ctx.font = "20px Outfit";
         items.forEach(item => {
             ctx.fillText(item.type === 'coin' ? "🪙" : "💣", item.x - 10, item.y + 8); // Falling elements
-        });    }, 1000 / 60);
+        });
+    }, 1000 / 60);
 }
 
 // ----------------------------------------------------
@@ -441,6 +539,8 @@ function setupRPSGame() {
         
         if (playerChoice === botChoice) {
             resultMsg = `Tie! Both picked ${playerChoice.toUpperCase()}`;
+            playSound('jump');
+            triggerHaptic('light');
         } else if (
             (playerChoice === 'rock' && botChoice === 'scissors') ||
             (playerChoice === 'paper' && botChoice === 'rock') ||
@@ -449,8 +549,12 @@ function setupRPSGame() {
             resultMsg = `Win! ${playerChoice.toUpperCase()} beats ${botChoice.toUpperCase()}`;
             wins++;
             gameScore += 20;
+            playSound('score');
+            triggerHaptic('medium');
         } else {
             resultMsg = `Lose! ${botChoice.toUpperCase()} beats ${playerChoice.toUpperCase()}`;
+            playSound('hit');
+            triggerHaptic('light');
         }
         
         rounds++;
@@ -488,9 +592,8 @@ function setupClickerGame() {
         if (gameTimeLeft > 0) {
             gameScore++;
             liveScore.textContent = `Score: ${gameScore}`;
-            if (tg.HapticFeedback) {
-                tg.HapticFeedback.impactOccurred("light");
-            }
+            playSound('score');
+            triggerHaptic('light');
         }
     });
     
@@ -500,7 +603,7 @@ function setupClickerGame() {
         
         if (gameTimeLeft <= 0) {
             clearInterval(gameInterval);
-            const reward = Math.min(50, Math.floor(gameScore / 2));
+            const reward = Math.min(100, Math.floor(gameScore / 2));
             triggerVictoryScreen(gameScore, reward);
         }
     }, 1000);
@@ -535,6 +638,8 @@ function setupTTTGame() {
             board[i] = "X";
             cell.textContent = "X";
             cell.style.color = "var(--accent)";
+            playSound('score');
+            triggerHaptic('light');
             
             if (checkTTTWin("X")) {
                 gameScore = 50;
@@ -558,10 +663,14 @@ function setupTTTGame() {
                 const botCell = grid.children[bestMove];
                 botCell.textContent = "O";
                 botCell.style.color = "#e74c3c";
+                playSound('jump');
+                triggerHaptic('light');
                 
                 if (checkTTTWin("O")) {
                     isGameOver = true;
                     resultText.textContent = "Bot wins!";
+                    playSound('hit');
+                    triggerHaptic('warning');
                     setTimeout(() => triggerVictoryScreen(0, 0), 1000);
                     return;
                 }
@@ -580,7 +689,6 @@ function setupTTTGame() {
     }
     
     function getTTTBotMove() {
-        // AI: Play random empty spot
         const empties = [];
         board.forEach((c, idx) => { if (c === "") empties.push(idx); });
         return empties[Math.floor(Math.random() * empties.length)];
@@ -603,14 +711,17 @@ function setupDodgeGame() {
     let playerX = 150;
     let balls = [];
     
-    document.getElementById("dodge-l").addEventListener("mousedown", () => playerX = Math.max(0, playerX - 20));
-    document.getElementById("dodge-r").addEventListener("mousedown", () => playerX = Math.min(300, playerX + 20));
-    document.getElementById("dodge-l").onclick = () => playerX = Math.max(0, playerX - 20);
-    document.getElementById("dodge-r").onclick = () => playerX = Math.min(300, playerX + 20);
+    function moveLeft() { playerX = Math.max(0, playerX - 20); playSound('jump'); triggerHaptic('light'); }
+    function moveRight() { playerX = Math.min(300, playerX + 20); playSound('jump'); triggerHaptic('light'); }
+    
+    document.getElementById("dodge-l").addEventListener("mousedown", moveLeft);
+    document.getElementById("dodge-r").addEventListener("mousedown", moveRight);
+    document.getElementById("dodge-l").onclick = moveLeft;
+    document.getElementById("dodge-r").onclick = moveRight;
     
     gameInterval = setInterval(() => {
         // Spawn fireball
-        if (Math.random() < 0.05) {
+        if (Math.random() < 0.055) {
             balls.push({
                 x: Math.random() * 320,
                 y: 0,
@@ -626,6 +737,8 @@ function setupDodgeGame() {
             // Check collision with player box at Y = 280
             if (balls[i].y >= 270 && balls[i].y <= 290 && balls[i].x >= playerX && balls[i].x <= playerX + 20) {
                 clearInterval(gameInterval);
+                playSound('hit');
+                triggerHaptic('warning');
                 const reward = Math.min(100, Math.floor(gameScore / 3));
                 triggerVictoryScreen(gameScore, reward);
                 return;
@@ -635,6 +748,8 @@ function setupDodgeGame() {
                 balls.splice(i, 1);
                 gameScore += 5;
                 liveScore.textContent = `Score: ${gameScore}`;
+                playSound('score');
+                triggerHaptic('light');
             }
         }
         
@@ -646,7 +761,8 @@ function setupDodgeGame() {
         ctx.font = "24px Outfit";
         balls.forEach(ball => {
             ctx.fillText("☄️", ball.x - 12, ball.y + 8); // Falling fireballs
-        });    }, 1000 / 60);
+        });
+    }, 1000 / 60);
 }
 
 // ----------------------------------------------------
@@ -683,12 +799,16 @@ function setupGuessGame() {
             liveScore.textContent = `Score: 100`;
             triggerVictoryScreen(100, 50);
         } else if (attemptsLeft <= 0) {
+            playSound('hit');
+            triggerHaptic('warning');
             document.getElementById("guess-hint").textContent = `Game Over! The number was ${secretNum}`;
             setTimeout(() => triggerVictoryScreen(0, 0), 1500);
         } else {
             const hint = guess < secretNum ? "Too low! 📈" : "Too high! 📉";
             document.getElementById("guess-hint").textContent = hint;
             document.getElementById("guess-att-text").textContent = `Attempts remaining: ${attemptsLeft}`;
+            playSound('score');
+            triggerHaptic('light');
         }
     };
 }
@@ -738,7 +858,8 @@ function setupMathGame() {
             liveTimer.textContent = `Time: ${gameTimeLeft}s`;
             if (gameTimeLeft <= 0) {
                 clearInterval(questionTimer);
-                // Time up -> Game over
+                playSound('hit');
+                triggerHaptic('warning');
                 const reward = Math.min(100, Math.floor(gameScore / 2));
                 triggerVictoryScreen(gameScore, reward);
             }
@@ -749,10 +870,14 @@ function setupMathGame() {
         if (userAnswer === answer) {
             gameScore += 10;
             liveScore.textContent = `Score: ${gameScore}`;
+            playSound('score');
+            triggerHaptic('medium');
             generateQuestion();
         } else {
             // Wrong answer -> Game over
             if (questionTimer) clearInterval(questionTimer);
+            playSound('hit');
+            triggerHaptic('warning');
             const reward = Math.min(100, Math.floor(gameScore / 2));
             triggerVictoryScreen(gameScore, reward);
         }
