@@ -278,14 +278,11 @@ function setupNinjaGame() {
         ctx.fillStyle = "#2ecc71";
         ctx.fillRect(0, 290, 320, 30); // Ground
         
-        ctx.fillStyle = "#e74c3c"; // Obstacle (Bamboo spike)
-        ctx.fillRect(obstacleX, 260, 15, 30);
+        ctx.font = "26px Outfit";
+        ctx.fillText("🎋", obstacleX - 4, 286); // Obstacle spike
         
-        ctx.fillStyle = "#f1c40f"; // Player (Ninja icon circle)
-        ctx.beginPath();
-        ctx.arc(40, ninjaY, 15, 0, Math.PI * 2);
-        ctx.fill();
-    }, 1000 / 60);
+        ctx.font = "28px Outfit";
+        ctx.fillText("🥷", 24, ninjaY + 8); // Player Ninja    }, 1000 / 60);
 }
 
 // ----------------------------------------------------
@@ -339,12 +336,12 @@ function setupSnakeGame() {
         
         // Draw
         ctx.clearRect(0, 0, 320, 320);
-        ctx.fillStyle = "#e74c3c"; // Apple
-        ctx.fillRect(apple.x, apple.y, 14, 14);
+        ctx.font = "16px Outfit";
+        ctx.fillText("🍎", apple.x, apple.y + 14); // Apple
         
-        ctx.fillStyle = "#3498db"; // Snake
-        snake.forEach(seg => ctx.fillRect(seg.x, seg.y, 14, 14));
-    }, 150);
+        snake.forEach((seg, index) => {
+            ctx.fillText(index === 0 ? "🐍" : "🟢", seg.x, seg.y + 14); // Snake head and body
+        });    }, 150);
 }
 
 // ----------------------------------------------------
@@ -405,16 +402,13 @@ function setupCatchGame() {
         
         // Draw
         ctx.clearRect(0, 0, 320, 320);
-        ctx.fillStyle = "#e67e22"; // Basket
-        ctx.fillRect(basketX, 290, basketWidth, 15);
+        ctx.font = "32px Outfit";
+        ctx.fillText("🧺", basketX + 12, 308); // Basket
         
+        ctx.font = "20px Outfit";
         items.forEach(item => {
-            ctx.fillStyle = item.type === 'coin' ? '#f1c40f' : '#e74c3c';
-            ctx.beginPath();
-            ctx.arc(item.x, item.y, 8, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }, 1000 / 60);
+            ctx.fillText(item.type === 'coin' ? "🪙" : "💣", item.x - 10, item.y + 8); // Falling elements
+        });    }, 1000 / 60);
 }
 
 // ----------------------------------------------------
@@ -646,16 +640,13 @@ function setupDodgeGame() {
         
         // Draw
         ctx.clearRect(0, 0, 320, 320);
-        ctx.fillStyle = "#3498db"; // Player
-        ctx.fillRect(playerX, 280, 20, 20);
+        ctx.font = "24px Outfit";
+        ctx.fillText("🏃", playerX - 2, 298); // Player
         
-        ctx.fillStyle = "#e74c3c"; // Fireballs
+        ctx.font = "24px Outfit";
         balls.forEach(ball => {
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }, 1000 / 60);
+            ctx.fillText("☄️", ball.x - 12, ball.y + 8); // Falling fireballs
+        });    }, 1000 / 60);
 }
 
 // ----------------------------------------------------
