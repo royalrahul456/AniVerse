@@ -603,14 +603,17 @@ async def cmd_check(message: Message, db: AsyncSession):
                 await message.reply(card, parse_mode="HTML", reply_markup=kb)
     else:
         # User is checking a name -> Show all variants paginated list
-        stmt = select(Character).where(Character.name.ilike(f"%{query_str}%"))
+        from utils.formatters import get_clean_name
+        query_clean = get_clean_name(query_str)
+        if not query_clean:
+            query_clean = query_str
+        stmt = select(Character).where(Character.name.ilike(f"%{query_clean}%"))
         res = await db.execute(stmt)
         matches = res.scalars().all()
 
         if not matches:
             await message.reply(f"❌ No character found matching '{escape_html(query_str)}'!", parse_mode="HTML")
             return
-
         base_name = get_clean_name(matches[0].name)
         anime = matches[0].anime
 
