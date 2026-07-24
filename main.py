@@ -149,20 +149,27 @@ class JoinCheckMiddleware:
         return
 
 async def start_health_server():
-    """Lightweight HTTP server for Render health checks — keeps the service alive."""
+    """Lightweight HTTP server for Render health checks & Games Arena API."""
     async def health(request):
         return web.Response(text="AniVerse Bot is running! ✅")
 
     app = web.Application()
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
+
+    # Games Arena API Setup
+    from handlers.api import get_user_profile_api, post_game_reward_api, options_handler
+    app.router.add_options("/api/profile/{user_id}", options_handler)
+    app.router.add_get("/api/profile/{user_id}", get_user_profile_api)
+    app.router.add_options("/api/games/reward", options_handler)
+    app.router.add_post("/api/games/reward", post_game_reward_api)
+
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Health check server running on port {port}")
-
+    logger.info(f"Health check & API server running on port {port}")
 async def main():
     if not config.BOT_TOKEN or config.BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
         logger.warning("BOT_TOKEN is not configured in environment variables or config.py!")

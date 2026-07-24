@@ -57,39 +57,52 @@ async def get_user_profile_api(request):
         logger.error(f"Error in get_user_profile_api: {e}", exc_info=True)
         return cors_json_response({"error": str(e)}, status=500)
 
-async def get_user_harem_api(request):
+import time
+LAST_REWARD_TIME = {}
+
+async def post_game_reward_api(request):
     try:
-        user_id_str = request.match_info.get("user_id")
-        if not user_id_str or not user_id_str.isdigit():
-            return cors_json_response({"error": "Invalid user ID"}, status=400)
-        
-        user_id = int(user_id_str)
+        data = await request.json()
+        user_id = data.get("user_id")
+        game_id = data.get("game_id", "unknown")
+        coins = data.get("coins", 0)
+
+        if not user_id or not isinstance(coins, int):
+            return cors_json_response({"error": "Invalid request parameters"}, status=400)
+
+        # 1. Anti-Cheat: Cap coins per game round to 100
+        if coins <= 0:
+            return cors_json_response({"error": "Coins must be positive"}, status=400)
+        if coins > 100:
+            coins = 100  # Cap at max allowed
+
+        # 2. Anti-Cheat: 15 seconds cooldown check per user
+        current_time = time.time()
+        last_time = LAST_REWARD_TIME.get(user_id, 0)
+        if current_time - last_time < 15:
+            return cors_json_response({"error": "Too fast! Please wait before claiming again."}, status=429)
+
+        LAST_REWARD_TIME[user_id] = current_time
+
+        # 3. Add coins to database user profile
         async with AsyncSessionLocal() as db:
-            # Query user characters and character metadata
-            stmt = (
-                select(Character, func.count(UserCharacter.id).label("cnt"))
-                .join(UserCharacter, UserCharacter.character_id == Character.id)
-                .where(UserCharacter.user_id == user_id)
-                .group_by(Character.id)
-                .order_by(Character.id)
-            )
+            stmt = select(User).where(User.user_id == user_id)
             res = await db.execute(stmt)
-            rows = res.all()
+            user = res.scalar_one_or_none()
+
+            if not user:
+                return cors_json_response({"error": "User not found"}, status=404)
+
+            user.coins += coins
+            await db.commit()
             
-            harem_list = []
-            for char, count in rows:
-                r_emoji = get_rarity_emoji(char.rarity)
-                harem_list.append({
-                    "id": char.id,
-                    "name": char.name,
-                    "anime": char.anime,
-                    "rarity": char.rarity,
-                    "rarity_emoji": r_emoji,
-                    "image_url": char.image_url,
-                    "count": count
-                })
+            logger.info(f"User {user_id} earned {coins} coins in game '{game_id}'. New balance: {user.coins}")
             
-            return cors_json_response({"harem": harem_list})
+            return cors_json_response({
+                "success": True,
+                "earned": coins,
+                "coins": user.coins
+            })
     except Exception as e:
-        logger.error(f"Error in get_user_harem_api: {e}", exc_info=True)
+        logger.error(f"Error in post_game_reward_api: {e}", exc_info=True)
         return cors_json_response({"error": str(e)}, status=500)

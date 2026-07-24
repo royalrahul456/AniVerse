@@ -5,15 +5,11 @@
     --text-primary: #ffffff;
     --text-secondary: #a0aec0;
     --accent: #6c5ce7;
+    --accent-glow: rgba(108, 92, 231, 0.4);
+    --success: #00b894;
+    --success-glow: rgba(0, 184, 148, 0.4);
     --gold: #f1c40f;
-    
-    /* Rarity Glow Colors */
-    --rarity-common: rgba(160, 174, 192, 0.4);
-    --rarity-rare: rgba(52, 152, 219, 0.7);
-    --rarity-epic: rgba(155, 89, 182, 0.8);
-    --rarity-legendary: rgba(241, 196, 15, 0.9);
-    --rarity-mythical: rgba(231, 76, 60, 1.0);
-    --rarity-amv: rgba(162, 155, 254, 0.8);
+    --gold-glow: rgba(241, 196, 15, 0.4);
 }
 
 * {
@@ -70,13 +66,10 @@ body {
     padding: 4px 10px;
     border-radius: 20px;
     margin-top: 6px;
-    box-shadow: 0 4px 10px rgba(108, 92, 231, 0.4);
+    box-shadow: 0 4px 10px var(--accent-glow);
 }
 
 .stats-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
     margin-top: 20px;
 }
 
@@ -84,14 +77,18 @@ body {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 14px;
-    padding: 12px;
+    padding: 14px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
+}
+
+.stat-card.full-width {
+    width: 100%;
 }
 
 .stat-icon {
-    font-size: 22px;
+    font-size: 28px;
 }
 
 .stat-details {
@@ -100,8 +97,10 @@ body {
 }
 
 .stat-value {
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 800;
+    color: var(--gold);
+    text-shadow: 0 0 10px var(--gold-glow);
 }
 
 .stat-label {
@@ -111,215 +110,443 @@ body {
     letter-spacing: 0.5px;
 }
 
-/* Controls (Search & Filters) */
-#controls-section {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+/* Intro Section */
+#intro-section {
     margin-bottom: 20px;
+    padding: 0 4px;
 }
 
-.search-box {
-    position: relative;
-    width: 100%;
+#intro-section h2 {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 4px;
 }
 
-.search-icon {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 14px;
+#intro-section p {
+    font-size: 13px;
     color: var(--text-secondary);
 }
 
-#search-input {
-    width: 100%;
-    padding: 12px 16px 12px 42px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    color: white;
-    font-family: inherit;
-    font-size: 14px;
-    outline: none;
-    transition: all 0.3s ease;
-}
-
-#search-input:focus {
-    border-color: var(--accent);
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 0 10px rgba(108, 92, 231, 0.25);
-}
-
-.filters-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    color: white;
-    font-family: inherit;
-    font-size: 13px;
-    outline: none;
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right 14px center;
-    background-size: 12px;
-}
-
-/* Gallery Section */
-#gallery-section {
-    position: relative;
-    min-height: 200px;
-}
-
-.cards-grid {
+/* Arcade Games Grid */
+.games-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 14px;
 }
 
-/* Character Trading Cards */
-.char-card {
+.game-card {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 16px;
-    overflow: hidden;
-    position: relative;
+    border-radius: 18px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease, border-color 0.2s ease;
+    position: relative;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 
-.char-card:active {
+.game-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    box-shadow: 0 8px 25px var(--accent-glow);
+}
+
+.game-card:active {
     transform: scale(0.96);
 }
 
-/* Rarity specific glow card classes */
-.char-card.rarity-common { border-color: #a0aec0; box-shadow: 0 4px 15px rgba(160, 174, 192, 0.15); }
-.char-card.rarity-rare { border-color: #3498db; box-shadow: 0 4px 20px rgba(52, 152, 219, 0.35); }
-.char-card.rarity-epic { border-color: #9b59b6; box-shadow: 0 4px 20px rgba(155, 89, 182, 0.45); }
-.char-card.rarity-legendary { border-color: #f1c40f; box-shadow: 0 4px 25px rgba(241, 196, 15, 0.55); }
-.char-card.rarity-mythical { border-color: #e74c3c; box-shadow: 0 4px 25px rgba(231, 76, 60, 0.65); }
-.char-card.rarity-amv { border-color: #a29bfe; box-shadow: 0 4px 20px rgba(162, 155, 254, 0.45); }
-
-.char-image-container {
-    width: 100%;
-    padding-top: 125%; /* 4:5 Aspect Ratio */
-    position: relative;
-    background: #000;
+.game-emoji {
+    font-size: 36px;
+    margin-bottom: 10px;
+    display: block;
 }
 
-.char-image {
-    position: absolute;
+.game-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.game-card p {
+    font-size: 11px;
+    color: var(--text-secondary);
+    height: 48px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.play-btn {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px var(--accent-glow);
+    transition: background 0.2s ease;
+}
+
+.game-card:hover .play-btn {
+    background: #7d6dfa;
+}
+
+/* Modal Overlays (Game and Victory screens) */
+.modal-overlay {
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    transition: transform 0.5s ease;
+    background: rgba(11, 13, 25, 0.95);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
 }
 
-.char-card:hover .char-image {
-    transform: scale(1.06);
+.modal-overlay.hidden {
+    display: none !important;
 }
 
-.char-info {
-    padding: 10px 12px;
+.modal-container {
+    width: 100%;
+    max-width: 400px;
+    background: #14172a;
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(to top, rgba(17, 20, 36, 0.95) 0%, rgba(17, 20, 36, 0.8) 100%);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.char-name {
-    font-size: 14px;
-    font-weight: 800;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.char-anime {
-    font-size: 10px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-top: 2px;
-}
-
-.char-footer {
+.modal-header {
+    padding: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 8px;
 }
 
-.char-rarity-badge {
-    font-size: 9px;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.char-count-badge {
-    font-size: 10px;
+.modal-header h2 {
+    font-size: 16px;
     font-weight: 800;
-    color: var(--gold);
-    background: rgba(241, 196, 15, 0.1);
-    border: 1px solid rgba(241, 196, 15, 0.2);
-    padding: 2px 6px;
-    border-radius: 8px;
 }
 
-/* Loading Spinner & Indicators */
-#loading-indicator {
+#close-game-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+/* Live Score/Stats Panel */
+#game-live-stats {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gold);
+}
+
+/* Game View Area */
+.game-view-area {
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 60px 0;
-    color: var(--text-secondary);
+    background: #0f1120;
+    min-height: 320px;
 }
 
-.spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid rgba(255, 255, 255, 0.08);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-bottom: 16px;
-}
-
-#no-results {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-secondary);
-}
-
-.empty-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
+#game-canvas {
+    background: #1c1f35;
+    border: 2px solid var(--card-border);
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     display: block;
 }
 
-.hidden {
-    display: none !important;
+/* HTML Container and Custom Games styling */
+#html-game-container {
+    width: 100%;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+/* Mobile Action Controls */
+.mobile-controls-row {
+    padding: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    background: #14172a;
+}
+
+.control-btn {
+    flex: 1;
+    max-width: 120px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    color: white;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+
+.control-btn:active {
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* HTML Games layouts (RPS / Math / TicTacToe / Guess) */
+.rps-button-group {
+    display: flex;
+    gap: 14px;
+    width: 100%;
+    justify-content: center;
+    padding: 20px 0;
+}
+
+.rps-btn {
+    width: 70px;
+    height: 70px;
+    font-size: 28px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.rps-btn:active {
+    transform: scale(0.9);
+    background: var(--accent);
+}
+
+.ttt-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    width: 220px;
+    height: 220px;
+}
+
+.ttt-cell {
+    background: #1c1f35;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.ttt-cell:active {
+    background: rgba(108, 92, 231, 0.15);
+}
+
+.guess-box {
+    text-align: center;
+    width: 100%;
+    padding: 10px;
+}
+
+.guess-input {
+    width: 120px;
+    padding: 12px;
+    background: #1c1f35;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: white;
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 800;
+    text-align: center;
+    outline: none;
+    margin-bottom: 12px;
+}
+
+.guess-feedback {
+    font-size: 14px;
+    height: 24px;
+    color: var(--gold);
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+.guess-attempts {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.math-box {
+    text-align: center;
+    width: 100%;
+}
+
+.math-equation {
+    font-size: 36px;
+    font-weight: 800;
+    margin-bottom: 24px;
+    letter-spacing: 1px;
+}
+
+.math-options {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    width: 100%;
+    padding: 10px;
+}
+
+.math-btn {
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    color: white;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.math-btn:active {
+    background: var(--accent);
+}
+
+/* Clicker game layout */
+.clicker-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.clicker-coin-btn {
+    width: 130px;
+    height: 130px;
+    font-size: 64px;
+    background: radial-gradient(circle, #f39c12 0%, #d35400 100%);
+    border: 4px solid var(--gold);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(230, 126, 34, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: transform 0.05s ease;
+}
+
+.clicker-coin-btn:active {
+    transform: scale(0.92);
+}
+
+/* Victory / Reward Screen */
+.reward-box {
+    background: #14172a;
+    border: 1px solid var(--card-border);
+    border-radius: 28px;
+    padding: 30px;
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.reward-sparkles {
+    font-size: 64px;
+    line-height: 1;
+    margin-bottom: 12px;
+}
+
+.reward-box h2 {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: var(--success);
+}
+
+.reward-box p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+}
+
+.earned-badge {
+    background: rgba(241, 196, 15, 0.1);
+    border: 1px solid rgba(241, 196, 15, 0.2);
+    padding: 10px 24px;
+    border-radius: 16px;
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--gold);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 0 0 10px var(--gold-glow);
+}
+
+.claim-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--success);
+    border: none;
+    border-radius: 14px;
+    color: white;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+    box-shadow: 0 6px 15px var(--success-glow);
+    transition: background 0.2s;
+}
+
+.claim-btn:active {
+    background: #2ecc71;
+}
+
+/* Animations */
+@keyframes scaleIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
 }

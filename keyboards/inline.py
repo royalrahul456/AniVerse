@@ -6,7 +6,7 @@ def get_dm_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     """Generates the primary Hub menu keyboard for DMs in AniVerse."""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🎮 Launch Harem App", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))    )
+        InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))    )
     builder.row(
         InlineKeyboardButton(text="👤 Profile", callback_data="dm_profile"),
         InlineKeyboardButton(text="🏆 AnimeDex", callback_data="dm_dex_All_1")
@@ -143,8 +143,7 @@ def get_profile_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🎨 Themes", callback_data="cb_themes_menu"),
         InlineKeyboardButton(text="🎒 Harem", callback_data="dm_bag_All_1")
     )
-    builder.row(
-        InlineKeyboardButton(text="🎮 Launch Harem App", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))
+    builder.row(        InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))
     )
     return builder.as_markup()
 

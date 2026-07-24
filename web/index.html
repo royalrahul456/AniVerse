@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AniVerse Harem Showcase</title>
+    <title>AniVerse Games Arena</title>
     <!-- Outfit Font for clean typography -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -19,54 +19,135 @@
                 <span id="user-tag" class="badge">Novice Trainer</span>
             </div>
             <div class="stats-row">
-                <div class="stat-card">
+                <div class="stat-card full-width">
                     <span class="stat-icon">🪙</span>
                     <div class="stat-details">
                         <span class="stat-value" id="stat-coins">0</span>
-                        <span class="stat-label">Coins</span>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-icon">🌟</span>
-                    <div class="stat-details">
-                        <span class="stat-value" id="stat-catches">0</span>
-                        <span class="stat-label">Catches</span>
+                        <span class="stat-label">Your Bot Coins Balance</span>
                     </div>
                 </div>
             </div>
         </header>
 
-        <!-- Controls Section -->
-        <section id="controls-section">
-            <div class="search-box">
-                <span class="search-icon">🔍</span>
-                <input type="text" id="search-input" placeholder="Search characters...">
-            </div>
-            <div class="filters-row">
-                <select id="filter-rarity">
-                    <option value="ALL">All Rarities</option>
-                </select>
-                <select id="sort-order">
-                    <option value="id_asc">ID: Low to High</option>
-                    <option value="id_desc">ID: High to Low</option>
-                    <option value="count_desc">Owned Count (Max)</option>
-                    <option value="name_asc">Name: A-Z</option>
-                </select>
-            </div>
+        <!-- Arcade Intro -->
+        <section id="intro-section">
+            <h2>🎮 Games Arena</h2>
+            <p>Play casual games and earn coins directly for your bot account!</p>
         </section>
 
-        <!-- Gallery Grid -->
-        <main id="gallery-section">
-            <div id="loading-indicator">
-                <div class="spinner"></div>
-                <p>Loading your harem collection...</p>
+        <!-- Games Grid -->
+        <main id="games-grid" class="games-grid">
+            <!-- 1. Memory Match -->
+            <div class="game-card" onclick="openGame('memory')">
+                <span class="game-emoji">🎴</span>
+                <h3>Memory Match</h3>
+                <p>Match anime character card pairs and test your memory.</p>
+                <button class="play-btn">Play</button>
             </div>
-            <div id="no-results" class="hidden">
-                <span class="empty-icon">⛩️</span>
-                <p>No characters found in your collection.</p>
+            <!-- 2. Ninja Jump -->
+            <div class="game-card" onclick="openGame('ninja')">
+                <span class="game-emoji">🥷</span>
+                <h3>Ninja Jump</h3>
+                <p>Jump to guide the ninja through bamboo obstacles.</p>
+                <button class="play-btn">Play</button>
             </div>
-            <div id="cards-grid" class="cards-grid"></div>
+            <!-- 3. Snake Game -->
+            <div class="game-card" onclick="openGame('snake')">
+                <span class="game-emoji">🐍</span>
+                <h3>Snake Eater</h3>
+                <p>Eat apples to grow. Don't hit the walls or yourself!</p>
+                <button class="play-btn">Play</button>
+            </div>
+            <!-- 4. Coin Catcher -->
+            <div class="game-card" onclick="openGame('catch')">
+                <span class="game-emoji">🧺</span>
+                <h3>Coin Catcher</h3>
+                <p>Catch falling coins. Avoid the red ninja bombs!</p>
+                <button class="play-btn">Play</button>
+            </div>
+            <!-- 5. Rock Paper Scissors -->
+            <div class="game-card" onclick="openGame('rps')">
+                <span class="game-emoji">✊</span>
+                <h3>Anime RPS</h3>
+                <p>Face off in Rock Paper Scissors against the bot.</p>
+                <button class="play-btn">Play</button>
+            </div>
+            <!-- 6. Coin Clicker -->
+            <div class="game-card" onclick="openGame('clicker')">
+                <span class="game-emoji">⚡</span>
+                <h3>Coin Clicker</h3>
+                <p>Tap the giant coin as fast as possible in 10 seconds.</p>
+                <button class="play-btn">Play</button>
+            </div>
+            <!-- 7. Tic Tac Toe -->
+            <div class="game-card" onclick="openGame('ttt')">
+                <span class="game-emoji">❌</span>
+                <h3>Tic Tac Toe</h3>
+                <p>Get three in a row to defeat the bot smart AI.</p>
+                <button class="play-btn">Play</button>
+            </div>
+            <!-- 8. Dodge Fireballs -->
+            <div class="game-card" onclick="openGame('dodge')">
+                <span class="game-emoji">☄️</span>
+                <h3>Dodge Fire</h3>
+                <p>Move your player to dodge falling meteors.</p>
+                <button class="play-btn">Play</button>
+            </div>
+            <!-- 9. Guess the Number -->
+            <div class="game-card" onclick="openGame('guess')">
+                <span class="game-emoji">❓</span>
+                <h3>Guess Number</h3>
+                <p>Find the secret number (1-100) in 6 attempts.</p>
+                <button class="play-btn">Play</button>
+            </div>
+            <!-- 10. Math Rush -->
+            <div class="game-card" onclick="openGame('math')">
+                <span class="game-emoji">➕</span>
+                <h3>Math Rush</h3>
+                <p>Solve arithmetic equations before the timer runs out!</p>
+                <button class="play-btn">Play</button>
+            </div>
         </main>
+    </div>
+
+    <!-- Game Playing Modal Overlay -->
+    <div id="game-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <header class="modal-header">
+                <h2 id="modal-title">Game Title</h2>
+                <button id="close-game-btn" onclick="closeGame()">✖ Exit</button>
+            </header>
+            
+            <div class="game-view-area">
+                <!-- Score & Live Stats -->
+                <div id="game-live-stats">
+                    <span id="live-score">Score: 0</span>
+                    <span id="live-timer" class="hidden">Time: 0</span>
+                </div>
+
+                <!-- Game Canvas -->
+                <canvas id="game-canvas" width="320" height="320" class="hidden"></canvas>
+
+                <!-- Custom HTML Game Containers -->
+                <div id="html-game-container" class="hidden"></div>
+            </div>
+
+            <!-- Custom Mobile Buttons (Dynamically displayed depending on the game) -->
+            <div id="mobile-controls" class="mobile-controls-row hidden"></div>
+        </div>
+    </div>
+
+    <!-- Claim Reward Overlay -->
+    <div id="reward-modal" class="modal-overlay hidden">
+        <div class="reward-box">
+            <div class="reward-sparkles">🎉</div>
+            <h2>Victory!</h2>
+            <p id="reward-message">You scored 10 points!</p>
+            <div class="earned-badge">
+                <span>🪙 +</span><span id="earned-coins-value">0</span>
+            </div>
+            <button class="claim-btn" onclick="claimReward()">Claim & Close</button>
+        </div>
     </div>
 
     <script src="app.js"></script>
