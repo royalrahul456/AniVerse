@@ -60,18 +60,17 @@ def get_harem_keyboard(user_id: int, page: int, max_page: int, rarity: str = "Al
         InlineKeyboardButton(text="💌 AMV 🔄", switch_inline_query_current_chat=f"collection.{user_id}.AMV")
     )
     nav_row = []
-    if page > 1:
-        nav_row.append(InlineKeyboardButton(text="◀️ Prev", callback_data=f"dm_bag_{rarity}_{page-1}_{sort_by}"))
+    prev_page = page - 1 if page > 1 else max_page
+    nav_row.append(InlineKeyboardButton(text="◀️ Prev", callback_data=f"dm_bag_{rarity}_{prev_page}_{sort_by}"))
     nav_row.append(InlineKeyboardButton(text=f"{page}/{max_page}", callback_data="noop"))
-    if page < max_page:
-        nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"dm_bag_{rarity}_{page+1}_{sort_by}"))
+    next_page = page + 1 if page < max_page else 1
+    nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"dm_bag_{rarity}_{next_page}_{sort_by}"))
     builder.row(*nav_row)
  
     builder.row(
         InlineKeyboardButton(text="🔍 Filter Rarity", callback_data=f"dm_bag_rarity_menu_{sort_by}")
     )
     return builder.as_markup()
-
 def get_harem_sorting_keyboard(rarity: str, page: int, current_sort: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     modes = [("anime", "📺 Anime"), ("id", "🆔 ID"), ("name", "📛 Name"), ("rarity", "💮 Rarity")]
@@ -88,27 +87,25 @@ def get_harem_sorting_keyboard(rarity: str, page: int, current_sort: str) -> Inl
 def get_showcase_keyboard(user_id: int, mode: str, page: int, max_page: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     nav_row = []
-    if page > 1:
-        nav_row.append(InlineKeyboardButton(text="◀️ Prev", callback_data=f"harem_{mode}_{user_id}_{page-1}"))
+    prev_page = page - 1 if page > 1 else max_page
+    nav_row.append(InlineKeyboardButton(text="◀️ Prev", callback_data=f"harem_{mode}_{user_id}_{prev_page}"))
     nav_row.append(InlineKeyboardButton(text=f"{page}/{max_page}", callback_data="noop"))
-    if page < max_page:
-        nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"harem_{mode}_{user_id}_{page+1}"))
+    next_page = page + 1 if page < max_page else 1
+    nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"harem_{mode}_{user_id}_{next_page}"))
     builder.row(*nav_row)
     builder.row(InlineKeyboardButton(text="🔙 Back to Harem", callback_data="dm_bag_All_1"))
     return builder.as_markup()
-
 def get_list_pagination_keyboard(cmd_prefix: str, query_str: str, page: int, max_page: int) -> InlineKeyboardMarkup:
     """Generates clean Prev/Next inline pagination for /anime and /search."""
     builder = InlineKeyboardBuilder()
     nav_row = []
-    if page > 1:
-        nav_row.append(InlineKeyboardButton(text="◀️ Prev", callback_data=f"{cmd_prefix}_{query_str}_{page-1}"))
+    prev_page = page - 1 if page > 1 else max_page
+    nav_row.append(InlineKeyboardButton(text="◀️ Prev", callback_data=f"{cmd_prefix}_{query_str}_{prev_page}"))
     nav_row.append(InlineKeyboardButton(text=f"{page}/{max_page}", callback_data="noop"))
-    if page < max_page:
-        nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"{cmd_prefix}_{query_str}_{page+1}"))
+    next_page = page + 1 if page < max_page else 1
+    nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"{cmd_prefix}_{query_str}_{next_page}"))
     builder.row(*nav_row)
     return builder.as_markup()
-
 
 def get_check_character_keyboard(char_id: int) -> InlineKeyboardMarkup:
     """Generates the 'Who Has It' button for /check."""
