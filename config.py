@@ -48,4 +48,4 @@ RARITY_CONFIG = {
 }
 
 # Telegram Mini App URL (Frontend hosted link)
-MINI_APP_URL = os.getenv("MINI_APP_URL", "https://royalrahul456.github.io/AniVerse/")
+MINI_APP_URL = os.getenv("MINI_APP_URL", "https://royalrahul456.github.io/AniVerse/web/")
