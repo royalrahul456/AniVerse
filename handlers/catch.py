@@ -4,6 +4,7 @@ import asyncio
 import logging
 import traceback
 from aiogram import Router, F
+from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
@@ -19,14 +20,6 @@ logger = logging.getLogger(__name__)
 
 character_cache = {}
 active_games = {} # chat_id -> dict with game details
-
-# Helper to check commands manually so suffix matches like /togglenameguess@AniVerse1bot always work
-def is_command_match(text: str, command_names: list) -> bool:
-    if not text or not text.startswith("/"):
-        return False
-    first_word = text.split()[0].lower()
-    cmd = first_word.split("@")[0][1:]
-    return cmd in command_names
 
 async def get_cached_characters(db: AsyncSession):
     global character_cache
@@ -50,9 +43,20 @@ async def is_admin_or_owner(event, db: AsyncSession) -> bool:
         res = await db.execute(stmt)
         if res.scalar_one_or_none():
             return True
+            
+        # Get chat ID safely based on event type
+        chat_id = None
+        if isinstance(event, Message):
+            chat_id = event.chat.id
+        elif isinstance(event, CallbackQuery) and event.message:
+            chat_id = event.message.chat.id
+            
+        if not chat_id:
+            return False
+            
         # Telegram admin check
         try:
-            member = await event.bot.get_chat_member(event.chat.id, user_id)
+            member = await event.bot.get_chat_member(chat_id, user_id)
             if member.status in ("creator", "administrator"):
                 return True
         except Exception:
@@ -193,7 +197,7 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
 # COMMAND HANDLERS
 # ----------------------------------------------------
 
-@router.message(lambda msg: is_command_match(msg.text, ["nameguess", "guess"]))
+@router.message(Command("nameguess", "guess"))
 async def cmd_nameguess(message: Message, db: AsyncSession, bot):
     try:
         chat_id = message.chat.id
@@ -218,7 +222,7 @@ async def cmd_nameguess(message: Message, db: AsyncSession, bot):
         error_msg = f"❌ <b>Error in nameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(traceback.format_exc())}</code>"
         await message.reply(error_msg, parse_mode="HTML")
 
-@router.message(lambda msg: is_command_match(msg.text, ["togglenameguess"]))
+@router.message(Command("togglenameguess"))
 async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
     try:
         if message.chat.type not in ("group", "supergroup"):
@@ -324,15 +328,9 @@ async def cb_nameguess_stop(callback: CallbackQuery, db: AsyncSession):
 # ANSWER GUESS MONITOR & LEGACY SPAWNS
 # ----------------------------------------------------
 
-def is_not_command(message: Message) -> bool:
-    return message.text is not None and not message.text.startswith("/")
-
-@router.message(F.chat.type.in_({"group", "supergroup"}), is_not_command)
+@router.message(F.chat.type.in_({"group", "supergroup"}), F.text, ~F.text.startswith("/"))
 async def group_message_monitor(message: Message, db: AsyncSession, bot):
     try:
-        if not message.text:
-            return
-
         chat_id = message.chat.id
         
         # 1. Handle Active Nameguess game evaluation
@@ -396,14 +394,14 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
     return
 
 # Legacy commands kept intact for command list consistency
-@router.message(lambda msg: is_command_match(msg.text, ["catch", "snatch"]))
+@router.message(Command("catch", "snatch"))
 async def cmd_catch(message: Message, db: AsyncSession, bot):
     await message.reply("ℹ️ Catching wild characters is disabled. Please play `/nameguess` to guess characters and earn coins!", parse_mode="HTML")
 
-@router.message(lambda msg: is_command_match(msg.text, ["spawnsettings"]))
+@router.message(Command("spawnsettings"))
 async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
     await message.reply("ℹ️ Wild spawning is managed by the `/togglenameguess` command.", parse_mode="HTML")
 
-@router.message(lambda msg: is_command_match(msg.text, ["setspawn"]))
+@router.message(Command("setspawn"))
 async def cmd_setspawn(message: Message, db: AsyncSession, bot):
     await message.reply("ℹ️ Spawns are controlled via `/togglenameguess`.", parse_mode="HTML")
