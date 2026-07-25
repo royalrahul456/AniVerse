@@ -3,14 +3,13 @@ import time
 import asyncio
 import logging
 from aiogram import Router, F
-from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func
+from sqlalchemy import select
 import config
-from database.models import User, Character, UserCharacter, ActiveSpawn, GroupSettings, RarityType, BotAdmin
+from database.models import User, Character, UserCharacter, GroupSettings, RarityType, BotAdmin
 from utils.formatters import format_blockquote, get_rarity_emoji, escape_html
 from handlers.start import get_or_create_user
 
@@ -19,6 +18,14 @@ logger = logging.getLogger(__name__)
 
 character_cache = {}
 active_games = {} # chat_id -> dict with game details
+
+# Helper to check commands manually so suffix matches like /togglenameguess@AniVerse1bot always work
+def is_command_match(text: str, command_names: list) -> bool:
+    if not text or not text.startswith("/"):
+        return False
+    first_word = text.split()[0].lower()
+    cmd = first_word.split("@")[0][1:]
+    return cmd in command_names
 
 async def get_cached_characters(db: AsyncSession):
     global character_cache
@@ -58,6 +65,22 @@ def generate_vowel_hint(name: str) -> str:
         else:
             hint_chars.append(char)
     return " ".join(hint_chars)
+
+async def cleanup_game_messages(chat_id: int, bot_obj, game_state: dict):
+    # Delete main game card image message
+    msg_id = game_state.get("msg_id")
+    if msg_id:
+        try:
+            await bot_obj.delete_message(chat_id, msg_id)
+        except Exception as e:
+            logger.debug(f"Failed to delete game card message: {e}")
+
+    # Delete all hint messages
+    for hint_id in game_state.get("hint_msg_ids", []):
+        try:
+            await bot_obj.delete_message(chat_id, hint_id)
+        except Exception as e:
+            logger.debug(f"Failed to delete hint message: {e}")
 
 async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: bool = False, reward: int = 150):
     if is_auto:
@@ -122,7 +145,11 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
     async def game_timeout_timer(timeout_chat_id, char_name, bot_obj):
         await asyncio.sleep(60)
         if timeout_chat_id in active_games:
-            active_games.pop(timeout_chat_id, None)
+            game = active_games.pop(timeout_chat_id, None)
+            
+            # Clean up old game images/hints
+            await cleanup_game_messages(timeout_chat_id, bot_obj, game)
+
             timeout_text = (
                 "⏳ <b>Time is up!</b> No one guessed the character in time.\n"
                 f"💡 Correct Answer: <b>{escape_html(char_name)}</b>"
@@ -152,14 +179,15 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
         "hint_requested": False,
         "is_auto": is_auto,
         "timer_task": timer_task,
-        "msg_id": msg.message_id if msg else None
+        "msg_id": msg.message_id if msg else None,
+        "hint_msg_ids": []
     }
 
 # ----------------------------------------------------
 # COMMAND HANDLERS
 # ----------------------------------------------------
 
-@router.message(Command("nameguess", "guess"))
+@router.message(lambda msg: is_command_match(msg.text, ["nameguess", "guess"]))
 async def cmd_nameguess(message: Message, db: AsyncSession, bot):
     chat_id = message.chat.id
     
@@ -180,7 +208,7 @@ async def cmd_nameguess(message: Message, db: AsyncSession, bot):
 
     await start_nameguess_game(chat_id, db, bot, is_auto=False, reward=150)
 
-@router.message(Command("togglenameguess"))
+@router.message(lambda msg: is_command_match(msg.text, ["togglenameguess"]))
 async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
     if message.chat.type not in ("group", "supergroup"):
         await message.reply("⚠️ This command can only be used inside group chats.")
@@ -213,6 +241,8 @@ async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
             game = active_games.pop(chat_id)
             if game.get("timer_task"):
                 game["timer_task"].cancel()
+            # Cleanup messages
+            await cleanup_game_messages(chat_id, bot, game)
             await message.reply("🛑 Active auto game stopped because Auto Nameguess was toggled OFF.")
 
 # ----------------------------------------------------
@@ -241,7 +271,9 @@ async def cb_nameguess_hint(callback: CallbackQuery, db: AsyncSession):
         f"👉 <code>{escape_html(hint_text)}</code>\n\n"
         "<i>Hint can only be requested once per game</i>"
     )
-    await callback.message.reply(card, parse_mode="HTML")
+    hint_msg = await callback.message.reply(card, parse_mode="HTML")
+    # Store hint message ID for cleanup
+    game["hint_msg_ids"].append(hint_msg.message_id)
     await callback.answer("Hint revealed!")
 
 @router.callback_query(F.data.startswith("ng_stop:"))
@@ -259,6 +291,9 @@ async def cb_nameguess_stop(callback: CallbackQuery, db: AsyncSession):
     game = active_games.pop(chat_id)
     if game.get("timer_task"):
         game["timer_task"].cancel()
+
+    # Clean up old game images/hints
+    await cleanup_game_messages(chat_id, callback.bot, game)
 
     admin_name = callback.from_user.first_name
     stop_text = f"🛑 Nameguess game stopped by <b>{escape_html(admin_name)}</b>."
@@ -300,10 +335,13 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
                     break
 
         if is_correct:
-            # Win! Clear active game
+            # Win! Clear active game timer & messages
             if game.get("timer_task"):
                 game["timer_task"].cancel()
             active_games.pop(chat_id)
+
+            # Cleanup card & hints
+            await cleanup_game_messages(chat_id, bot, game)
 
             user_id = message.from_user.id
             username = message.from_user.username or ""
@@ -332,18 +370,18 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
                     await start_nameguess_game(chat_id, db, bot, is_auto=True)
             return
 
-    # 2. Legacy spawns are completely bypassed to let Nameguess run continuously without thresholds
+    # 2. Legacy spawns are completely bypassed to let Nameguess run continuously
     return
 
 # Legacy commands kept intact for command list consistency
-@router.message(Command("catch", "snatch"))
+@router.message(lambda msg: is_command_match(msg.text, ["catch", "snatch"]))
 async def cmd_catch(message: Message, db: AsyncSession, bot):
     await message.reply("ℹ️ Catching wild characters is disabled. Please play `/nameguess` to guess characters and earn coins!", parse_mode="HTML")
 
-@router.message(Command("spawnsettings"))
+@router.message(lambda msg: is_command_match(msg.text, ["spawnsettings"]))
 async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
     await message.reply("ℹ️ Wild spawning is managed by the `/togglenameguess` command.", parse_mode="HTML")
 
-@router.message(Command("setspawn"))
+@router.message(lambda msg: is_command_match(msg.text, ["setspawn"]))
 async def cmd_setspawn(message: Message, db: AsyncSession, bot):
     await message.reply("ℹ️ Spawns are controlled via `/togglenameguess`.", parse_mode="HTML")
