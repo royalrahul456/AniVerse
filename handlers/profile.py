@@ -621,12 +621,29 @@ async def cmd_check(message: Message, db: AsyncSession):
         res_all = await db.execute(stmt_all)
         all_chars = res_all.scalars().all()
 
-        variants = [c for c in all_chars if get_clean_name(c.name).lower() == base_name.lower()]
+        base_name_norm = base_name.lower().replace('&', 'and')
+        base_parts = [p.strip() for p in base_name_norm.split('and') if p.strip()]
+
+        variants = []
+        for c in all_chars:
+            c_clean = get_clean_name(c.name).lower().replace('&', 'and')
+            c_parts = [p.strip() for p in c_clean.split('and') if p.strip()]
+            
+            matched = False
+            if c_clean == base_name_norm or base_name_norm in c_clean:
+                matched = True
+            else:
+                for bp in base_parts:
+                    if bp in c_parts or any(bp in cp for cp in c_parts):
+                        matched = True
+                        break
+            if matched:
+                variants.append(c)
+
         if not variants:
             variants = matches
 
         variants.sort(key=lambda x: x.id)
-
         limit = 8
         total_variants = len(variants)
         total_pages = (total_variants + limit - 1) // limit
@@ -645,8 +662,8 @@ async def cmd_check(message: Message, db: AsyncSession):
         for v in page_variants:
             r_emoji = get_rarity_emoji(v.rarity)
             id_str = f"{v.id:02d}" if v.id < 100 else f"{v.id}"
-            text += f"├── {r_emoji} {v.rarity} | ID: {id_str}\n"
-
+            name_suffix = f" ({escape_html(v.name)})" if get_clean_name(v.name).lower() != base_name.lower() else ""
+            text += f"├── {r_emoji} {v.rarity}{name_suffix} | ID: {id_str}\n"
         builder = InlineKeyboardBuilder()
         buttons = []
         buttons.append(InlineKeyboardButton(text="⏹️", callback_data="noop"))
@@ -671,9 +688,25 @@ async def cb_cid_page(callback: CallbackQuery, db: AsyncSession):
     all_chars = res_all.scalars().all()
 
     from utils.formatters import get_clean_name
-    variants = [c for c in all_chars if get_clean_name(c.name).lower() == char_name.lower()]
-    variants.sort(key=lambda x: x.id)
+    char_name_norm = char_name.lower().replace('&', 'and')
+    base_parts = [p.strip() for p in char_name_norm.split('and') if p.strip()]
 
+    variants = []
+    for c in all_chars:
+        c_clean = get_clean_name(c.name).lower().replace('&', 'and')
+        c_parts = [p.strip() for p in c_clean.split('and') if p.strip()]
+        
+        matched = False
+        if c_clean == char_name_norm or char_name_norm in c_clean:
+            matched = True
+        else:
+            for bp in base_parts:
+                if bp in c_parts or any(bp in cp for cp in c_parts):
+                    matched = True
+                    break
+        if matched:
+            variants.append(c)
+    variants.sort(key=lambda x: x.id)
     if not variants:
         await callback.answer("❌ No variants found.", show_alert=True)
         return
@@ -703,8 +736,8 @@ async def cb_cid_page(callback: CallbackQuery, db: AsyncSession):
     for v in page_variants:
         r_emoji = get_rarity_emoji(v.rarity)
         id_str = f"{v.id:02d}" if v.id < 100 else f"{v.id}"
-        text += f"├── {r_emoji} {v.rarity} | ID: {id_str}\n"
-
+        name_suffix = f" ({escape_html(v.name)})" if get_clean_name(v.name).lower() != char_name.lower() else ""
+        text += f"├── {r_emoji} {v.rarity}{name_suffix} | ID: {id_str}\n"
     builder = InlineKeyboardBuilder()
     buttons = []
     
