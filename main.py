@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 import os
+import collections
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -14,11 +15,25 @@ import config
 from database.database import init_db, AsyncSessionLocal
 from database.models import Character, RarityType, UserDailyLimit, BotAdmin
 from handlers import start, profile, catch, shop, games, trade, admin, xo, inline_query, redeem, auction
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
         pass
+
+# ----------------------------------------------------
+# LOG BUFFER DIAGNOSTICS FOR RENDER
+# ----------------------------------------------------
+log_buffer = collections.deque(maxlen=150)
+
+class BufferLogHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            log_entry = self.format(record)
+            log_buffer.append(log_entry)
+        except Exception:
+            pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +41,10 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
+
+buf_handler = BufferLogHandler()
+buf_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logging.getLogger().addHandler(buf_handler)
 
 async def seed_characters():
     async with AsyncSessionLocal() as session:
@@ -141,7 +160,13 @@ async def start_health_server():
     app.router.add_get("/", health_check)
     app.router.add_get("/health", health_check)
     
-    # 2. REST API Endpoints for Telegram Mini App
+    # 2. Live Logs Diagnostic Route
+    async def view_logs(request):
+        log_text = "\n".join(log_buffer)
+        return web.Response(text=log_text, content_type="text/plain")
+    app.router.add_get("/logs", view_logs)
+    
+    # 3. REST API Endpoints for Telegram Mini App
     from handlers.api import get_user_profile_api, post_game_reward_api
     app.router.add_get("/api/profile/{user_id}", get_user_profile_api)
     app.router.add_post("/api/games/reward", post_game_reward_api)
