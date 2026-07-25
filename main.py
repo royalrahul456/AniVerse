@@ -59,146 +59,127 @@ class DbSessionMiddleware:
             return await handler(event, data)
 
 # In-memory cache for join status checks to avoid hitting Telegram API rate limits and causing lag
-# Format: user_id -> (timestamp, is_joined)
 _join_check_cache = {}
 
 class JoinCheckMiddleware:
     async def __call__(self, handler, event, data):
-        from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
-        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        from aiogram.types import Message, CallbackQuery
         import time
         
         user_id = None
         if isinstance(event, Message):
-            # Bypass join check for /start command to let users see welcome/start menu
             if event.text and event.text.strip().startswith("/start"):
                 return await handler(event, data)
             user_id = event.from_user.id if event.from_user else None
         elif isinstance(event, CallbackQuery):
-            # Bypass join check if the callback data belongs to home command back actions
             if event.data and event.data == "dm_home":
                 return await handler(event, data)
             user_id = event.from_user.id if event.from_user else None
 
         if user_id:
-            # Bypass checks for bot admin/owners
             if config.ADMIN_IDS and user_id in config.ADMIN_IDS:
                 return await handler(event, data)
 
             current_time = time.time()
             if user_id in _join_check_cache:
                 cached_time, cached_joined = _join_check_cache[user_id]
-                # If they are already joined, cache for 5 minutes (300s)
-                # If not joined, cache for 10 seconds to allow quick retry
                 expiry = 300 if cached_joined else 10
                 if current_time - cached_time < expiry:
                     if cached_joined:
                         return await handler(event, data)
                     else:
-                        # Deny access directly using cached status
                         return await self._send_denied_response(event)
 
-            bot = data["bot"]
-            is_joined = False
             try:
-                member = await bot.get_chat_member(chat_id="@AniVerseUnion", user_id=user_id)
-                if member.status in ["member", "administrator", "creator"]:
-                    is_joined = True
-            except Exception as e:
-                err_msg = str(e).lower()
-                if "user not found" in err_msg:
-                    is_joined = False
-                else:
-                    # Let pass if bot is not in group chat or public username is not setup yet
-                    is_joined = True
+                member = await event.bot.get_chat_member(config.OFFICIAL_CHANNEL_ID, user_id)
+                is_joined = member.status in ["member", "administrator", "creator"]
+                _join_check_cache[user_id] = (current_time, is_joined)
+                if is_joined:
+                    return await handler(event, data)
+            except Exception:
+                _join_check_cache[user_id] = (current_time, True)
+                return await handler(event, data)
 
-            # Save check status to cache
-            _join_check_cache[user_id] = (current_time, is_joined)
-
-            if not is_joined:
-                return await self._send_denied_response(event)
-
+            return await self._send_denied_response(event)
         return await handler(event, data)
 
     async def _send_denied_response(self, event):
         from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
         from aiogram.utils.keyboard import InlineKeyboardBuilder
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="💬 Join Official GC", url="https://t.me/AniVerseUnion"))
         
-        caption = (
-            "⚠️ <b>Access Denied!</b>\n\n"
-            "You must join our official group chat to use this bot:\n"
-            "👉 https://t.me/AniVerseUnion"
+        text = (
+            "🚨 <b>Access Denied!</b>\n\n"
+            "You must join our **Official Update Channel** to use this bot and play games!"
         )
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="📢 Join Updates Channel", url=config.OFFICIAL_CHANNEL_LINK))
         
-        if isinstance(event, Message):
+        if isinstance(event, CallbackQuery):
+            builder.row(InlineKeyboardButton(text="🔄 Try Again", callback_data="dm_home"))
             try:
-                await event.reply(caption, reply_markup=builder.as_markup(), parse_mode="HTML")
-            except Exception:
-                pass
-        elif isinstance(event, CallbackQuery):
-            try:
-                await event.message.reply(caption, reply_markup=builder.as_markup(), parse_mode="HTML")
+                await event.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
             except Exception:
                 pass
             try:
-                await event.answer("⚠️ You must join our official GC first!", show_alert=True)
+                await event.answer("⚠️ Please join the channel first!", show_alert=True)
             except Exception:
                 pass
-        return
+        else:
+            try:
+                await event.reply(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+            except Exception:
+                pass
+        return None
 
+# Combined Web App server running on Render's single dynamic port
 async def start_health_server():
-    """Lightweight HTTP server for Render health checks & Games Arena API."""
-    async def health(request):
-        return web.Response(text="AniVerse Bot is running! ✅")
-
     app = web.Application()
-    app.router.add_get("/", health)
-    app.router.add_get("/health", health)
-
-    # Games Arena API Setup
-    from handlers.api import get_user_profile_api, post_game_reward_api, options_handler
-    app.router.add_options("/api/profile/{user_id}", options_handler)
+    
+    # 1. Render Health Check Endpoint
+    async def health_check(request):
+        return web.Response(text="OK", status=200)
+    app.router.add_get("/", health_check)
+    app.router.add_get("/health", health_check)
+    
+    # 2. REST API Endpoints for Telegram Mini App
+    from handlers.api import get_user_profile_api, post_game_reward_api
     app.router.add_get("/api/profile/{user_id}", get_user_profile_api)
-    app.router.add_options("/api/games/reward", options_handler)
     app.router.add_post("/api/games/reward", post_game_reward_api)
-
+    
     runner = web.AppRunner(app)
     await runner.setup()
+    
+    # Bind to Render's single dynamic PORT (falls back to 8080 locally)
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Health check & API server running on port {port}")
+    logger.info(f"Consolidated API & Health Server running on port {port}...")
+
 async def main():
-    if not config.BOT_TOKEN or config.BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        logger.warning("BOT_TOKEN is not configured in environment variables or config.py!")
-
-    # Start health check server (required for Render free tier)
-    await start_health_server()
-
     await init_db()
     await seed_characters()
-
-    # Pre-populate custom rarity cache and seed defaults
+    
+    # Pre-populate custom rarities
+    from utils.formatters import RARITY_CACHE
     try:
-        from database.models import RarityType
-        from utils.formatters import RARITY_CACHE
         async with AsyncSessionLocal() as session:
-            for name, config_info in config.RARITY_CONFIG.items():
-                stmt = select(RarityType).where(RarityType.name.ilike(name))
-                res = await session.execute(stmt)
-                existing = res.scalar_one_or_none()
-                if not existing:
+            # Seed default rarities if none exist
+            rarity_check = await session.execute(select(RarityType))
+            if not rarity_check.scalars().all():
+                logger.info("Initializing default rarities in database...")
+                defaults = [
+                    ("Common", "⚪", 70, "Gray", True, True, 70),
+                    ("Rare", "🔵", 18, "Blue", True, True, 18),
+                    ("Epic", "🟣", 9, "Purple", True, True, 9),
+                    ("Legendary", "🟡", 3, "Gold", True, True, 3)
+                ]
+                for name, emoji, weight, color, spawn, claim, c_weight in defaults:
                     new_r = RarityType(
-                        name=name.title(),
-                        emoji=config_info.get("emoji", "⚪"),
-                        weight=config_info.get("weight", 10),
-                        color=config_info.get("color", "Gray"),
-                        spawn_enabled=True
+                        name=name, emoji=emoji, weight=weight, color=color,
+                        spawn_enabled=spawn, claim_enabled=claim, claim_weight=c_weight
                     )
                     session.add(new_r)
-            await session.commit()
+                await session.commit()
 
             res = await session.execute(select(RarityType))
             rarities = res.scalars().all()
@@ -232,10 +213,8 @@ async def main():
         BotCommand(command="dart", description="Play animated dart throw (daily 2x)"),
         BotCommand(command="trivia", description="Play anime quiz trivia"),
         BotCommand(command="scramble", description="Play word scramble puzzle"),
-        BotCommand(command="spawnchance", description="View wild character spawn chances"),
-        BotCommand(command="claimchance", description="View daily free character claim chances"),
-        BotCommand(command="editspawnchance", description="Edit spawn weights (Admin only)"),
-        BotCommand(command="editclaimchance", description="Edit daily claim weights (Admin only)"),
+        BotCommand(command="nameguess", description="Start a manual character guessing game"),
+        BotCommand(command="togglenameguess", description="Toggle continuous automatic guessing loop"),
         BotCommand(command="addtoclaim", description="Add a rarity to claim pool (Admin only)"),
         BotCommand(command="removefromclaim", description="Remove a rarity from claim pool (Admin only)"),
         BotCommand(command="pay", description="Pay coins to another trainer"),
@@ -255,12 +234,14 @@ async def main():
         logger.info("Bot commands registered successfully in Telegram menu.")
     except Exception as e:
         logger.error(f"Failed to register bot commands: {e}")
+
     db_middleware = DbSessionMiddleware()
     join_middleware = JoinCheckMiddleware()
     dp.message.middleware(db_middleware)
     dp.message.middleware(join_middleware)
     dp.callback_query.middleware(db_middleware)
     dp.callback_query.middleware(join_middleware)
+    
     dp.include_router(start.router)
     dp.include_router(admin.router)
     dp.include_router(profile.router)
@@ -272,6 +253,8 @@ async def main():
     dp.include_router(inline_query.router)
     dp.include_router(redeem.router)
     dp.include_router(auction.router)
+
+    # background tasks
     async def auction_background_loop():
         from handlers.auction import process_auctions_tick
         while True:
@@ -282,7 +265,8 @@ async def main():
             await asyncio.sleep(5)
     asyncio.create_task(auction_background_loop())
 
-
+    # Start consolidated Health & API Web Server
+    await start_health_server()
 
     logger.info("AniVerse Anime Collection Bot started successfully!")
     try:

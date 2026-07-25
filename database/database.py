@@ -31,6 +31,10 @@ async def init_db():
         except Exception:
             pass
         try:
+            await conn.execute(text("ALTER TABLE group_settings ADD COLUMN auto_nameguess_enabled BOOLEAN DEFAULT FALSE"))
+        except Exception:
+            pass
+        try:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_user_id ON user_characters (user_id)"))
         except Exception:
             pass

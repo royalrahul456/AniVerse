@@ -72,7 +72,7 @@ class GroupSettings(Base):
     spawn_threshold = Column(Integer, default=10)
     message_counter = Column(Integer, default=0)
     spawns_enabled = Column(Boolean, default=True)
-
+    auto_nameguess_enabled = Column(Boolean, default=False)
 class ActiveGame(Base):
     __tablename__ = "active_games"
 
