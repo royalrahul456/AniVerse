@@ -20,28 +20,41 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
-    # Safely alter tables to add new columns if they do not exist
+    # Safely alter tables to add new columns if they do not exist.
+    # Note: Each alteration must run in its own transaction block (engine.begin()) 
+    # to prevent PostgreSQL from aborting the entire block if one column already exists.
+    
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE rarity_types ADD COLUMN claim_enabled BOOLEAN DEFAULT FALSE"))
         except Exception:
             pass
+            
+    async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE rarity_types ADD COLUMN claim_weight INTEGER DEFAULT 10"))
         except Exception:
             pass
+            
+    async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE group_settings ADD COLUMN auto_nameguess_enabled BOOLEAN DEFAULT FALSE"))
         except Exception:
             pass
+            
+    async with engine.begin() as conn:
         try:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_user_id ON user_characters (user_id)"))
         except Exception:
             pass
+            
+    async with engine.begin() as conn:
         try:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_character_id ON user_characters (character_id)"))
         except Exception:
             pass
+            
+    async with engine.begin() as conn:
         try:
             if "sqlite" in str(engine.url):
                 await conn.execute(text("PRAGMA journal_mode=WAL;"))

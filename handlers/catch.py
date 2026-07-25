@@ -219,7 +219,10 @@ async def cmd_nameguess(message: Message, db: AsyncSession, bot):
 
         await start_nameguess_game(chat_id, db, bot, is_auto=False, reward=150)
     except Exception as e:
-        error_msg = f"❌ <b>Error in nameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(traceback.format_exc())}</code>"
+        tb = traceback.format_exc()
+        if len(tb) > 3000:
+            tb = tb[:3000] + "\n...(truncated)..."
+        error_msg = f"❌ <b>Error in nameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(tb)}</code>"
         await message.reply(error_msg, parse_mode="HTML")
 
 @router.message(Command("togglenameguess"))
@@ -260,9 +263,11 @@ async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
                 await cleanup_game_messages(chat_id, bot, game)
                 await message.reply("🛑 Active auto game stopped because Auto Nameguess was toggled OFF.")
     except Exception as e:
-        error_msg = f"❌ <b>Error in togglenameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(traceback.format_exc())}</code>"
+        tb = traceback.format_exc()
+        if len(tb) > 3000:
+            tb = tb[:3000] + "\n...(truncated)..."
+        error_msg = f"❌ <b>Error in togglenameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(tb)}</code>"
         await message.reply(error_msg, parse_mode="HTML")
-
 # ----------------------------------------------------
 # CALLBACK HANDLERS
 # ----------------------------------------------------
