@@ -154,16 +154,18 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
     actual_name_clean = get_clean_name(character.name).lower()
 
     is_correct = False
-    if '&' in actual_name_clean:
+    actual_normalized = actual_name_clean.replace('&', 'and')
+    guess_normalized = guess_clean.replace('&', 'and')
+
+    if guess_normalized == actual_normalized or (guess_normalized and guess_normalized in actual_normalized):
+        is_correct = True
+    elif '&' in actual_name_clean:
         name_parts = [p.strip() for p in actual_name_clean.split('&') if p.strip()]
         for part in name_parts:
-            if guess_clean == part or (len(guess_clean) >= 3 and guess_clean in part):
+            part_normalized = part.replace('&', 'and')
+            if guess_normalized == part_normalized or (len(guess_normalized) >= 3 and guess_normalized in part_normalized):
                 is_correct = True
                 break
-    else:
-        if guess_clean == actual_name_clean or (guess_clean and guess_clean in actual_name_clean):
-            is_correct = True
-
     if not guess_clean or not is_correct:
         await message.reply("❌ That is not the correct character name! Try again.")
         return
