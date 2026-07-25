@@ -2,6 +2,7 @@ import random
 import time
 import asyncio
 import logging
+import traceback
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -37,22 +38,27 @@ async def get_cached_characters(db: AsyncSession):
     return list(character_cache.values())
 
 async def is_admin_or_owner(event, db: AsyncSession) -> bool:
-    user_id = event.from_user.id
-    # Owner check
-    if config.ADMIN_IDS and user_id in config.ADMIN_IDS:
-        return True
-    # DB Admin check
-    stmt = select(BotAdmin).where(BotAdmin.user_id == user_id)
-    res = await db.execute(stmt)
-    if res.scalar_one_or_none():
-        return True
-    # Telegram admin check
     try:
-        member = await event.bot.get_chat_member(event.chat.id, user_id)
-        if member.status in ("creator", "administrator"):
+        user_id = event.from_user.id if event.from_user else None
+        if not user_id:
+            return False
+        # Owner check
+        if config.ADMIN_IDS and user_id in config.ADMIN_IDS:
             return True
-    except Exception:
-        pass
+        # DB Admin check
+        stmt = select(BotAdmin).where(BotAdmin.user_id == user_id)
+        res = await db.execute(stmt)
+        if res.scalar_one_or_none():
+            return True
+        # Telegram admin check
+        try:
+            member = await event.bot.get_chat_member(event.chat.id, user_id)
+            if member.status in ("creator", "administrator"):
+                return True
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error(f"Error checking admin status: {e}")
     return False
 
 def generate_vowel_hint(name: str) -> str:
@@ -139,7 +145,7 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
             msg = await bot.send_message(chat_id, caption, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
         logger.error(f"Failed to spawn nameguess character: {e}")
-        return
+        raise e
 
     # Timeout timer task
     async def game_timeout_timer(timeout_chat_id, char_name, bot_obj):
@@ -189,61 +195,69 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
 
 @router.message(lambda msg: is_command_match(msg.text, ["nameguess", "guess"]))
 async def cmd_nameguess(message: Message, db: AsyncSession, bot):
-    chat_id = message.chat.id
-    
-    # Restrict to official group
-    is_official = False
-    if chat_id == config.OFFICIAL_CHAT_ID:
-        is_official = True
-    elif message.chat.username and message.chat.username.lower() == "pokeempireunion":
-        is_official = True
+    try:
+        chat_id = message.chat.id
+        
+        # Restrict to official group
+        is_official = False
+        if chat_id == config.OFFICIAL_CHAT_ID:
+            is_official = True
+        elif message.chat.username and message.chat.username.lower() == "pokeempireunion":
+            is_official = True
 
-    if not is_official:
-        await message.reply("❌ The Nameguess game is restricted to the <b>Official Group Chat</b> only!", parse_mode="HTML")
-        return
+        if not is_official:
+            await message.reply("❌ The Nameguess game is restricted to the <b>Official Group Chat</b> only!", parse_mode="HTML")
+            return
 
-    if chat_id in active_games:
-        await message.reply("⚠️ There is already an active Nameguess game in this chat! Solve that one first.")
-        return
+        if chat_id in active_games:
+            await message.reply("⚠️ There is already an active Nameguess game in this chat! Solve that one first.")
+            return
 
-    await start_nameguess_game(chat_id, db, bot, is_auto=False, reward=150)
+        await start_nameguess_game(chat_id, db, bot, is_auto=False, reward=150)
+    except Exception as e:
+        error_msg = f"❌ <b>Error in nameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(traceback.format_exc())}</code>"
+        await message.reply(error_msg, parse_mode="HTML")
 
 @router.message(lambda msg: is_command_match(msg.text, ["togglenameguess"]))
 async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
-    if message.chat.type not in ("group", "supergroup"):
-        await message.reply("⚠️ This command can only be used inside group chats.")
-        return
+    try:
+        if message.chat.type not in ("group", "supergroup"):
+            await message.reply("⚠️ This command can only be used inside group chats.")
+            return
 
-    if not await is_admin_or_owner(message, db):
-        await message.reply("❌ Only group administrators or bot owners can toggle this setting.")
-        return
+        if not await is_admin_or_owner(message, db):
+            await message.reply("❌ Only group administrators or bot owners can toggle this setting.")
+            return
 
-    chat_id = message.chat.id
-    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-    res = await db.execute(stmt)
-    settings = res.scalar_one_or_none()
+        chat_id = message.chat.id
+        stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
+        res = await db.execute(stmt)
+        settings = res.scalar_one_or_none()
 
-    if not settings:
-        settings = GroupSettings(chat_id=chat_id, spawns_enabled=True, auto_nameguess_enabled=False)
-        db.add(settings)
+        if not settings:
+            settings = GroupSettings(chat_id=chat_id, spawns_enabled=True, auto_nameguess_enabled=False)
+            db.add(settings)
 
-    settings.auto_nameguess_enabled = not settings.auto_nameguess_enabled
-    await db.commit()
+        settings.auto_nameguess_enabled = not settings.auto_nameguess_enabled
+        await db.commit()
 
-    status = "ENABLED 🟢" if settings.auto_nameguess_enabled else "DISABLED 🔴"
-    await message.reply(f"ℹ️ <b>Auto Nameguess</b> is now <b>{status}</b> in this group chat.", parse_mode="HTML")
+        status = "ENABLED 🟢" if settings.auto_nameguess_enabled else "DISABLED 🔴"
+        await message.reply(f"ℹ️ <b>Auto Nameguess</b> is now <b>{status}</b> in this group chat.", parse_mode="HTML")
 
-    if settings.auto_nameguess_enabled:
-        if chat_id not in active_games:
-            await start_nameguess_game(chat_id, db, bot, is_auto=True)
-    else:
-        if chat_id in active_games:
-            game = active_games.pop(chat_id)
-            if game.get("timer_task"):
-                game["timer_task"].cancel()
-            # Cleanup messages
-            await cleanup_game_messages(chat_id, bot, game)
-            await message.reply("🛑 Active auto game stopped because Auto Nameguess was toggled OFF.")
+        if settings.auto_nameguess_enabled:
+            if chat_id not in active_games:
+                await start_nameguess_game(chat_id, db, bot, is_auto=True)
+        else:
+            if chat_id in active_games:
+                game = active_games.pop(chat_id)
+                if game.get("timer_task"):
+                    game["timer_task"].cancel()
+                # Cleanup messages
+                await cleanup_game_messages(chat_id, bot, game)
+                await message.reply("🛑 Active auto game stopped because Auto Nameguess was toggled OFF.")
+    except Exception as e:
+        error_msg = f"❌ <b>Error in togglenameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(traceback.format_exc())}</code>"
+        await message.reply(error_msg, parse_mode="HTML")
 
 # ----------------------------------------------------
 # CALLBACK HANDLERS
@@ -251,54 +265,60 @@ async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
 
 @router.callback_query(F.data.startswith("ng_hint:"))
 async def cb_nameguess_hint(callback: CallbackQuery, db: AsyncSession):
-    chat_id = int(callback.data.split(":")[1])
+    try:
+        chat_id = int(callback.data.split(":")[1])
 
-    if chat_id not in active_games:
-        await callback.answer("❌ There is no active game running here.", show_alert=True)
-        return
+        if chat_id not in active_games:
+            await callback.answer("❌ There is no active game running here.", show_alert=True)
+            return
 
-    game = active_games[chat_id]
-    if game.get("hint_requested"):
-        await callback.answer("⚠️ Hint has already been requested once for this game!", show_alert=True)
-        return
+        game = active_games[chat_id]
+        if game.get("hint_requested"):
+            await callback.answer("⚠️ Hint has already been requested once for this game!", show_alert=True)
+            return
 
-    game["hint_requested"] = True
-    hint_text = generate_vowel_hint(game["character_name"])
+        game["hint_requested"] = True
+        hint_text = generate_vowel_hint(game["character_name"])
 
-    card = (
-        "💡 <b>Nameguess Hint</b>\n"
-        "───────────────\n"
-        f"👉 <code>{escape_html(hint_text)}</code>\n\n"
-        "<i>Hint can only be requested once per game</i>"
-    )
-    hint_msg = await callback.message.reply(card, parse_mode="HTML")
-    # Store hint message ID for cleanup
-    game["hint_msg_ids"].append(hint_msg.message_id)
-    await callback.answer("Hint revealed!")
+        card = (
+            "💡 <b>Nameguess Hint</b>\n"
+            "───────────────\n"
+            f"👉 <code>{escape_html(hint_text)}</code>\n\n"
+            "<i>Hint can only be requested once per game</i>"
+        )
+        hint_msg = await callback.message.reply(card, parse_mode="HTML")
+        # Store hint message ID for cleanup
+        game["hint_msg_ids"].append(hint_msg.message_id)
+        await callback.answer("Hint revealed!")
+    except Exception as e:
+        logger.error(f"Error in hint callback: {e}")
 
 @router.callback_query(F.data.startswith("ng_stop:"))
 async def cb_nameguess_stop(callback: CallbackQuery, db: AsyncSession):
-    chat_id = int(callback.data.split(":")[1])
+    try:
+        chat_id = int(callback.data.split(":")[1])
 
-    if chat_id not in active_games:
-        await callback.answer("❌ There is no active game running here.", show_alert=True)
-        return
+        if chat_id not in active_games:
+            await callback.answer("❌ There is no active game running here.", show_alert=True)
+            return
 
-    if not await is_admin_or_owner(callback, db):
-        await callback.answer("❌ Only group admins or bot owners can stop the game.", show_alert=True)
-        return
+        if not await is_admin_or_owner(callback, db):
+            await callback.answer("❌ Only group admins or bot owners can stop the game.", show_alert=True)
+            return
 
-    game = active_games.pop(chat_id)
-    if game.get("timer_task"):
-        game["timer_task"].cancel()
+        game = active_games.pop(chat_id)
+        if game.get("timer_task"):
+            game["timer_task"].cancel()
 
-    # Clean up old game images/hints
-    await cleanup_game_messages(chat_id, callback.bot, game)
+        # Clean up old game images/hints
+        await cleanup_game_messages(chat_id, callback.bot, game)
 
-    admin_name = callback.from_user.first_name
-    stop_text = f"🛑 Nameguess game stopped by <b>{escape_html(admin_name)}</b>."
-    await callback.message.reply(stop_text, parse_mode="HTML")
-    await callback.answer("Game stopped!")
+        admin_name = callback.from_user.first_name
+        stop_text = f"🛑 Nameguess game stopped by <b>{escape_html(admin_name)}</b>."
+        await callback.message.reply(stop_text, parse_mode="HTML")
+        await callback.answer("Game stopped!")
+    except Exception as e:
+        logger.error(f"Error in stop callback: {e}")
 
 # ----------------------------------------------------
 # ANSWER GUESS MONITOR & LEGACY SPAWNS
@@ -309,68 +329,70 @@ def is_not_command(message: Message) -> bool:
 
 @router.message(F.chat.type.in_({"group", "supergroup"}), is_not_command)
 async def group_message_monitor(message: Message, db: AsyncSession, bot):
-    if not message.text:
-        return
-
-    chat_id = message.chat.id
-    
-    # 1. Handle Active Nameguess game evaluation
-    if chat_id in active_games:
-        game = active_games[chat_id]
-        guess = message.text.strip()
-
-        from utils.formatters import get_clean_name
-        guess_clean = get_clean_name(guess).lower().replace('&', 'and')
-        correct_clean = get_clean_name(game["character_name"]).lower().replace('&', 'and')
-
-        is_correct = False
-        if guess_clean == correct_clean:
-            is_correct = True
-        else:
-            correct_parts = [p.strip() for p in correct_clean.split('and') if p.strip()]
-            guess_parts = [p.strip() for p in guess_clean.split('and') if p.strip()]
-            for gp in guess_parts:
-                if gp in correct_parts or any(gp in cp for cp in correct_parts):
-                    is_correct = True
-                    break
-
-        if is_correct:
-            # Win! Clear active game timer & messages
-            if game.get("timer_task"):
-                game["timer_task"].cancel()
-            active_games.pop(chat_id)
-
-            # Cleanup card & hints
-            await cleanup_game_messages(chat_id, bot, game)
-
-            user_id = message.from_user.id
-            username = message.from_user.username or ""
-            first_name = message.from_user.first_name or "Trainer"
-
-            user = await get_or_create_user(db, user_id, username, first_name)
-            reward = game["reward"]
-            user.coins += reward
-            await db.commit()
-
-            trainer_name = escape_html(first_name)
-            ans_text = (
-                f"🎉 <b>Correct! {trainer_name} guessed it!</b>\n"
-                f"💡 Answer: <b>{escape_html(game['character_name'])}</b>\n"
-                f"💰 <b>+{reward}</b> coins added!"
-            )
-            await message.reply(ans_text, parse_mode="HTML")
-
-            # Check if auto loop needs to continue
-            if game.get("is_auto"):
-                await asyncio.sleep(2)
-                stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-                res = await db.execute(stmt)
-                settings = res.scalar_one_or_none()
-                if settings and settings.auto_nameguess_enabled:
-                    await start_nameguess_game(chat_id, db, bot, is_auto=True)
+    try:
+        if not message.text:
             return
 
-    # 2. Legacy spawns are completely bypassed to let Nameguess run continuously
+        chat_id = message.chat.id
+        
+        # 1. Handle Active Nameguess game evaluation
+        if chat_id in active_games:
+            game = active_games[chat_id]
+            guess = message.text.strip()
+
+            from utils.formatters import get_clean_name
+            guess_clean = get_clean_name(guess).lower().replace('&', 'and')
+            correct_clean = get_clean_name(game["character_name"]).lower().replace('&', 'and')
+
+            is_correct = False
+            if guess_clean == correct_clean:
+                is_correct = True
+            else:
+                correct_parts = [p.strip() for p in correct_clean.split('and') if p.strip()]
+                guess_parts = [p.strip() for p in guess_clean.split('and') if p.strip()]
+                for gp in guess_parts:
+                    if gp in correct_parts or any(gp in cp for cp in correct_parts):
+                        is_correct = True
+                        break
+
+            if is_correct:
+                # Win! Clear active game timer & messages
+                if game.get("timer_task"):
+                    game["timer_task"].cancel()
+                active_games.pop(chat_id)
+
+                # Cleanup card & hints
+                await cleanup_game_messages(chat_id, bot, game)
+
+                user_id = message.from_user.id
+                username = message.from_user.username or ""
+                first_name = message.from_user.first_name or "Trainer"
+
+                user = await get_or_create_user(db, user_id, username, first_name)
+                reward = game["reward"]
+                user.coins += reward
+                await db.commit()
+
+                trainer_name = escape_html(first_name)
+                ans_text = (
+                    f"🎉 <b>Correct! {trainer_name} guessed it!</b>\n"
+                    f"💡 Answer: <b>{escape_html(game['character_name'])}</b>\n"
+                    f"💰 <b>+{reward}</b> coins added!"
+                )
+                await message.reply(ans_text, parse_mode="HTML")
+
+                # Check if auto loop needs to continue
+                if game.get("is_auto"):
+                    await asyncio.sleep(2)
+                    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
+                    res = await db.execute(stmt)
+                    settings = res.scalar_one_or_none()
+                    if settings and settings.auto_nameguess_enabled:
+                        await start_nameguess_game(chat_id, db, bot, is_auto=True)
+                return
+    except Exception as e:
+        logger.error(f"Error in guess monitor: {e}")
+
     return
 
 # Legacy commands kept intact for command list consistency
