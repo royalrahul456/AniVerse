@@ -134,16 +134,21 @@ def get_back_to_hub_keyboard() -> InlineKeyboardMarkup:
     builder.row(InlineKeyboardButton(text="🔙 Back to Hub Menu", callback_data="dm_home"))
     return builder.as_markup()
 
-def get_profile_keyboard() -> InlineKeyboardMarkup:
+def get_profile_keyboard(is_group: bool = False, bot_username: str = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="🎨 Themes", callback_data="cb_themes_menu"),
         InlineKeyboardButton(text="🎒 Harem", callback_data="dm_bag_All_1")
     )
-    builder.row(        InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))
-    )
+    if not is_group:
+        builder.row(
+            InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))
+        )
+    elif bot_username:
+        builder.row(
+            InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", url=f"https://t.me/{bot_username}")
+        )
     return builder.as_markup()
-
 def get_leaderboard_keyboard(current_category: str) -> InlineKeyboardMarkup:
     import config
     builder = InlineKeyboardBuilder()

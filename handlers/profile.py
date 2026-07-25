@@ -325,18 +325,20 @@ async def cmd_profile(message: Message, db: AsyncSession):
     user = await get_or_create_user(db, message.from_user.id, message.from_user.username, message.from_user.first_name)
     text = await build_profile_card(user, db)
     cover_photo = await get_user_harem_cover(user, db)
-    kb = get_profile_keyboard()
+    is_group = message.chat.type != "private"
+    bot_user = await message.bot.get_me()
+    kb = get_profile_keyboard(is_group=is_group, bot_username=bot_user.username)
     await send_or_edit_harem(message, cover_photo, text, kb, is_callback=False)
-
 @router.callback_query(F.data == "dm_profile")
 async def cb_profile(callback: CallbackQuery, db: AsyncSession):
     user = await get_or_create_user(db, callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     text = await build_profile_card(user, db)
     cover_photo = await get_user_harem_cover(user, db)
-    kb = get_profile_keyboard()
+    is_group = callback.message.chat.type != "private"
+    bot_user = await callback.bot.get_me()
+    kb = get_profile_keyboard(is_group=is_group, bot_username=bot_user.username)
     await send_or_edit_harem(callback.message, cover_photo, text, kb, is_callback=True)
-    try:
-        await callback.answer()
+    try:        await callback.answer()
     except Exception:
         pass
 
