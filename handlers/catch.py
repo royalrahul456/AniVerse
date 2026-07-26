@@ -344,19 +344,26 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
             guess = message.text.strip()
 
             from utils.formatters import get_clean_name
-            guess_clean = get_clean_name(guess).lower().replace('&', 'and')
-            correct_clean = get_clean_name(game["character_name"]).lower().replace('&', 'and')
+            # Normalize and split character name into words
+            correct_clean = get_clean_name(game["character_name"]).lower()
+            correct_words = [w.strip(".,()[]&") for w in correct_clean.split()]
+            stop_words = {"and", "the", "of", "a", "d", "d.", "v2", "&"}
+            correct_words_filtered = [w for w in correct_words if w and w not in stop_words]
+
+            # Normalize and split guess into words
+            guess_clean = get_clean_name(guess).lower()
+            guess_words = [w.strip(".,()[]&") for w in guess_clean.split()]
 
             is_correct = False
-            if guess_clean == correct_clean:
+            # Check if any word in the player's guess matches any of the character's major name words
+            for gw in guess_words:
+                if gw in correct_words_filtered:
+                    is_correct = True
+                    break
+            
+            # Fallback to exact comparison if filter removed all words
+            if not is_correct and guess_clean == correct_clean:
                 is_correct = True
-            else:
-                correct_parts = [p.strip() for p in correct_clean.split('and') if p.strip()]
-                guess_parts = [p.strip() for p in guess_clean.split('and') if p.strip()]
-                for gp in guess_parts:
-                    if gp in correct_parts or any(gp in cp for cp in correct_parts):
-                        is_correct = True
-                        break
 
             if is_correct:
                 # Win! Clear active game timer & messages

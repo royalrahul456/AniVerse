@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 import config
 from database.database import init_db, AsyncSessionLocal
-from database.models import Character, RarityType, UserDailyLimit, BotAdmin
+from database.models import Character, RarityType, UserDailyLimit, BotAdmin, GroupSettings
 from handlers import start, profile, catch, shop, games, trade, admin, xo, inline_query, redeem, auction
 
 if sys.platform == "win32":
@@ -182,6 +182,20 @@ async def start_health_server():
 
 async def main():
     await init_db()
+    
+    # Complete cleanup of the Video rarity
+    try:
+        from sqlalchemy import text
+        async with AsyncSessionLocal() as session:
+            # 1. Delete all characters that belong to the 'Video' rarity
+            await session.execute(text("DELETE FROM characters WHERE rarity = 'Video'"))
+            # 2. Delete the Video rarity from rarity types table
+            await session.execute(text("DELETE FROM rarity_types WHERE name = 'Video'"))
+            await session.commit()
+        logger.info("Successfully cleaned up Video rarity from database.")
+    except Exception as e:
+        logger.error(f"Failed to perform Video rarity database cleanup: {e}")
+
     await seed_characters()
     
     # Pre-populate custom rarities
@@ -292,6 +306,32 @@ async def main():
 
     # Start consolidated Health & API Web Server
     await start_health_server()
+
+    # Resume active auto-nameguess loops in the background on startup
+    async def resume_auto_nameguess_loops():
+        from database.models import GroupSettings
+        from handlers.catch import start_nameguess_game, active_games
+        
+        await asyncio.sleep(5) # Wait for bot polling to initialize
+        logger.info("Checking for active auto nameguess loops to resume...")
+        try:
+            async with AsyncSessionLocal() as session:
+                stmt = select(GroupSettings).where(GroupSettings.auto_nameguess_enabled == True)
+                res = await session.execute(stmt)
+                settings_list = res.scalars().all()
+                for setting in settings_list:
+                    chat_id = setting.chat_id
+                    if chat_id not in active_games:
+                        logger.info(f"Resuming Auto Nameguess loop for chat {chat_id}...")
+                        try:
+                            # Start loop with is_auto=True
+                            await start_nameguess_game(chat_id, session, bot, is_auto=True)
+                        except Exception as ex:
+                            logger.error(f"Error resuming auto nameguess for chat {chat_id}: {ex}")
+        except Exception as ex:
+            logger.error(f"Error in resume_auto_nameguess_loops startup task: {ex}")
+
+    asyncio.create_task(resume_auto_nameguess_loops())
 
     logger.info("AniVerse Anime Collection Bot started successfully!")
     try:
