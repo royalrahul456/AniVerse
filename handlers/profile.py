@@ -32,6 +32,20 @@ router = Router()
 PAGE_SIZE = 12
 DEFAULT_CHAR_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 
+def get_harem_owner_id(message) -> int:
+    """Extract owner's Telegram ID from the tg://user?id= link entity in the caption."""
+    if not message:
+        return None
+    entities = message.caption_entities if message.caption_entities else message.entities
+    if entities:
+        for ent in entities:
+            if ent.type == "text_link" and ent.url and ent.url.startswith("tg://user?id="):
+                try:
+                    return int(ent.url.split("id=")[1])
+                except Exception:
+                    pass
+    return None
+
 async def get_all_rarity_items(db: AsyncSession):
     items = [("All", "🌐 View All")]
     seen = set()
@@ -348,6 +362,16 @@ async def cmd_harem(message: Message, db: AsyncSession):
 
 @router.callback_query(F.data.startswith("dm_bag_"))
 async def cb_bag(callback: CallbackQuery, db: AsyncSession):
+    # Ownership check — only the harem owner can interact
+    owner_id = get_harem_owner_id(callback.message)
+    if owner_id and callback.from_user.id != owner_id:
+        try:
+            await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
+        except Exception:
+            pass
+        return
+    owner_id = owner_id or callback.from_user.id
+
     parts = callback.data.split("_")
     
     # 1. Check if it's the Sort Menu request
@@ -409,7 +433,7 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
         page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
         sort_by = "anime"
 
-    await render_bag_page(callback.from_user.id, rarity, page, sort_by, callback.message, db, is_callback=True)
+    await render_bag_page(owner_id, rarity, page, sort_by, callback.message, db, is_callback=True)
     try:
         await callback.answer()
     except Exception:
@@ -515,6 +539,15 @@ async def cb_harem_showcase(callback: CallbackQuery, db: AsyncSession):
     mode = parts[1]
     user_id = int(parts[2])
     page = int(parts[3]) if len(parts) > 3 else 1
+
+    # Ownership check — user_id is embedded directly in the callback data
+    if callback.from_user.id != user_id:
+        try:
+            await callback.answer("⚠️ This is not your showcase! Use /harem to view yours.", show_alert=True)
+        except Exception:
+            pass
+        return
+
     await render_harem_showcase(user_id, mode, page, callback.message, db, is_callback=True)
     try:
         await callback.answer()
