@@ -1,3 +1,4 @@
+import logging
 from aiogram import Router, F
 from aiogram.types import (
     InlineQuery, 
@@ -14,6 +15,7 @@ from database.database import AsyncSessionLocal
 from database.models import User, UserCharacter, Character
 from utils.formatters import get_rarity_emoji, escape_html
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 DEFAULT_THUMB = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
@@ -272,10 +274,11 @@ async def handle_inline_query(inline_query: InlineQuery):
                                     )
                                 )
                             )
-
     # Set next_offset if there are potentially more results
     next_offset = str(offset + limit) if len(results) == limit else ""
     try:
         await inline_query.answer(results, cache_time=5, is_personal=True, next_offset=next_offset)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Error answering inline query: {e}", exc_info=True)
+
+
