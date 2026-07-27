@@ -30,6 +30,62 @@ def clean_html_entities(val: str) -> str:
         val = html.unescape(val)
     return val
 
+def build_inline_item(item_id: str, img_val: str, title: str, clean_anime: str, caption: str, rarity: str, filter_mode: str):
+    """Safely builds appropriate InlineQueryResult based on image URL / Telegram file ID type."""
+    if img_val.startswith("http"):
+        return InlineQueryResultPhoto(
+            id=item_id,
+            photo_url=img_val,
+            thumbnail_url=img_val,
+            title=title,
+            description=clean_anime,
+            caption=caption,
+            parse_mode="HTML"
+        )
+    
+    # Telegram file ID logic
+    is_video = (
+        img_val.startswith(("BAAC", "BAAD", "CgAC", "CGAC")) or 
+        filter_mode == "AMV" or 
+        rarity.lower() == "amv"
+    )
+    
+    if is_video:
+        try:
+            return InlineQueryResultCachedVideo(
+                id=item_id,
+                video_file_id=img_val,
+                title=title,
+                description=clean_anime,
+                caption=caption,
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+    try:
+        return InlineQueryResultCachedPhoto(
+            id=item_id,
+            photo_file_id=img_val,
+            title=title,
+            description=clean_anime,
+            caption=caption,
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+    return InlineQueryResultArticle(
+        id=item_id,
+        title=title,
+        description=clean_anime,
+        thumbnail_url=DEFAULT_THUMB,
+        input_message_content=InputTextMessageContent(
+            message_text=caption,
+            parse_mode="HTML"
+        )
+    )
+
 @router.inline_query()
 async def handle_inline_query(inline_query: InlineQuery):
     query = inline_query.query.strip()
@@ -49,13 +105,12 @@ async def handle_inline_query(inline_query: InlineQuery):
             user_id = int(user_id_str)
         filter_mode = parts[2].upper() if len(parts) > 2 else "ALL"
     else:
-        # Show bot's global database collection, not user's personal collection
         is_collection = False
         search_query = query
 
-    # Pagination
+    # Pagination settings (limit = 25 per page for fast & smooth Telegram scroll)
     offset = int(inline_query.offset) if inline_query.offset and inline_query.offset.isdigit() else 0
-    limit = 50
+    limit = 25
 
     async with AsyncSessionLocal() as db:
         if is_collection:
@@ -80,16 +135,20 @@ async def handle_inline_query(inline_query: InlineQuery):
             res = await db.execute(stmt)
             rows = res.all()
 
-            if filter_mode == "AMV" and not rows and offset == 0:
-                fallback_stmt = (
-                    select(Character, func.count(UserCharacter.id).label("cnt"))
-                    .join(UserCharacter, UserCharacter.character_id == Character.id)
-                    .where(UserCharacter.user_id == user_id)
-                    .group_by(Character.id)
-                    .order_by(Character.id)
-                    .limit(limit)
+            if not rows and offset == 0:
+                msg_text = "No AMV characters found in collection!" if filter_mode == "AMV" else "Collection is empty!"
+                results.append(
+                    InlineQueryResultArticle(
+                        id="empty_collection",
+                        title=msg_text,
+                        description=f"{owner_name}'s collection",
+                        thumbnail_url=DEFAULT_THUMB,
+                        input_message_content=InputTextMessageContent(
+                            message_text=f"🎒 <b>{owner_mention}'s Collection</b>\n\n{msg_text}",
+                            parse_mode="HTML"
+                        )
+                    )
                 )
-                rows = (await db.execute(fallback_stmt)).all()
 
             for idx, (char, cnt) in enumerate(rows):
                 r_emoji = get_rarity_emoji(char.rarity)
@@ -107,91 +166,45 @@ async def handle_inline_query(inline_query: InlineQuery):
                 clean_anime = clean_html_entities(char.anime)
                 clean_rarity = clean_html_entities(char.rarity)
 
-                if filter_mode == "AMV":
-                    title = f"AMV — {clean_name}"
-                else:
-                    title = f"{clean_rarity} — {clean_name}"
-
+                title = f"AMV — {clean_name}" if filter_mode == "AMV" else f"{clean_rarity} — {clean_name}"
                 item_id = f"item_{char.id}_{offset}_{idx}"
 
-                if img_val.startswith("http"):
-                    results.append(
-                        InlineQueryResultPhoto(
-                            id=item_id,
-                            photo_url=img_val,
-                            thumbnail_url=img_val,
-                            title=title,
-                            description=clean_anime,
-                            caption=caption,
-                            parse_mode="HTML"
-                        )
-                    )
-                else:
-                    if filter_mode == "AMV" or char.rarity.lower() == "amv":
-                        try:
-                            results.append(
-                                InlineQueryResultCachedVideo(
-                                    id=item_id,
-                                    video_file_id=img_val,
-                                    title=title,
-                                    description=clean_anime,
-                                    caption=caption,
-                                    parse_mode="HTML"
-                                )
-                            )
-                        except Exception:
-                            results.append(
-                                InlineQueryResultArticle(
-                                    id=item_id,
-                                    title=title,
-                                    description=clean_anime,
-                                    thumbnail_url=DEFAULT_THUMB,
-                                    input_message_content=InputTextMessageContent(
-                                        message_text=caption,
-                                        parse_mode="HTML"
-                                    )
-                                )
-                            )
-                    else:
-                        try:
-                            results.append(
-                                InlineQueryResultCachedPhoto(
-                                    id=item_id,
-                                    photo_file_id=img_val,
-                                    title=title,
-                                    description=clean_anime,
-                                    caption=caption,
-                                    parse_mode="HTML"
-                                )
-                            )
-                        except Exception:
-                            results.append(
-                                InlineQueryResultArticle(
-                                    id=item_id,
-                                    title=title,
-                                    description=clean_anime,
-                                    thumbnail_url=DEFAULT_THUMB,
-                                    input_message_content=InputTextMessageContent(
-                                        message_text=caption,
-                                        parse_mode="HTML"
-                                    )
-                                )
-                            )
+                try:
+                    res_item = build_inline_item(item_id, img_val, title, clean_anime, caption, char.rarity, filter_mode)
+                    if res_item:
+                        results.append(res_item)
+                except Exception as e:
+                    logger.error(f"Error building inline item {char.id}: {e}")
+
         else:
-            # Query Bot's Global Character Database (Show all if empty, filter AMV if 'amv', otherwise search)
+            # Global Character Database Search
             if search_query == "":
                 stmt = select(Character).order_by(Character.id)
             elif search_query.lower() == "amv":
-                stmt = select(Character).where(Character.rarity.ilike("AMV"))
+                stmt = select(Character).where(Character.rarity.ilike("AMV")).order_by(Character.id)
             else:
                 stmt = select(Character).where(
                     (Character.name.ilike(f"%{search_query}%")) |
                     (Character.anime.ilike(f"%{search_query}%"))
                 ).order_by(Character.id)
-                
+
             stmt = stmt.offset(offset).limit(limit)
             res = await db.execute(stmt)
             chars = res.scalars().all()
+
+            if not chars and offset == 0:
+                results.append(
+                    InlineQueryResultArticle(
+                        id="no_results",
+                        title="No characters found",
+                        description=f"No matches for '{search_query}'",
+                        thumbnail_url=DEFAULT_THUMB,
+                        input_message_content=InputTextMessageContent(
+                            message_text=f"🔍 No characters found matching <b>{escape_html(search_query)}</b>.",
+                            parse_mode="HTML"
+                        )
+                    )
+                )
 
             for idx, char in enumerate(chars):
                 r_emoji = get_rarity_emoji(char.rarity)
@@ -211,73 +224,18 @@ async def handle_inline_query(inline_query: InlineQuery):
                 title = f"{clean_rarity} — {clean_name}"
                 item_id = f"search_{char.id}_{offset}_{idx}"
 
-                if img_val.startswith("http"):
-                    results.append(
-                        InlineQueryResultPhoto(
-                            id=item_id,
-                            photo_url=img_val,
-                            thumbnail_url=img_val,
-                            title=title,
-                            description=clean_anime,
-                            caption=caption,
-                            parse_mode="HTML"
-                        )
-                    )
-                else:
-                    if char.rarity.lower() == "amv":
-                        try:
-                            results.append(
-                                InlineQueryResultCachedVideo(
-                                    id=item_id,
-                                    video_file_id=img_val,
-                                    title=title,
-                                    description=clean_anime,
-                                    caption=caption,
-                                    parse_mode="HTML"
-                                )
-                            )
-                        except Exception:
-                            results.append(
-                                InlineQueryResultArticle(
-                                    id=item_id,
-                                    title=title,
-                                    description=clean_anime,
-                                    thumbnail_url=DEFAULT_THUMB,
-                                    input_message_content=InputTextMessageContent(
-                                        message_text=caption,
-                                        parse_mode="HTML"
-                                    )
-                                )
-                            )
-                    else:
-                        try:
-                            results.append(
-                                InlineQueryResultCachedPhoto(
-                                    id=item_id,
-                                    photo_file_id=img_val,
-                                    title=title,
-                                    description=clean_anime,
-                                    caption=caption,
-                                    parse_mode="HTML"
-                                )
-                            )
-                        except Exception:
-                            results.append(
-                                InlineQueryResultArticle(
-                                    id=item_id,
-                                    title=title,
-                                    description=clean_anime,
-                                    thumbnail_url=DEFAULT_THUMB,
-                                    input_message_content=InputTextMessageContent(
-                                        message_text=caption,
-                                        parse_mode="HTML"
-                                    )
-                                )
-                            )
-    # Set next_offset if there are potentially more results
+                try:
+                    res_item = build_inline_item(item_id, img_val, title, clean_anime, caption, char.rarity, filter_mode)
+                    if res_item:
+                        results.append(res_item)
+                except Exception as e:
+                    logger.error(f"Error building search item {char.id}: {e}")
+
+    # Set next_offset if full page was returned to enable infinite scroll
     next_offset = str(offset + limit) if len(results) == limit else ""
+
     try:
-        await inline_query.answer(results, cache_time=5, is_personal=True, next_offset=next_offset)
+        await inline_query.answer(results, cache_time=1, is_personal=True, next_offset=next_offset)
     except Exception as e:
         logger.error(f"Error answering inline query: {e}", exc_info=True)
 
