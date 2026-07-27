@@ -67,5 +67,6 @@ import re
 def get_clean_name(name: str) -> str:
     if not name:
         return ""
-    # Strip any [bracketed content]
-    return re.sub(r'\[.*?\]', '', name).strip()
+    text = re.sub(r'\[.*?\]', '', name)
+    text = re.sub(r'[^\w\s]', '', text, flags=re.UNICODE)
+    return text.strip()

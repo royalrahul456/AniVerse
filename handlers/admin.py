@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 import config
 from database.models import User, Character, UserCharacter, GroupSettings, RarityType, BotAdmin
-from utils.formatters import format_blockquote, get_rarity_emoji, escape_html, RARITY_CACHE
+from utils.formatters import format_blockquote, get_rarity_emoji, escape_html, get_clean_name, RARITY_CACHE
 from utils.settings import set_cover_media, get_cover_media
 from keyboards.inline import get_back_to_hub_keyboard
 from handlers.start import get_or_create_user
@@ -440,10 +440,36 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await message.reply("❌ Character registration process has been cancelled.")
 
 async def find_existing_character_anime(name: str, db: AsyncSession) -> str | None:
-    stmt = select(Character).where(Character.name.ilike(name))
+    if not name:
+        return None
+    raw_name = name.strip()
+    
+    # 1. Try exact match first
+    stmt = select(Character).where(Character.name.ilike(raw_name))
     res = await db.execute(stmt)
     char = res.scalars().first()
-    return char.anime if (char and char.anime) else None
+    if char and char.anime:
+        return char.anime
+
+    # 2. Try match with clean name (emojis/symbols stripped)
+    clean_name = get_clean_name(raw_name)
+    if clean_name:
+        stmt = select(Character).where(Character.name.ilike(f"%{clean_name}%"))
+        res = await db.execute(stmt)
+        char = res.scalars().first()
+        if char and char.anime:
+            return char.anime
+
+        # 3. Try matching distinct words (e.g. 'Luffy' matching 'Monkey D. Luffy')
+        words = [w for w in clean_name.split() if len(w) > 2]
+        for w in words:
+            stmt = select(Character).where(Character.name.ilike(f"%{w}%"))
+            res = await db.execute(stmt)
+            char = res.scalars().first()
+            if char and char.anime:
+                return char.anime
+
+    return None
 async def send_rarity_keyboard(message: Message, name: str, anime: str, state_data: dict, db: AsyncSession, is_callback: bool = False, callback_query: CallbackQuery = None):
     # Fetch available rarities
     default_rarities = ["Common", "Rare", "Epic", "Legendary", "Mythical"]
