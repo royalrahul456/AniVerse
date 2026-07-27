@@ -184,7 +184,7 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
         "🧠 <b>Guess The Character!</b>\n"
         "───────────────\n"
         "💭 Think you know this character?\n"
-        "⌛ You have 60 seconds!\n"
+        "⌛ You have 120 seconds!\n"
         f"💰 Reward: <b>{reward}</b> coins"
     )
 
@@ -207,9 +207,9 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
         logger.error(f"Failed to spawn nameguess character: {e}")
         raise e
 
-    # Timeout timer task
+    # Timeout timer task (120 seconds)
     async def game_timeout_timer(timeout_chat_id, char_name, bot_obj):
-        await asyncio.sleep(60)
+        await asyncio.sleep(120)
         if timeout_chat_id in active_games:
             game = active_games.pop(timeout_chat_id, None)
             
@@ -221,7 +221,10 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
                 f"💡 Correct Answer: <b>{escape_html(char_name)}</b>"
             )
             try:
-                await bot_obj.send_message(timeout_chat_id, timeout_text, parse_mode="HTML")
+                t_msg = await bot_obj.send_message(timeout_chat_id, timeout_text, parse_mode="HTML")
+                # Auto delete timeout notification message after 30s
+                await asyncio.sleep(30)
+                await bot_obj.delete_message(timeout_chat_id, t_msg.message_id)
             except Exception:
                 pass
             
