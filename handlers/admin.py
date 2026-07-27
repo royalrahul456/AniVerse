@@ -259,26 +259,23 @@ async def cmd_give(message: Message, db: AsyncSession):
                 f"👤 <b>Receiver:</b> <a href=\"tg://user?id={user.user_id}\">{escape_html(user.first_name)}</a>"
             )
         )
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="🎒 View Harem", callback_data="dm_bag_All_1"))
-        
         media_url = character.image_url if character.image_url else DEFAULT_FALLBACK_PHOTO
         try:
             if media_url.startswith("http"):
-                await message.reply_photo(media_url, caption=card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+                await message.reply_photo(media_url, caption=card_text, parse_mode="HTML")
             else:
                 if character.rarity.lower() == "amv":
                     try:
-                        await message.reply_video(media_url, caption=card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+                        await message.reply_video(media_url, caption=card_text, parse_mode="HTML")
                     except Exception:
-                        await message.reply_photo(DEFAULT_FALLBACK_PHOTO, caption=card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+                        await message.reply_photo(DEFAULT_FALLBACK_PHOTO, caption=card_text, parse_mode="HTML")
                 else:
                     try:
-                        await message.reply_photo(media_url, caption=card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+                        await message.reply_photo(media_url, caption=card_text, parse_mode="HTML")
                     except Exception:
-                        await message.reply_photo(DEFAULT_FALLBACK_PHOTO, caption=card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+                        await message.reply_photo(DEFAULT_FALLBACK_PHOTO, caption=card_text, parse_mode="HTML")
         except Exception:
-            await message.reply(card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+            await message.reply(card_text, parse_mode="HTML")
 
 @router.message(Command("addrarity"))
 async def cmd_addrarity(message: Message, db: AsyncSession):
