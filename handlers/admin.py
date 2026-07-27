@@ -439,33 +439,6 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.reply("❌ Character registration process has been cancelled.")
 
-import re
-
-def parse_name_and_anime(raw_input: str) -> tuple[str, str | None]:
-    """
-    Extracts character name and optional bracketed anime name from strings like:
-    'Luffy [One Piece]' -> ('Luffy', 'One Piece')
-    '[One Piece] Luffy' -> ('Luffy', 'One Piece')
-    'Rem (Re:Zero)'     -> ('Rem', 'Re:Zero')
-    'Saitama'           -> ('Saitama', None)
-    """
-    if not raw_input:
-        return "", None
-    raw = raw_input.strip()
-    match_square = re.search(r'\[(.*?)\]', raw)
-    if match_square:
-        anime_extracted = match_square.group(1).strip()
-        name_clean = re.sub(r'\[.*?\]', '', raw).strip()
-        if name_clean and anime_extracted:
-            return name_clean, anime_extracted
-    match_round = re.search(r'\((.*?)\)', raw)
-    if match_round:
-        anime_extracted = match_round.group(1).strip()
-        name_clean = re.sub(r'\(.*?\)', '', raw).strip()
-        if name_clean and anime_extracted:
-            return name_clean, anime_extracted
-    return raw, None
-
 async def find_existing_character_anime(name: str, db: AsyncSession) -> str | None:
     stmt = select(Character).where(Character.name.ilike(name))
     res = await db.execute(stmt)
@@ -695,11 +668,9 @@ async def cmd_addchar(message: Message, state: FSMContext, db: AsyncSession):
     msg_id_text = f" at ID <b>#{target_id}</b>" if target_id is not None else ""
 
     if name:
-        parsed_name, extracted_anime = parse_name_and_anime(name)
-        name = parsed_name
         state_data["name"] = name
         
-        anime = extracted_anime or await find_existing_character_anime(name, db)
+        anime = await find_existing_character_anime(name, db)
         if anime:
             state_data["anime"] = anime
             state_data["anime_autofilled"] = True
@@ -787,15 +758,13 @@ async def process_name(message: Message, state: FSMContext, db: AsyncSession):
             return
 
         state_data = await state.get_data()
-        parsed_name, extracted_anime = parse_name_and_anime(name)
-        name = parsed_name
         state_data["name"] = name
         if media_file_id:
             state_data["media_file_id"] = media_file_id
             state_data["media_type"] = media_type
         await state.update_data(**state_data)
 
-        anime = extracted_anime or await find_existing_character_anime(name, db)
+        anime = await find_existing_character_anime(name, db)
         if anime:
             state_data["anime"] = anime
             state_data["anime_autofilled"] = True
