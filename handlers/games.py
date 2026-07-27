@@ -15,7 +15,19 @@ from utils.game_limits import check_game_limit, record_game_play
 from keyboards.inline import get_games_keyboard, get_back_to_hub_keyboard
 
 
+import asyncio
+
 router = Router()
+
+def schedule_message_deletion(bot, chat_id: int, message_id: int, delay: int = 120):
+    """Schedules background auto-deletion of a Telegram message after `delay` seconds."""
+    async def _delete():
+        await asyncio.sleep(delay)
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except Exception:
+            pass
+    asyncio.create_task(_delete())
 
 @router.callback_query(F.data == "dm_games")
 @router.message(Command("games"))
@@ -76,7 +88,8 @@ async def cmd_spin(event, db: AsyncSession):
         await message_obj.edit_text(text, parse_mode="HTML")
         await event.answer()
     else:
-        await message_obj.reply(text, parse_mode="HTML")
+        spin_msg = await message_obj.reply(text, parse_mode="HTML")
+        schedule_message_deletion(message_obj.bot, message_obj.chat.id, spin_msg.message_id, 120)
 
 @router.message(Command("daily"))
 async def cmd_daily(message: Message, db: AsyncSession):
@@ -107,7 +120,8 @@ async def cmd_daily(message: Message, db: AsyncSession):
             f"🎯 <b>Keep your streak going tomorrow!</b>\n"
             f"💰 <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"        )
     )
-    await message.answer(text, parse_mode="HTML")
+    daily_msg = await message.answer(text, parse_mode="HTML")
+    schedule_message_deletion(message.bot, message.chat.id, daily_msg.message_id, 120)
 
 @router.callback_query(F.data == "game_coinflip")
 @router.message(Command("coinflip"))
@@ -241,7 +255,8 @@ async def cmd_dice(event, db: AsyncSession):
     if is_callback:
         await message_obj.edit_text(card, parse_mode="HTML")
     else:
-        await dice_msg.reply(card, parse_mode="HTML")
+        dice_res_msg = await dice_msg.reply(card, parse_mode="HTML")
+        schedule_message_deletion(message_obj.bot, message_obj.chat.id, dice_res_msg.message_id, 120)
 
 @router.callback_query(F.data == "game_dart")
 @router.message(Command("dart"))
@@ -314,7 +329,8 @@ async def cmd_dart(event, db: AsyncSession):
     if is_callback:
         await message_obj.edit_text(card, parse_mode="HTML")
     else:
-        await dart_msg.reply(card, parse_mode="HTML")
+        dart_res_msg = await dart_msg.reply(card, parse_mode="HTML")
+        schedule_message_deletion(message_obj.bot, message_obj.chat.id, dart_res_msg.message_id, 120)
 
 # Trivia Questions List
 TRIVIA_QUESTIONS = [
@@ -827,4 +843,5 @@ async def cmd_scramble(event, db: AsyncSession):
         await message_obj.edit_text(card, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
         await event.answer()
     else:
-        await message_obj.answer(card, parse_mode="HTML")
+        scram_msg = await message_obj.answer(card, parse_mode="HTML")
+        schedule_message_deletion(message_obj.bot, message_obj.chat.id, scram_msg.message_id, 120)

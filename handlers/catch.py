@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 character_cache = {}
 active_games = {} # chat_id -> dict with game details
 
+def schedule_message_deletion(bot, chat_id: int, message_id: int, delay: int = 120):
+    """Schedules background auto-deletion of a Telegram message after `delay` seconds."""
+    async def _delete():
+        await asyncio.sleep(delay)
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except Exception:
+            pass
+    asyncio.create_task(_delete())
+
 async def get_random_character(db: AsyncSession, custom_rarity: str = None) -> Character:
     """Dynamically selects a character from the database weighted by rarity across ALL available characters."""
     stmt = select(Character)
@@ -222,9 +232,7 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
             )
             try:
                 t_msg = await bot_obj.send_message(timeout_chat_id, timeout_text, parse_mode="HTML")
-                # Auto delete timeout notification message after 30s
-                await asyncio.sleep(30)
-                await bot_obj.delete_message(timeout_chat_id, t_msg.message_id)
+                schedule_message_deletion(bot_obj, timeout_chat_id, t_msg.message_id, 120)
             except Exception:
                 pass
             
@@ -440,7 +448,8 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
                     f"💡 Answer: <b>{escape_html(game['character_name'])}</b>\n"
                     f"💰 <b>+{reward}</b> coins added!"
                 )
-                await message.reply(ans_text, parse_mode="HTML")
+                ans_msg = await message.reply(ans_text, parse_mode="HTML")
+                schedule_message_deletion(bot, chat_id, ans_msg.message_id, 120)
 
                 # Check if auto loop needs to continue
                 if game.get("is_auto"):
@@ -568,7 +577,8 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
         )
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(text="🎒 View Harem", callback_data="dm_bag_All_1"))
-        await message.reply(card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+        catch_msg = await message.reply(card_text, parse_mode="HTML", reply_markup=builder.as_markup())
+        schedule_message_deletion(bot, chat_id, catch_msg.message_id, 120)
     except Exception as e:
         logger.error(f"Error in cmd_catch command: {e}")
         await message.reply("⚠️ An error occurred while trying to catch the character.")
