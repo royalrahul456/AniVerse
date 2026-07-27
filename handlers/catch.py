@@ -21,39 +21,47 @@ logger = logging.getLogger(__name__)
 character_cache = {}
 active_games = {} # chat_id -> dict with game details
 
-async def get_cached_characters(db: AsyncSession):
-    global character_cache
-    if not character_cache:
-        stmt = select(Character)
-        res = await db.execute(stmt)
-        chars = res.scalars().all()
-        character_cache = {c.id: c for c in chars}
-    return list(character_cache.values())
-
-async def spawn_character(chat_id: int, db: AsyncSession, bot, custom_rarity: str = None) -> bool:
-    characters = await get_cached_characters(db)
+async def get_random_character(db: AsyncSession, custom_rarity: str = None) -> Character:
+    """Dynamically selects a character from the database weighted by rarity across ALL available characters."""
+    stmt = select(Character)
+    res = await db.execute(stmt)
+    characters = res.scalars().all()
     if not characters:
-        return False
+        return None
 
     if custom_rarity:
         selected_rarity = custom_rarity.title()
     else:
-        stmt = select(RarityType).where(RarityType.spawn_enabled == True)
-        res = await db.execute(stmt)
-        rarities = res.scalars().all()
-        
-        if not rarities:
-            selected_rarity = "Common"
-        else:
-            choices = [r.name for r in rarities]
-            weights = [r.weight for r in rarities]
-            selected_rarity = random.choices(choices, weights=weights, k=1)[0]
+        # Base weights from config.RARITY_CONFIG
+        weights_map = {r_name.title(): info["weight"] for r_name, info in config.RARITY_CONFIG.items()}
 
-    filtered = [c for c in characters if c.rarity.lower() == selected_rarity.lower()]
+        # Merge DB enabled rarities if set
+        db_rar_stmt = select(RarityType).where(RarityType.spawn_enabled == True)
+        db_rarities = (await db.execute(db_rar_stmt)).scalars().all()
+        for dr in db_rarities:
+            weights_map[dr.name.title()] = dr.weight
+
+        # Available rarities present in database characters
+        available_rarities = list(set(c.rarity.title() for c in characters if c.rarity))
+
+        choices = []
+        weights = []
+        for r in available_rarities:
+            choices.append(r)
+            weights.append(weights_map.get(r, 10))
+
+        selected_rarity = random.choices(choices, weights=weights, k=1)[0]
+
+    filtered = [c for c in characters if c.rarity and c.rarity.title() == selected_rarity]
     if not filtered:
         filtered = characters
 
-    character = random.choice(filtered)
+    return random.choice(filtered)
+
+async def spawn_character(chat_id: int, db: AsyncSession, bot, custom_rarity: str = None) -> bool:
+    character = await get_random_character(db, custom_rarity)
+    if not character:
+        return False
 
     await db.execute(delete(ActiveSpawn).where(ActiveSpawn.chat_id == chat_id))
     
@@ -161,26 +169,9 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
     if is_auto:
         reward = random.randint(100, 200)
 
-    characters = await get_cached_characters(db)
-    if not characters:
+    character = await get_random_character(db)
+    if not character:
         return
-
-    # Filter to active spawn rarities
-    stmt = select(RarityType).where(RarityType.spawn_enabled == True)
-    res = await db.execute(stmt)
-    rarities = res.scalars().all()
-    if not rarities:
-        selected_rarity = "Common"
-    else:
-        choices = [r.name for r in rarities]
-        weights = [r.weight for r in rarities]
-        selected_rarity = random.choices(choices, weights=weights, k=1)[0]
-
-    filtered = [c for c in characters if c.rarity.lower() == selected_rarity.lower()]
-    if not filtered:
-        filtered = characters
-
-    character = random.choice(filtered)
 
     # Inline Keyboard
     builder = InlineKeyboardBuilder()
