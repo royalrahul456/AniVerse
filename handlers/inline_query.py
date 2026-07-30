@@ -18,7 +18,7 @@ from utils.formatters import get_rarity_emoji, escape_html
 logger = logging.getLogger(__name__)
 router = Router()
 
-DEFAULT_THUMB = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
+DEFAULT_THUMB = "https://images7.alphacoders.com/133/1331826.jpeg"
 
 def clean_html_entities(val: str) -> str:
     """Recursively unescapes HTML entities to handle double-escaped strings like &amp;amp; or &#x27;"""
@@ -30,22 +30,41 @@ def clean_html_entities(val: str) -> str:
         val = html.unescape(val)
     return val
 
+def is_valid_url(url: str) -> bool:
+    if not url or not url.startswith(("http://", "https://")):
+        return False
+    if url in ("https://img.jpg", "http://img.jpg", "https://example.com"):
+        return False
+    return True
+
 def build_inline_item(item_id: str, img_val: str, title: str, clean_anime: str, caption: str, rarity: str, filter_mode: str):
     """Safely builds appropriate InlineQueryResult based on image URL / Telegram file ID type."""
     if img_val.startswith("http"):
-        return InlineQueryResultPhoto(
-            id=item_id,
-            photo_url=img_val,
-            thumbnail_url=img_val,
-            title=title,
-            description=clean_anime,
-            caption=caption,
-            parse_mode="HTML"
-        )
+        if is_valid_url(img_val):
+            return InlineQueryResultPhoto(
+                id=item_id,
+                photo_url=img_val,
+                thumbnail_url=img_val,
+                title=title,
+                description=clean_anime,
+                caption=caption,
+                parse_mode="HTML"
+            )
+        else:
+            return InlineQueryResultArticle(
+                id=item_id,
+                title=title,
+                description=clean_anime,
+                thumbnail_url=DEFAULT_THUMB,
+                input_message_content=InputTextMessageContent(
+                    message_text=caption,
+                    parse_mode="HTML"
+                )
+            )
     
     # Telegram file ID logic
     is_video = (
-        img_val.startswith(("BAAC", "BAAD", "CgAC", "CGAC")) or 
+        img_val.startswith(("BAAC", "BAAD", "CgAC", "CGAC", "BQAC", "DQAC")) or 
         filter_mode == "AMV" or 
         rarity.lower() == "amv"
     )
