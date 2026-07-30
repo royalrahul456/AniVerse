@@ -262,6 +262,7 @@ async def main():
         BotCommand(command="claim", description="🎁 Claim a free daily character"),
         BotCommand(command="guess", description="🎯 Catch wild character / start guessing"),
         BotCommand(command="spawnsettings", description="⚙️ View group spawn configuration"),
+        BotCommand(command="setspawn", description="⚙️ Set group spawn threshold (Admin)"),
         BotCommand(command="togglespawn", description="⚡ Toggle wild character spawns"),
         BotCommand(command="games", description="🎮 Open Arcade Games Center"),
         BotCommand(command="mines", description="💣 Start a 5x5 Mines game"),
@@ -280,14 +281,24 @@ async def main():
         BotCommand(command="gift", description="🎁 Gift a character to another trainer"),
         BotCommand(command="give", description="👑 Grant character or coins (Owner only)"),
         BotCommand(command="shop", description="🛒 Shop profile themes & items"),
+        BotCommand(command="addchar", description="➕ Add new character (Admin only)"),
         BotCommand(command="editchar", description="✏️ Edit character details (Admin only)"),
-        BotCommand(command="addtoclaim", description="➕ Add rarity to claim pool (Admin only)"),
+        BotCommand(command="deletechar", description="🗑️ Delete character (Owner only)"),
+        BotCommand(command="setimg", description="🖼️ Update character media (Admin only)"),
+        BotCommand(command="setcover", description="🖼️ Set bot cover banners (Owner only)"),
+        BotCommand(command="spawn", description="💥 Force spawn wild character (Admin)"),
+        BotCommand(command="stats", description="📊 View bot database statistics (Owner)"),
+        BotCommand(command="addrarity", description="✨ Add custom rarity tier (Owner only)"),
+        BotCommand(command="delrarity", description="🗑️ Delete custom rarity tier (Owner only)"),
+        BotCommand(command="editrarityemoji", description="🎨 Edit custom rarity emoji (Owner only)"),
+        BotCommand(command="addtochance", description="🎯 Add rarity to spawn pool (Admin)"),
+        BotCommand(command="removefromchance", description="🚫 Remove rarity from spawn pool (Admin)"),
+        BotCommand(command="addtoclaim", description="➕ Add rarity to claim pool (Admin)"),
         BotCommand(command="removefromclaim", description="➖ Remove rarity from claim pool (Admin)"),
         BotCommand(command="promote", description="⭐ Promote user to admin (Owner only)"),
         BotCommand(command="demote", description="🔻 Demote user from admin (Owner only)"),
         BotCommand(command="adminlist", description="📋 List bot admin staff"),
-        BotCommand(command="delrarity", description="🗑️ Delete custom rarity tier (Owner only)"),
-        BotCommand(command="editrarityemoji", description="🎨 Edit custom rarity emoji (Owner only)")
+        BotCommand(command="ownerhelp", description="👑 View owner command guide (Owner only)")
     ]
     try:
         await bot.set_my_commands(commands)

@@ -119,90 +119,91 @@ async def cb_dm_home(callback: CallbackQuery, db: AsyncSession):
     await send_or_edit_start(callback.message, get_cover_media("start"), caption, builder.as_markup(), is_callback=True)
     await callback.answer()
 
-@router.callback_query(F.data == "dm_help")
-async def cb_dm_help(callback: CallbackQuery):
-    from keyboards.inline import get_back_to_hub_keyboard
-    is_admin = callback.from_user.id in config.ADMIN_IDS
+def build_help_text(is_admin: bool) -> str:
     text = (
         "❓ <b>AniVerse Guide & Help Center</b>\n\n"
         "╭───「 🎒 Trainer Utilities 」───╮\n"
         "├─➩ /profile — Stats & themes\n"
         "├─➩ /harem — View harem collection\n"
         "├─➩ /leaderboard [type] — Global rankings (coins/catches)\n"
-        "├─➩ /check &lt;id&gt; — Character status\n"
+        "├─➩ /check &lt;id&gt; — Character status & owners\n"
         "├─➩ /search &lt;name&gt; — Database lookup\n"
         "├─➩ /anime &lt;show&gt; — Filter by anime\n"
-        "├─➩ /fav &lt;id&gt; — Custom harem banner\n"
+        "├─➩ /fav &lt;id&gt; — Custom harem cover banner\n"
         "├─➩ /claim — Free daily character\n"
         "╰───────────────────────────╯\n\n"
         "╭───「 🎮 Games & Arcade 」───╮\n"
         "├─➩ /games — Games Center menu\n"
         "├─➩ /spin — Lucky spin wheel\n"
         "├─➩ /daily — Claim daily bonus coins\n"
-        "├─➩ /coinflip &lt;bet&gt; &lt;choice&gt;\n"
-        "├─➩ /dice &lt;bet&gt; &lt;choice&gt;\n"
+        "├─➩ /coinflip &lt;bet&gt; &lt;choice&gt; — Bet coins\n"
+        "├─➩ /dice &lt;bet&gt; &lt;choice&gt; — Dice roll\n"
+        "├─➩ /dart — Animated dart arena\n"
         "├─➩ /trivia — Play anime quizzes\n"
-        "├─➩ /mines &lt;bet&gt; &lt;mines&gt;\n"
+        "├─➩ /mines &lt;bet&gt; &lt;mines&gt; — Mines arcade\n"
         "├─➩ /scramble — Word puzzle rewards\n"
         "├─➩ /xo &lt;reply&gt; — Play Tic-Tac-Toe\n"
+        "├─➩ /nameguess — Start manual guessing game\n"
+        "├─➩ /togglenameguess — Toggle auto-guessing game loop\n"
+        "╰───────────────────────────╯\n\n"
+        "╭───「 ⚙️ Group Spawns 」───╮\n"
+        "├─➩ /guess &lt;name&gt; — Catch wild character\n"
+        "├─➩ /spawnsettings — View group spawn progress\n"
+        "├─➩ /setspawn &lt;val&gt; — Set threshold / on / off\n"
+        "├─➩ /togglespawn — Quick toggle wild spawns\n"
         "╰───────────────────────────╯\n\n"
         "╭───「 🤝 Commerce & Deals 」───╮\n"
         "├─➩ /pay &lt;user&gt; &lt;amount&gt; — Send coins\n"
         "├─➩ /balance — Check coin balance\n"
         "├─➩ /gift &lt;user&gt; &lt;id&gt; — Gift character\n"
         "├─➩ /shop — Buy profile themes\n"
-        "├─➩ /trade &lt;your_id&gt; &lt;their_id&gt;\n"
+        "├─➩ /trade &lt;your_id&gt; &lt;their_id&gt; — Trade\n"
         "├─➩ /redeem &lt;code&gt; — Claim promo code\n"
         "├─➩ /auction &lt;id&gt; &lt;price&gt; — List character\n"
         "├─➩ /bid &lt;auc_id&gt; &lt;amount&gt; — Bid on active\n"
-        "├─➩ /cancelauction &lt;auc_id&gt;\n"
-        "├─➩ /auctions — View active/queue\n"
-        "╰───────────────────────────╯\n\n"        "📌 <i>Keep chatting in group chats to trigger wild character spawns, and type /guess &lt;name&gt; to collect them!</i>"
-        + (f"\n\n👑 <b>Owner:</b> Since you are a bot owner, type /ownerhelp to see creator tools!" if is_admin else "")
+        "├─➩ /cancelauction &lt;auc_id&gt; — Cancel auction\n"
+        "├─➩ /auctions — View active auctions\n"
+        "╰───────────────────────────╯"
     )
-    await send_or_edit_start(callback.message, get_cover_media("help"), text, get_back_to_hub_keyboard(), is_callback=True)
+    if is_admin:
+        text += (
+            "\n\n"
+            "╭───「 👑 Owner & Admin Tools 」───╮\n"
+            "├─➩ /addchar — Add new character\n"
+            "├─➩ /editchar — Edit character details\n"
+            "├─➩ /deletechar &lt;id&gt; — Delete character\n"
+            "├─➩ /setimg &lt;id&gt; — Update character media\n"
+            "├─➩ /give &lt;user&gt; &lt;id/coins&gt; — Grant item\n"
+            "├─➩ /setcover &lt;start/help&gt; — Set bot banners\n"
+            "├─➩ /spawn — Force spawn character\n"
+            "├─➩ /stats — View bot statistics\n"
+            "├─➩ /addtochance &lt;rarity&gt; — Enable spawn chance\n"
+            "├─➩ /removefromchance &lt;rarity&gt; — Disable spawn chance\n"
+            "├─➩ /addtoclaim &lt;rarity&gt; — Enable claim pool\n"
+            "├─➩ /removefromclaim &lt;rarity&gt; — Disable claim pool\n"
+            "├─➩ /promote &lt;user&gt; — Promote admin\n"
+            "├─➩ /demote &lt;user&gt; — Demote admin\n"
+            "├─➩ /adminlist — View bot admin staff\n"
+            "├─➩ /ownerhelp — Full creator guide\n"
+            "╰───────────────────────────╯"
+        )
+    text += "\n\n📌 <i>Keep chatting in group chats to trigger wild character spawns, and type /guess &lt;name&gt; to collect them!</i>"
+    return text
+
+@router.callback_query(F.data == "dm_help")
+async def cb_dm_help(callback: CallbackQuery):
+    from keyboards.inline import get_back_to_hub_keyboard
+    is_admin = callback.from_user.id in config.ADMIN_IDS if callback.from_user else False
+    text = build_help_text(is_admin)
+    cover_media = get_cover_media("help")
+    await send_or_edit_start(callback.message, cover_media, text, get_back_to_hub_keyboard(), is_callback=True)
     await callback.answer()
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     is_admin = message.from_user.id in config.ADMIN_IDS if message.from_user else False
-    text = (
-        "❓ <b>AniVerse Guide & Help Center</b>\n\n"
-        "╭───「 🎒 Trainer Utilities 」───╮\n"
-        "├─➩ /profile — Stats & themes\n"
-        "├─➩ /harem — View harem collection\n"
-        "├─➩ /leaderboard [type] — Global rankings (coins/catches)\n"
-        "├─➩ /check &lt;id&gt; — Character status\n"
-        "├─➩ /search &lt;name&gt; — Database lookup\n"
-        "├─➩ /anime &lt;show&gt; — Filter by anime\n"
-        "├─➩ /fav &lt;id&gt; — Custom harem banner\n"
-        "├─➩ /claim — Free daily character\n"
-        "╰───────────────────────────╯\n\n"
-        "╭───「 🎮 Games & Arcade 」───╮\n"
-        "├─➩ /games — Games Center menu\n"
-        "├─➩ /spin — Lucky spin wheel\n"
-        "├─➩ /daily — Claim daily bonus coins\n"
-        "├─➩ /coinflip &lt;bet&gt; &lt;choice&gt;\n"
-        "├─➩ /dice &lt;bet&gt; &lt;choice&gt;\n"
-        "├─➩ /trivia — Play anime quizzes\n"
-        "├─➩ /mines &lt;bet&gt; &lt;mines&gt;\n"
-        "├─➩ /scramble — Word puzzle rewards\n"
-        "├─➩ /xo &lt;reply&gt; — Play Tic-Tac-Toe\n"
-        "╰───────────────────────────╯\n\n"
-        "╭───「 🤝 Commerce & Deals 」───╮\n"
-        "├─➩ /pay &lt;user&gt; &lt;amount&gt; — Send coins\n"
-        "├─➩ /balance — Check coin balance\n"
-        "├─➩ /gift &lt;user&gt; &lt;id&gt; — Gift character\n"
-        "├─➩ /shop — Buy profile themes\n"
-        "├─➩ /trade &lt;your_id&gt; &lt;their_id&gt;\n"
-        "├─➩ /redeem &lt;code&gt; — Claim promo code\n"
-        "├─➩ /auction &lt;id&gt; &lt;price&gt; — List character\n"
-        "├─➩ /bid &lt;auc_id&gt; &lt;amount&gt; — Bid on active\n"
-        "├─➩ /cancelauction &lt;auc_id&gt;\n"
-        "├─➩ /auctions — View active/queue\n"
-        "╰───────────────────────────╯\n\n"        "📌 <i>Keep chatting in group chats to trigger wild character spawns, and type /guess &lt;name&gt; to collect them!</i>"
-        + (f"\n\n👑 <b>Owner:</b> Since you are a bot owner, type /ownerhelp to see creator tools!" if is_admin else "")
-    )
+    text = build_help_text(is_admin)
+    cover_media = get_cover_media("help")
     
     is_group = message.chat.type != "private"
     builder = InlineKeyboardBuilder()
@@ -211,4 +212,4 @@ async def cmd_help(message: Message):
     else:
         builder.row(InlineKeyboardButton(text="🔙 Back to Hub Menu", callback_data="dm_home"))
         
-    await send_or_edit_start(message, get_cover_media("help"), text, builder.as_markup(), is_callback=False)
+    await send_or_edit_start(message, cover_media, text, builder.as_markup(), is_callback=False)

@@ -2,7 +2,7 @@ import json
 import os
 
 SETTINGS_FILE = "data/settings.json"
-DEFAULT_ANIME_BANNER = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
+DEFAULT_ANIME_BANNER = "https://images7.alphacoders.com/133/1331826.jpeg"
 
 def _load_settings() -> dict:
     if not os.path.exists(SETTINGS_FILE):
