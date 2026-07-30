@@ -389,104 +389,9 @@ async def cb_nameguess_stop(callback: CallbackQuery, db: AsyncSession):
         logger.error(f"Error in stop callback: {e}")
 
 # ----------------------------------------------------
-# ANSWER GUESS MONITOR & LEGACY SPAWNS
+# ANSWER GUESS MONITOR & LEGACY SPAWNS (Moved to bottom)
 # ----------------------------------------------------
 
-@router.message(F.chat.type.in_({"group", "supergroup"}))
-async def group_message_monitor(message: Message, db: AsyncSession, bot):
-    try:
-        # Ignore bot commands
-        if message.text and message.text.startswith("/"):
-            return
-
-        chat_id = message.chat.id
-        
-        # 1. Handle Active Nameguess game evaluation
-        if chat_id in active_games and message.text:
-            game = active_games[chat_id]
-            guess = message.text.strip()
-
-            from utils.formatters import get_clean_name
-            # Normalize and split character name into words
-            correct_clean = get_clean_name(game["character_name"]).lower()
-            correct_words = [w.strip(".,()[]&") for w in correct_clean.split()]
-            stop_words = {"and", "the", "of", "a", "d", "d.", "v2", "&"}
-            correct_words_filtered = [w for w in correct_words if w and w not in stop_words]
-
-            # Normalize and split guess into words
-            guess_clean = get_clean_name(guess).lower()
-            guess_words = [w.strip(".,()[]&") for w in guess_clean.split()]
-
-            is_correct = False
-            # Check if any word in the player's guess matches any of the character's major name words
-            for gw in guess_words:
-                if gw in correct_words_filtered:
-                    is_correct = True
-                    break
-            
-            # Fallback to exact comparison if filter removed all words
-            if not is_correct and guess_clean == correct_clean:
-                is_correct = True
-
-            if is_correct:
-                # Win! Clear active game timer & messages
-                if game.get("timer_task"):
-                    game["timer_task"].cancel()
-                active_games.pop(chat_id)
-
-                # Cleanup card & hints
-                await cleanup_game_messages(chat_id, bot, game)
-
-                user_id = message.from_user.id
-                username = message.from_user.username or ""
-                first_name = message.from_user.first_name or "Trainer"
-
-                user = await get_or_create_user(db, user_id, username, first_name)
-                reward = game["reward"]
-                user.coins += reward
-                await db.commit()
-
-                trainer_name = escape_html(first_name)
-                ans_text = (
-                    f"🎉 <b>Correct! {trainer_name} guessed it!</b>\n"
-                    f"💡 Answer: <b>{escape_html(game['character_name'])}</b>\n"
-                    f"💰 <b>+{reward}</b> coins added!"
-                )
-                ans_msg = await message.reply(ans_text, parse_mode="HTML")
-                schedule_message_deletion(bot, chat_id, ans_msg.message_id, 120)
-
-                # Check if auto loop needs to continue
-                if game.get("is_auto"):
-                    await asyncio.sleep(2)
-                    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-                    res = await db.execute(stmt)
-                    settings = res.scalar_one_or_none()
-                    if settings and settings.auto_nameguess_enabled:
-                        await start_nameguess_game(chat_id, db, bot, is_auto=True)
-                return
-
-        # 2. Increment message counter for wild character spawns
-        stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-        res = await db.execute(stmt)
-        settings = res.scalar_one_or_none()
-
-        if not settings:
-            settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0, spawns_enabled=True)
-            db.add(settings)
-            await db.commit()
-
-        if settings.spawns_enabled:
-            settings.message_counter += 1
-            if settings.message_counter >= settings.spawn_threshold:
-                settings.message_counter = 0
-                await db.commit()
-                await spawn_character(chat_id, db, bot)
-            else:
-                await db.commit()
-    except Exception as e:
-        logger.error(f"Error in guess monitor: {e}")
-
-    return
 
 # /guess, /catch, /snatch = WILD SPAWN CATCHING ONLY → adds character to harem
 # Nameguess game (coins only) is answered via plain text in group_message_monitor
@@ -714,3 +619,98 @@ async def cmd_togglespawn(message: Message, db: AsyncSession, bot):
         f"<i>Use /spawnsettings to view full settings.</i>"
     )
     await message.reply(text, parse_mode="HTML")
+
+# ----------------------------------------------------
+# ANSWER GUESS MONITOR & LEGACY SPAWNS (Catch-all for group chat)
+# ----------------------------------------------------
+@router.message(F.chat.type.in_({"group", "supergroup"}), ~F.text.startswith("/"))
+async def group_message_monitor(message: Message, db: AsyncSession, bot):
+    try:
+        chat_id = message.chat.id
+        
+        # 1. Handle Active Nameguess game evaluation
+        if chat_id in active_games and message.text:
+            game = active_games[chat_id]
+            guess = message.text.strip()
+
+            from utils.formatters import get_clean_name
+            # Normalize and split character name into words
+            correct_clean = get_clean_name(game["character_name"]).lower()
+            correct_words = [w.strip(".,()[]&") for w in correct_clean.split()]
+            stop_words = {"and", "the", "of", "a", "d", "d.", "v2", "&"}
+            correct_words_filtered = [w for w in correct_words if w and w not in stop_words]
+
+            # Normalize and split guess into words
+            guess_clean = get_clean_name(guess).lower()
+            guess_words = [w.strip(".,()[]&") for w in guess_clean.split()]
+
+            is_correct = False
+            # Check if any word in the player's guess matches any of the character's major name words
+            for gw in guess_words:
+                if gw in correct_words_filtered:
+                    is_correct = True
+                    break
+            
+            # Fallback to exact comparison if filter removed all words
+            if not is_correct and guess_clean == correct_clean:
+                is_correct = True
+
+            if is_correct:
+                # Win! Clear active game timer & messages
+                if game.get("timer_task"):
+                    game["timer_task"].cancel()
+                active_games.pop(chat_id)
+
+                # Cleanup card & hints
+                await cleanup_game_messages(chat_id, bot, game)
+
+                user_id = message.from_user.id
+                username = message.from_user.username or ""
+                first_name = message.from_user.first_name or "Trainer"
+
+                user = await get_or_create_user(db, user_id, username, first_name)
+                reward = game["reward"]
+                user.coins += reward
+                await db.commit()
+
+                trainer_name = escape_html(first_name)
+                ans_text = (
+                    f"🎉 <b>Correct! {trainer_name} guessed it!</b>\n"
+                    f"💡 Answer: <b>{escape_html(game['character_name'])}</b>\n"
+                    f"💰 <b>+{reward}</b> coins added!"
+                )
+                ans_msg = await message.reply(ans_text, parse_mode="HTML")
+                schedule_message_deletion(bot, chat_id, ans_msg.message_id, 120)
+
+                # Check if auto loop needs to continue
+                if game.get("is_auto"):
+                    await asyncio.sleep(2)
+                    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
+                    res = await db.execute(stmt)
+                    settings = res.scalar_one_or_none()
+                    if settings and settings.auto_nameguess_enabled:
+                        await start_nameguess_game(chat_id, db, bot, is_auto=True)
+                return
+
+        # 2. Increment message counter for wild character spawns
+        stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
+        res = await db.execute(stmt)
+        settings = res.scalar_one_or_none()
+
+        if not settings:
+            settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0, spawns_enabled=True)
+            db.add(settings)
+            await db.commit()
+
+        if settings.spawns_enabled:
+            settings.message_counter += 1
+            if settings.message_counter >= settings.spawn_threshold:
+                settings.message_counter = 0
+                await db.commit()
+                await spawn_character(chat_id, db, bot)
+            else:
+                await db.commit()
+    except Exception as e:
+        logger.error(f"Error in group_message_monitor: {e}")
+
+    return
