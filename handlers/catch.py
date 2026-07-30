@@ -392,13 +392,17 @@ async def cb_nameguess_stop(callback: CallbackQuery, db: AsyncSession):
 # ANSWER GUESS MONITOR & LEGACY SPAWNS
 # ----------------------------------------------------
 
-@router.message(F.chat.type.in_({"group", "supergroup"}), F.text, ~F.text.startswith("/"))
+@router.message(F.chat.type.in_({"group", "supergroup"}))
 async def group_message_monitor(message: Message, db: AsyncSession, bot):
     try:
+        # Ignore bot commands
+        if message.text and message.text.startswith("/"):
+            return
+
         chat_id = message.chat.id
         
         # 1. Handle Active Nameguess game evaluation
-        if chat_id in active_games:
+        if chat_id in active_games and message.text:
             game = active_games[chat_id]
             guess = message.text.strip()
 
@@ -519,22 +523,23 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
             if message.chat.type == "private":
                 await message.reply("⚠️ Wild characters only spawn in group chats. Keep chatting to trigger a spawn!", parse_mode="HTML")
             else:
-                await message.reply("⚠️ No wild character is active right now! Keep chatting to spawn one.")
+                await message.reply("⚠️ No active wild character to catch right now! Keep chatting in group to spawn one.", parse_mode="HTML")
             return
 
-        char_stmt = select(Character).where(Character.id == spawn.character_id)
-        char_res = await db.execute(char_stmt)
-        character = char_res.scalar_one()
+        character = spawn.character
+        if not character:
+            await message.reply("⚠️ Error reading spawned character data.")
+            return
 
+        # Flexible matching logic (single word match or full match)
         from utils.formatters import get_clean_name
-        guess_clean = get_clean_name(guess_lower).lower()
         actual_name_clean = get_clean_name(character.name).lower()
-
-        # Any single meaningful word from the character's name counts as correct
-        actual_words = [w.strip(".,()[]") for w in actual_name_clean.split() if w]
-        stop_words = {"and", "the", "of", "a", "d", "&", "no", "to"}
+        actual_words = [w.strip(".,()[]&") for w in actual_name_clean.split()]
+        stop_words = {"and", "the", "of", "a", "d", "d.", "v2", "&"}
         actual_words_filtered = [w for w in actual_words if w and w not in stop_words]
-        guess_words = [w.strip(".,()[]") for w in guess_clean.split() if w]
+
+        guess_clean = get_clean_name(guess).lower()
+        guess_words = [w.strip(".,()[]&") for w in guess_clean.split()]
 
         is_correct = any(gw in actual_words_filtered for gw in guess_words)
         if not is_correct and guess_clean == actual_name_clean:
@@ -576,7 +581,7 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
             )
         )
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="🎒 View Harem", callback_data="dm_bag_All_1"))
+        builder.row(InlineKeyboardButton(text="🎒 View Harem", callback_data=f"dm_bag_{user_id}_All_1_anime"))
         catch_msg = await message.reply(card_text, parse_mode="HTML", reply_markup=builder.as_markup())
         schedule_message_deletion(bot, chat_id, catch_msg.message_id, 120)
     except Exception as e:
@@ -623,7 +628,7 @@ async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
     )
     await message.reply(text, parse_mode="HTML")
 
-@router.message(Command("setspawn"))
+@router.message(Command("setspawn", "spawnchance", "changetime", "spawnrate", "spawnthreshold"))
 async def cmd_setspawn(message: Message, db: AsyncSession, bot):
     if message.chat.type == "private":
         await message.reply("⚠️ This command can only be used in group chats.")

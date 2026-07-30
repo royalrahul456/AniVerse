@@ -362,31 +362,43 @@ async def cmd_harem(message: Message, db: AsyncSession):
 
 @router.callback_query(F.data.startswith("dm_bag_"))
 async def cb_bag(callback: CallbackQuery, db: AsyncSession):
-    # Ownership check — only the harem owner can interact
-    owner_id = get_harem_owner_id(callback.message)
-    if owner_id and callback.from_user.id != owner_id:
-        try:
-            await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
-        except Exception:
-            pass
-        return
-    owner_id = owner_id or callback.from_user.id
-
     parts = callback.data.split("_")
     
-    # 1. Check if it's the Sort Menu request
-    # Format: dm_bag_sort_menu_{rarity}_{page}_{sort_by}
-    if len(parts) >= 7 and parts[2] == "sort" and parts[3] == "menu":
-        rarity = parts[4]
-        page = int(parts[5])
-        sort_by = parts[6]
-        
+    owner_id = None
+    
+    # 1. Sort Menu request: dm_bag_sort_menu_{user_id}_{rarity}_{page}_{sort_by}
+    if "sort" in parts and "menu" in parts:
+        idx = parts.index("menu")
+        rem = parts[idx+1:]
+        if len(rem) >= 4 and rem[0].isdigit():
+            owner_id = int(rem[0])
+            rarity = rem[1]
+            page = int(rem[2])
+            sort_by = rem[3]
+        elif len(rem) >= 3:
+            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
+            rarity = rem[0]
+            page = int(rem[1])
+            sort_by = rem[2]
+        else:
+            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
+            rarity = "All"
+            page = 1
+            sort_by = "anime"
+
+        if callback.from_user.id != owner_id:
+            try:
+                await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
+            except Exception:
+                pass
+            return
+
         text = (
             "⇅ <b>SORT HAREM COLLECTION</b>\n\n"
             + format_blockquote("Choose how you would like to sort the characters displayed in your Harem:")
         )
-        kb = get_harem_sorting_keyboard(rarity, page, sort_by)
-        user_stmt = select(User).where(User.user_id == callback.from_user.id)
+        kb = get_harem_sorting_keyboard(owner_id, rarity, page, sort_by)
+        user_stmt = select(User).where(User.user_id == owner_id)
         user_res = await db.execute(user_stmt)
         user = user_res.scalar_one_or_none()
         cover_photo = await get_user_harem_cover(user, db)
@@ -397,17 +409,34 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
             pass
         return
 
-    # 2. Check if it's the Rarity Filter Menu request
-    # Format: dm_bag_rarity_menu_{sort_by}
-    if len(parts) >= 5 and parts[2] == "rarity" and parts[3] == "menu":
-        sort_by = parts[4]
+    # 2. Rarity Filter Menu request: dm_bag_rarity_menu_{user_id}_{sort_by}
+    if "rarity" in parts and "menu" in parts:
+        idx = parts.index("menu")
+        rem = parts[idx+1:]
+        if len(rem) >= 2 and rem[0].isdigit():
+            owner_id = int(rem[0])
+            sort_by = rem[1]
+        elif len(rem) >= 1:
+            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
+            sort_by = rem[0]
+        else:
+            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
+            sort_by = "anime"
+
+        if callback.from_user.id != owner_id:
+            try:
+                await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
+            except Exception:
+                pass
+            return
+
         rarity_items = await get_all_rarity_items(db)
         text = (
             "🔍 <b>FILTER HAREM BY RARITY TIER</b>\n\n"
             + format_blockquote("Select a rarity tier below to view characters belonging exclusively to that category:")
         )
-        kb = get_rarity_selection_menu_keyboard(rarity_items, sort_by)
-        user_stmt = select(User).where(User.user_id == callback.from_user.id)
+        kb = get_rarity_selection_menu_keyboard(owner_id, rarity_items, sort_by)
+        user_stmt = select(User).where(User.user_id == owner_id)
         user_res = await db.execute(user_stmt)
         user = user_res.scalar_one_or_none()
         cover_photo = await get_user_harem_cover(user, db)
@@ -418,20 +447,40 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
             pass
         return
 
-    # 3. Standard bag query
-    # Format: dm_bag_{rarity}_{page}_{sort_by}
-    if len(parts) >= 5:
-        rarity = parts[2]
-        page = int(parts[3])
-        sort_by = parts[4]
+    # 3. Standard bag pagination / view request: dm_bag_{user_id}_{rarity}_{page}_{sort_by}
+    if len(parts) >= 6 and parts[2].isdigit():
+        owner_id = int(parts[2])
+        rarity = parts[3]
+        page = int(parts[4])
+        sort_by = parts[5]
+    elif len(parts) >= 5:
+        if parts[2].isdigit():
+            owner_id = int(parts[2])
+            rarity = parts[3]
+            page = int(parts[4])
+            sort_by = "anime"
+        else:
+            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
+            rarity = parts[2]
+            page = int(parts[3])
+            sort_by = parts[4]
     elif len(parts) == 4:
+        owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
         rarity = parts[2]
         page = int(parts[3])
         sort_by = "anime"
     else:
+        owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
         rarity = "All"
-        page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+        page = 1
         sort_by = "anime"
+
+    if callback.from_user.id != owner_id:
+        try:
+            await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
+        except Exception:
+            pass
+        return
 
     await render_bag_page(owner_id, rarity, page, sort_by, callback.message, db, is_callback=True)
     try:
