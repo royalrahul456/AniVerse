@@ -42,8 +42,7 @@ RARITY_CONFIG = {
     "Rare": {"emoji": "🔵", "weight": 30, "color": "Blue"},
     "Epic": {"emoji": "🟣", "weight": 14, "color": "Purple"},
     "Legendary": {"emoji": "🟡", "weight": 5, "color": "Gold"},
-    "Mythical": {"emoji": "🔴", "weight": 1, "color": "Red"},
-    "Amv": {"emoji": "🎬", "weight": 10, "color": "Purple"}
+    "Mythical": {"emoji": "🔴", "weight": 1, "color": "Red"}
 }
 
 # Telegram Mini App URL (Frontend hosted link)

@@ -33,7 +33,7 @@ def schedule_message_deletion(bot, chat_id: int, message_id: int, delay: int = 1
     asyncio.create_task(_delete())
 
 async def get_random_character(db: AsyncSession, custom_rarity: str = None) -> Character:
-    """Dynamically selects a character from the database weighted by rarity across ALL available characters."""
+    """Dynamically selects a character from the database weighted by spawn-enabled rarities."""
     stmt = select(Character)
     res = await db.execute(stmt)
     characters = res.scalars().all()
@@ -43,23 +43,37 @@ async def get_random_character(db: AsyncSession, custom_rarity: str = None) -> C
     if custom_rarity:
         selected_rarity = custom_rarity.title()
     else:
-        # Base weights from config.RARITY_CONFIG
+        # Base allowed spawn rarities & weights from config.RARITY_CONFIG
         weights_map = {r_name.title(): info["weight"] for r_name, info in config.RARITY_CONFIG.items()}
+        enabled_spawn_rarities = set(weights_map.keys())
 
-        # Merge DB enabled rarities if set
-        db_rar_stmt = select(RarityType).where(RarityType.spawn_enabled == True)
+        # Query custom rarities from DB RarityType table
+        db_rar_stmt = select(RarityType)
         db_rarities = (await db.execute(db_rar_stmt)).scalars().all()
+        
         for dr in db_rarities:
-            weights_map[dr.name.title()] = dr.weight
+            if dr.spawn_enabled:
+                weights_map[dr.name.title()] = dr.weight
+                enabled_spawn_rarities.add(dr.name.title())
+            else:
+                # Explicitly disabled in DB
+                weights_map.pop(dr.name.title(), None)
+                enabled_spawn_rarities.discard(dr.name.title())
 
-        # Available rarities present in database characters
-        available_rarities = list(set(c.rarity.title() for c in characters if c.rarity))
+        # Only select from character rarities present in database that are explicitly enabled
+        available_rarities = [
+            r for r in set(c.rarity.title() for c in characters if c.rarity)
+            if r in enabled_spawn_rarities and weights_map.get(r, 0) > 0
+        ]
+
+        if not available_rarities:
+            available_rarities = list(enabled_spawn_rarities)
 
         choices = []
         weights = []
         for r in available_rarities:
             choices.append(r)
-            weights.append(weights_map.get(r, 10))
+            weights.append(weights_map[r])
 
         selected_rarity = random.choices(choices, weights=weights, k=1)[0]
 
