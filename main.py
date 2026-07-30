@@ -48,6 +48,23 @@ logging.getLogger().addHandler(buf_handler)
 
 async def seed_characters():
     async with AsyncSessionLocal() as session:
+        # Seed base RarityType entries if missing
+        for r_name, r_info in config.RARITY_CONFIG.items():
+            r_stmt = select(RarityType).where(RarityType.name.ilike(r_name))
+            r_res = await session.execute(r_stmt)
+            existing_rarity = r_res.scalar_one_or_none()
+            if not existing_rarity:
+                rarity_item = RarityType(
+                    name=r_name.title(),
+                    emoji=r_info["emoji"],
+                    weight=r_info["weight"],
+                    spawn_enabled=True,
+                    claim_enabled=True,
+                    claim_weight=r_info["weight"]
+                )
+                session.add(rarity_item)
+        await session.commit()
+
         stmt = select(Character)
         res = await session.execute(stmt)
         existing = res.scalars().all()
