@@ -97,6 +97,30 @@ def get_showcase_keyboard(user_id: int, mode: str, page: int, max_page: int) -> 
     builder.row(InlineKeyboardButton(text="🔙 Back to Harem", callback_data=f"dm_bag_{user_id}_All_1_anime"))
     return builder.as_markup()
 
+def get_list_pagination_keyboard(cmd_prefix: str, query_str: str, page: int, max_page: int) -> InlineKeyboardMarkup:
+    """Generates clean Prev/Next inline pagination for /anime and /search."""
+    builder = InlineKeyboardBuilder()
+    nav_row = []
+    prev_page = page - 1 if page > 1 else max_page
+    nav_row.append(InlineKeyboardButton(text="◀️ Prev", callback_data=f"{cmd_prefix}_{query_str}_{prev_page}"))
+    nav_row.append(InlineKeyboardButton(text=f"{page}/{max_page}", callback_data="noop"))
+    next_page = page + 1 if page < max_page else 1
+    nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"{cmd_prefix}_{query_str}_{next_page}"))
+    builder.row(*nav_row)
+    return builder.as_markup()
+
+def get_check_character_keyboard(char_id: int) -> InlineKeyboardMarkup:
+    """Generates the 'Who Has It' button for /check."""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="👥 Who Has It", callback_data=f"who_has_{char_id}"))
+    return builder.as_markup()
+
+def get_check_back_keyboard(char_id: int) -> InlineKeyboardMarkup:
+    """Generates the 'Back' button for /check owners page."""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🔙 Back", callback_data=f"check_back_{char_id}"))
+    return builder.as_markup()
+
 def get_rarity_selection_menu_keyboard(user_id: int, rarity_items: List[Tuple[str, str]], sort_by: str = "anime") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     buttons = []
