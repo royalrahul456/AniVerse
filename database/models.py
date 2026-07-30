@@ -65,6 +65,8 @@ class ActiveSpawn(Base):
     character_id = Column(Integer, ForeignKey("characters.id"), nullable=False)
     spawned_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    character = relationship("Character")
+
 class GroupSettings(Base):
     __tablename__ = "group_settings"
 

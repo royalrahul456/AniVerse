@@ -10,6 +10,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
+from sqlalchemy.orm import joinedload
 import config
 from database.models import User, Character, UserCharacter, GroupSettings, RarityType, BotAdmin, ActiveSpawn
 from utils.formatters import format_blockquote, get_rarity_emoji, escape_html
@@ -420,7 +421,7 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
         nickname = escape_html(message.from_user.first_name if message.from_user else "Trainer")
         guess_lower = guess.strip().lower()
 
-        spawn_stmt = select(ActiveSpawn).where(ActiveSpawn.chat_id == chat_id)
+        spawn_stmt = select(ActiveSpawn).options(joinedload(ActiveSpawn.character)).where(ActiveSpawn.chat_id == chat_id)
         spawn_res = await db.execute(spawn_stmt)
         spawn = spawn_res.scalar_one_or_none()
 
@@ -432,6 +433,10 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
             return
 
         character = spawn.character
+        if not character and spawn.character_id:
+            c_res = await db.execute(select(Character).where(Character.id == spawn.character_id))
+            character = c_res.scalar_one_or_none()
+
         if not character:
             await message.reply("⚠️ Error reading spawned character data.")
             return
