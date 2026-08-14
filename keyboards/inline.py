@@ -83,7 +83,7 @@ def get_harem_sorting_keyboard(user_id: int, rarity: str, page: int, current_sor
     
     builder.row(buttons[0], buttons[1])
     builder.row(buttons[2], buttons[3])
-    builder.row(InlineKeyboardButton(text="{get_emoji('back')} Back to Harem", callback_data=f"dm_bag_{user_id}_{rarity}_{page}_{current_sort}"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Harem", callback_data=f"dm_bag_{user_id}_{rarity}_{page}_{current_sort}"))
     return builder.as_markup()
 
 def get_showcase_keyboard(user_id: int, mode: str, page: int, max_page: int) -> InlineKeyboardMarkup:
@@ -95,7 +95,7 @@ def get_showcase_keyboard(user_id: int, mode: str, page: int, max_page: int) -> 
     next_page = page + 1 if page < max_page else 1
     nav_row.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"harem_{mode}_{user_id}_{next_page}"))
     builder.row(*nav_row)
-    builder.row(InlineKeyboardButton(text="{get_emoji('back')} Back to Harem", callback_data=f"dm_bag_{user_id}_All_1_anime"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Harem", callback_data=f"dm_bag_{user_id}_All_1_anime"))
     return builder.as_markup()
 
 def get_list_pagination_keyboard(cmd_prefix: str, query_str: str, page: int, max_page: int) -> InlineKeyboardMarkup:
@@ -117,9 +117,9 @@ def get_check_character_keyboard(char_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 def get_check_back_keyboard(char_id: int) -> InlineKeyboardMarkup:
-    """Generates the 'Back' button for /check owners page."f""
+    """Generates the 'Back' button for /check owners page."""
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="{get_emoji('back')} Back", callback_data=f"check_back_{char_id}"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back", callback_data=f"check_back_{char_id}"))
     return builder.as_markup()
 
 def get_rarity_selection_menu_keyboard(user_id: int, rarity_items: List[Tuple[str, str]], sort_by: str = "anime") -> InlineKeyboardMarkup:
@@ -129,12 +129,12 @@ def get_rarity_selection_menu_keyboard(user_id: int, rarity_items: List[Tuple[st
         buttons.append(InlineKeyboardButton(text=r_label, callback_data=f"dm_bag_{user_id}_{r_code}_1_{sort_by}"))
     for i in range(0, len(buttons), 2):
         builder.row(*buttons[i:i+2])
-    builder.row(InlineKeyboardButton(text="{get_emoji('back')} Back to Harem", callback_data=f"dm_bag_{user_id}_All_1_{sort_by}"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Harem", callback_data=f"dm_bag_{user_id}_All_1_{sort_by}"))
     return builder.as_markup()
 
 def get_back_to_hub_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
     return builder.as_markup()
 
 def get_profile_keyboard(is_group: bool = False, bot_username: str = None) -> InlineKeyboardMarkup:
@@ -159,12 +159,12 @@ def get_leaderboard_keyboard(current_category: str) -> InlineKeyboardMarkup:
     currency_emoji = getattr(config, "CURRENCY_EMOJI", "🪙")
     categories = [
         ("coins", f"{currency_emoji} Top {currency_name}"),
-        ("catches", "{get_emoji('energy')} Top Snatches"),
-        ("premium", "{get_emoji('crown')} Premium")
+        ("catches", f"{get_emoji('energy')} Top Snatches"),
+        ("premium", f"{get_emoji('crown')} Premium")
     ]
     buttons = []
     for key, label in categories:
-        tick = " {get_emoji('success')}" if current_category.lower() == key else ""
+        tick = f" {get_emoji('success')}" if current_category.lower() == key else ""
         buttons.append(InlineKeyboardButton(text=f"{label}{tick}", callback_data=f"dm_leaderboard_{key}"))
     builder.row(buttons[0], buttons[1])
     builder.row(buttons[2])
