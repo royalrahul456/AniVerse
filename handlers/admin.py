@@ -2445,4 +2445,6 @@ async def cmd_autoemojis(message: Message, db: AsyncSession):
             await message.reply(f"{get_emoji('warning')} Found the pack, but no standard UI emojis ({''.join(DEFAULT_EMOJIS.values())}) matched the stickers inside.")
     except Exception as e:
         await db.rollback()
-        await message.reply(f"{get_emoji('error')} An unexpected database error occurred during mapping:\n\n<code>{e}</code>", parse_mode="HTML")
+        import html
+        safe_error = html.escape(str(e))
+        await message.reply(f"{get_emoji('error')} An unexpected database error occurred during mapping:\n\n<code>{safe_error}</code>", parse_mode="HTML")
