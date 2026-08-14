@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import random
 import math
 import datetime
@@ -119,7 +120,7 @@ async def cmd_fav(message: Message, db: AsyncSession):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip().isdigit():
         await message.reply(
-            "⚠️ <b>Usage Format:</b> <code>/fav &lt;character_id&gt;</code>\n\n"
+            f"{get_emoji('warning')} <b>Usage Format:</b> <code>/fav &lt;character_id&gt;</code>\n\n"
             + format_blockquote("Please provide only the numeric character ID!\n<b>Example:</b> <code>/fav 1</code>"),
             parse_mode="HTML"
         )
@@ -133,7 +134,7 @@ async def cmd_fav(message: Message, db: AsyncSession):
     item = res.first()
 
     if not item:
-        await message.reply(f"❌ You don't own any character with ID <b>#{char_id}</b> in your harem!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You don't own any character with ID <b>#{char_id}</b> in your harem!", parse_mode="HTML")
         return
 
     uc, char = item
@@ -144,8 +145,8 @@ async def cmd_fav(message: Message, db: AsyncSession):
     card = (
         f"🌟 <b>FAVORITE HAREM CHARACTER UPDATED!</b> 🌟\n\n"
         + format_blockquote(
-            f"🆔 <b>ID:</b> #{char.id}\n"
-            f"👤 <b>Favorite:</b> <b>{escape_html(char.name)}</b> [{char.anime}]\n"
+            f"{get_emoji('id')} <b>ID:</b> #{char.id}\n"
+            f"{get_emoji('user')} <b>Favorite:</b> <b>{escape_html(char.name)}</b> [{char.anime}]\n"
             f"{r_emoji} <b>Rarity:</b> {r_emoji} {char.rarity}\n\n"
             f"🖼️ This character's photo will now be used as your custom <b>Harem Cover Banner</b>!"
         )
@@ -162,7 +163,7 @@ async def cmd_fav(message: Message, db: AsyncSession):
 async def build_profile_card(user: User, db: AsyncSession) -> str:
     THEME_CONFIGS = {
         "default": {
-            "top_border": "╭──「 🏆 Profile 」",
+            "top_border": f"╭──「 {get_emoji('trophy')} Profile 」",
             "bullet": "├─➩",
             "progress_filled": "▰",
             "progress_empty": "▱",
@@ -186,8 +187,8 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
             "prem_footer": "╰───────────────────"
         },
         "gold": {
-            "top_border": "╭───「 👑 Gold VIP Profile 」───╮",
-            "bullet": "├─👑",
+            "top_border": f"╭───「 {get_emoji('crown')} Gold VIP Profile 」───╮",
+            "bullet": f"├─{get_emoji('crown')}",
             "progress_filled": "🪙",
             "progress_empty": "🔸",
             "rarity_header": "╭─ Rarity Breakdown ─",
@@ -306,26 +307,26 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
         delta = user.premium_until - now
         days = delta.days
         hours = delta.seconds // 3600
-        premium_line = f"{bullet} 👑 Premium Active ({days}d {hours}h left)"
+        premium_line = f"{bullet} {get_emoji('crown')} Premium Active ({days}d {hours}h left)"
         tag_line = f"{bullet} 🏷️ Tag: {escape_html(user.premium_tag or 'None')}"
     else:
-        premium_line = f"{bullet} ❌ Premium Inactive"
+        premium_line = f"{bullet} {get_emoji('error')} Premium Inactive"
         tag_line = f"{bullet} 🏷️ Tag: None"
 
     card = (
         f"{cfg['top_border']}\n"
         f"{bullet} 🏓 User: {escape_html(user.first_name)}\n"
-        f"{bullet} 🆔 ID: {user.user_id}\n"
-        f"{bullet} 💰 Balance: {user.coins:,}\n"
-        f"{bullet} ⚡ Characters: {unique_owned} (Total Snatches: {total_snatches})\n"
+        f"{bullet} {get_emoji('id')} ID: {user.user_id}\n"
+        f"{bullet} {get_emoji('coin')} Balance: {user.coins:,}\n"
+        f"{bullet} {get_emoji('energy')} Characters: {unique_owned} (Total Snatches: {total_snatches})\n"
         f"{bullet} 🌍 Harem: {unique_owned}/{total_db_chars} ({harem_pct:.3f}%)\n"
-        f"{bullet} 🎁 Progress:\n"
+        f"{bullet} {get_emoji('gift')} Progress:\n"
         f"╰         {progress_bar}\n\n"
         f"{cfg['rarity_header']}\n"
         f"{breakdown_text}\n"
         f"{cfg['rarity_footer']}\n\n"
         f"{cfg['rank_header']}\n"
-        f"{bullet} 🏆 Position: #{position}\n"
+        f"{bullet} {get_emoji('trophy')} Position: #{position}\n"
         f"{cfg['rank_footer']}\n"
         f"{cfg['prem_header']}\n"
         f"{premium_line}\n"
@@ -388,7 +389,7 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
 
         if callback.from_user.id != owner_id:
             try:
-                await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
+                await callback.answer(f"{get_emoji('warning')} This is not your harem! Use /harem to view yours.", show_alert=True)
             except Exception:
                 pass
             return
@@ -425,7 +426,7 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
 
         if callback.from_user.id != owner_id:
             try:
-                await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
+                await callback.answer(f"{get_emoji('warning')} This is not your harem! Use /harem to view yours.", show_alert=True)
             except Exception:
                 pass
             return
@@ -477,7 +478,7 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
 
     if callback.from_user.id != owner_id:
         try:
-            await callback.answer("⚠️ This is not your harem! Use /harem to view yours.", show_alert=True)
+            await callback.answer(f"{get_emoji('warning')} This is not your harem! Use /harem to view yours.", show_alert=True)
         except Exception:
             pass
         return
@@ -494,7 +495,7 @@ async def render_bag_page(user_id: int, rarity: str, page: int, sort_by: str, me
     user = u_res.scalar_one_or_none()
     
     owner_name = escape_html(user.first_name) if (user and user.first_name) else "Trainer"
-    owner_header = f'⭐ <b><a href="tg://user?id={user_id}">{owner_name}</a>\'s Harem</b> ⭐'
+    owner_header = f'⭐ <b><a href="tg://user?id={user_id}">{owner_name}</a>\'s Harem</b> ⭐f'
     cover_photo = await get_user_harem_cover(user, db)
 
     stmt = (
@@ -592,7 +593,7 @@ async def cb_harem_showcase(callback: CallbackQuery, db: AsyncSession):
     # Ownership check — user_id is embedded directly in the callback data
     if callback.from_user.id != user_id:
         try:
-            await callback.answer("⚠️ This is not your showcase! Use /harem to view yours.", show_alert=True)
+            await callback.answer("{get_emoji('warning')} This is not your showcase! Use /harem to view yours.", show_alert=True)
         except Exception:
             pass
         return
@@ -634,11 +635,11 @@ async def render_harem_showcase(user_id: int, mode: str, page: int, message_obj,
     from utils.formatters import get_clean_name
     text = (
         f"{title_header} ({page}/{total_items})\n"
-        f"👤 <b>Owner:</b> <a href=\"tg://user?id={user_id}\">{owner_name}</a>\n\n"
+        f"{get_emoji('user')} <b>Owner:</b> <a href=\"tg://user?id={user_id}\">{owner_name}</a>\n\n"
         + format_blockquote(
             f"🌟 <b>Name:</b> {escape_html(char.name)}\n"
-            f"🆔 <b>ID:</b> #{char.id}\n"
-            f"📺 <b>Anime:</b> {escape_html(char.anime)}\n"
+            f"{get_emoji('id')} <b>ID:</b> #{char.id}\n"
+            f"{get_emoji('tv')} <b>Anime:</b> {escape_html(char.anime)}\n"
             f"🎬 <b>Rarity:</b> {r_emoji} {char.rarity}\n"
             f"📦 <b>Copies Owned:</b> ×{u_cnt}"
         )
@@ -650,7 +651,7 @@ async def render_harem_showcase(user_id: int, mode: str, page: int, message_obj,
 async def cmd_check(message: Message, db: AsyncSession):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("⚠️ <b>Usage:</b>\n👉 <code>/check &lt;id&gt;</code> to view details\n👉 <code>/search &lt;name&gt;</code> (or <code>/cid &lt;name&gt;</code>) to view variants list", parse_mode="HTML")
+        await message.reply("{get_emoji('warning')} <b>Usage:</b>\n{get_emoji('pointer')} <code>/check &lt;id&gt;</code> to view details\n{get_emoji('pointer')} <code>/search &lt;name&gt;</code> (or <code>/cid &lt;name&gt;</code>) to view variants list", parse_mode="HTML")
         return
     query_str = parts[1].strip()
     from utils.formatters import get_clean_name
@@ -662,7 +663,7 @@ async def cmd_check(message: Message, db: AsyncSession):
         character = res.scalar_one_or_none()
 
         if not character:
-            await message.reply(f"❌ No character found with ID #{query_str}!", parse_mode="HTML")
+            await message.reply(f"{get_emoji('error')} No character found with ID #{query_str}!", parse_mode="HTML")
             return
 
         r_emoji = get_rarity_emoji(character.rarity)
@@ -670,8 +671,8 @@ async def cmd_check(message: Message, db: AsyncSession):
         card = (
             f"👾 <b>Character Info</b>\n\n"
             + format_blockquote(
-                f"🆔 <b>ID:</b> {character.id}\n"
-                f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
+                f"{get_emoji('id')} <b>ID:</b> {character.id}\n"
+                f"{get_emoji('no_entry')} <b>Name:</b> {escape_html(character.name)}\n"
                 f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
                 f"🎬 <b>Rarity:</b> {r_emoji} {character.rarity}"
             )
@@ -696,7 +697,7 @@ async def cmd_check(message: Message, db: AsyncSession):
         matches = res.scalars().all()
 
         if not matches:
-            await message.reply(f"❌ No character found matching '{escape_html(query_str)}'!", parse_mode="HTML")
+            await message.reply(f"{get_emoji('error')} No character found matching '{escape_html(query_str)}'!", parse_mode="HTML")
             return
         base_name = get_clean_name(matches[0].name)
         anime = matches[0].anime
@@ -792,7 +793,7 @@ async def cb_cid_page(callback: CallbackQuery, db: AsyncSession):
             variants.append(c)
     variants.sort(key=lambda x: x.id)
     if not variants:
-        await callback.answer("❌ No variants found.", show_alert=True)
+        await callback.answer("{get_emoji('error')} No variants found.", show_alert=True)
         return
 
     anime = variants[0].anime
@@ -848,7 +849,7 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
     char_res = await db.execute(char_stmt)
     character = char_res.scalar_one_or_none()
     if not character:
-        await callback.answer("❌ Character not found.", show_alert=True)
+        await callback.answer("{get_emoji('error')} Character not found.", show_alert=True)
         return
 
     stmt = (
@@ -864,7 +865,7 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
 
     if not rows:
         try:
-            await callback.answer("❌ Nobody owns this character yet!", show_alert=True)
+            await callback.answer("{get_emoji('error')} Nobody owns this character yet!", show_alert=True)
         except Exception:
             pass
         return
@@ -899,15 +900,15 @@ async def cb_check_back(callback: CallbackQuery, db: AsyncSession):
     char_res = await db.execute(char_stmt)
     character = char_res.scalar_one_or_none()
     if not character:
-        await callback.answer("❌ Character not found.", show_alert=True)
+        await callback.answer("{get_emoji('error')} Character not found.", show_alert=True)
         return
 
     r_emoji = get_rarity_emoji(character.rarity)
     card = (
         f"👾 <b>Character Info</b>\n\n"
         + format_blockquote(
-            f"🆔 <b>ID:</b> {character.id}\n"
-            f"⛔ <b>Name:</b> {escape_html(character.name)}\n"
+            f"{get_emoji('id')} <b>ID:</b> {character.id}\n"
+            f"{get_emoji('no_entry')} <b>Name:</b> {escape_html(character.name)}\n"
             f"🍿 <b>Anime:</b> {escape_html(character.anime)}\n"
             f"🎬 <b>Rarity:</b> {r_emoji} {character.rarity}"
         )
@@ -932,7 +933,7 @@ async def cb_check_back(callback: CallbackQuery, db: AsyncSession):
 async def cmd_anime(message: Message, db: AsyncSession):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("⚠️ <b>Usage:</b> <code>/anime &lt;anime_name&gt;</code>\n<i>Example: /anime Wuthering Waves</i>", parse_mode="HTML")
+        await message.reply("{get_emoji('warning')} <b>Usage:</b> <code>/anime &lt;anime_name&gt;</code>\n<i>Example: /anime Wuthering Waves</i>", parse_mode="HTML")
         return
     query_str = parts[1].strip()
     await render_anime_list(query_str, 1, message, db, is_callback=False)
@@ -954,7 +955,7 @@ async def render_anime_list(query_str: str, page: int, message_obj, db: AsyncSes
     characters = res.scalars().all()
 
     if not characters:
-        text = f"❌ No anime shows found matching <b>{escape_html(query_str)}</b>!"
+        text = f"{get_emoji('error')} No anime shows found matching <b>{escape_html(query_str)}</b>!"
         if is_callback:
             await message_obj.edit_text(text, parse_mode="HTML")
         else:
@@ -994,7 +995,7 @@ async def cmd_claim(message: Message, db: AsyncSession):
         official_chat_id = getattr(config, "OFFICIAL_CHAT_ID", None)
         if official_chat_id and message.chat.id != official_chat_id:
             await message.reply(
-                "❌ <b>Daily Free Roll Restriction</b>\n\n"
+                "{get_emoji('error')} <b>Daily Free Roll Restriction</b>\n\n"
                 "You can only use the <code>/claim</code> command in our <b>Official Group Chat</b>!\n"
                 f"<i>(Current Chat ID: <code>{message.chat.id}</code>, Expected: <code>{official_chat_id}</code>)</i>",
                 parse_mode="HTML"
@@ -1031,7 +1032,7 @@ async def cmd_claim(message: Message, db: AsyncSession):
     characters = res.scalars().all()
     
     if not characters:
-        await message.reply("⚠️ No characters with active claim rarities are currently available in the database.")
+        await message.reply("{get_emoji('warning')} No characters with active claim rarities are currently available in the database.")
         return
  
     # 5. Fetch weights of active rarities from RarityType
@@ -1044,12 +1045,12 @@ async def cmd_claim(message: Message, db: AsyncSession):
     active_rarities = [r for r in rarity_list if r.name.lower() in char_rarity_set]
  
     if not active_rarities:
-        await message.reply("⚠️ No characters are currently available for any active claim rarities.")
+        await message.reply("{get_emoji('warning')} No characters are currently available for any active claim rarities.")
         return
  
     total_weight = sum(r.claim_weight for r in active_rarities)
     if total_weight <= 0:
-        await message.reply("⚠️ Total claim probability weight is 0. Cannot claim.")
+        await message.reply("{get_emoji('warning')} Total claim probability weight is 0. Cannot claim.")
         return
  
     # Select rarity first based strictly on claim weights
@@ -1076,13 +1077,13 @@ async def cmd_claim(message: Message, db: AsyncSession):
     chance_pct = (chosen_rarity.claim_weight / total_weight) * 100
  
     card = (
-        f"✨ <b>CONGRATS {escape_html(message.from_user.first_name.upper())}!</b>\n\n"
+        f"{get_emoji('sparkle')} <b>CONGRATS {escape_html(message.from_user.first_name.upper())}!</b>\n\n"
         + format_blockquote(
             f"📛 <b>Name:</b> {escape_html(character.name)}\n"
-            f"💎 <b>Rarity:</b> {r_emoji} {character.rarity}\n"
-            f"⚡ <b>Chance:</b> {chance_pct:.2f}%\n"
-            f"📺 <b>Anime:</b> {escape_html(character.anime)}\n"
-            f"🆔 <b>ID:</b> #{character.id:03d}\n\n"
+            f"{get_emoji('gem')} <b>Rarity:</b> {r_emoji} {character.rarity}\n"
+            f"{get_emoji('energy')} <b>Chance:</b> {chance_pct:.2f}%\n"
+            f"{get_emoji('tv')} <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"{get_emoji('id')} <b>ID:</b> #{character.id:03d}\n\n"
             f"⏳ <i>Resets daily at 5:30 AM IST</i>"
         )
     )
@@ -1108,7 +1109,7 @@ async def cmd_claimchance(message: Message, db: AsyncSession):
     characters = res.scalars().all()
     
     if not characters:
-        await message.reply("⚠️ No characters with active claim rarities are currently available in the database.")
+        await message.reply("{get_emoji('warning')} No characters with active claim rarities are currently available in the database.")
         return
  
     stmt_rarities = select(RarityType).where(RarityType.claim_enabled == True)
@@ -1120,12 +1121,12 @@ async def cmd_claimchance(message: Message, db: AsyncSession):
     active_rarities = [r for r in rarity_list if r.name.lower() in char_rarity_set]
  
     if not active_rarities:
-        await message.reply("⚠️ No characters are currently available for any active claim rarities.")
+        await message.reply("{get_emoji('warning')} No characters are currently available for any active claim rarities.")
         return
  
     total_weight = sum(r.claim_weight for r in active_rarities)
     if total_weight <= 0:
-        await message.reply("⚠️ Total claim probability weight is 0. Cannot compute claim chances.")
+        await message.reply("{get_emoji('warning')} Total claim probability weight is 0. Cannot compute claim chances.")
         return
         
     lines = []
@@ -1174,7 +1175,7 @@ async def render_leaderboard(category: str, message_obj, db: AsyncSession, is_ca
     currency_emoji = getattr(config, "CURRENCY_EMOJI", "🪙")
 
     if category == "catches":
-        header = "⚡ <b>TOP SNATCHES LEADERBOARD</b> ⚡"
+        header = "{get_emoji('energy')} <b>TOP SNATCHES LEADERBOARD</b> {get_emoji('energy')}"
         stmt = select(User).order_by(desc(User.total_catches)).limit(10)
         res = await db.execute(stmt)
         top_users = res.scalars().all()
@@ -1184,7 +1185,7 @@ async def render_leaderboard(category: str, message_obj, db: AsyncSession, is_ca
             lines.append(f"{icon} <b>{escape_html(name_str)}</b> — <code>{u.total_catches:,} catches</code>")
         
     elif category == "premium":
-        header = "👑 <b>PREMIUM MEMBERS LEADERBOARD</b> 👑"
+        header = "{get_emoji('crown')} <b>PREMIUM MEMBERS LEADERBOARD</b> {get_emoji('crown')}"
         now = datetime.datetime.utcnow()
         stmt = select(User).where(User.premium_until > now).order_by(User.premium_until).limit(10)
         res = await db.execute(stmt)
@@ -1243,10 +1244,10 @@ async def cmd_settheme(message: Message, db: AsyncSession):
     unlocked = [t.strip().lower() for t in (user.unlocked_themes or "default").split(",") if t.strip()]
 
     theme_details = {
-        "default": {"name": "Default Theme", "emoji": "🏆"},
+        "default": {"name": "Default Theme", "emoji": "{get_emoji('trophy')}"},
         "sakura": {"name": "Sakura Theme", "emoji": "🌸"},
         "cosmic": {"name": "Cosmic Theme", "emoji": "🌌"},
-        "gold": {"name": "Gold VIP Theme", "emoji": "👑"},
+        "gold": {"name": "Gold VIP Theme", "emoji": "{get_emoji('crown')}"},
         "dark": {"name": "Dark Knight Theme", "emoji": "🦇"},
         "cyber": {"name": "Neon Cyber Theme", "emoji": "👾"},
         "phoenix": {"name": "Phoenix Theme", "emoji": "🐦‍🔥"}
@@ -1256,7 +1257,7 @@ async def cmd_settheme(message: Message, db: AsyncSession):
         "🎨 <b>Choose Your Trainer Profile Theme</b>\n\n"
         + format_blockquote(
             "Select one of your unlocked profile card themes below to apply it dynamically to your profile card!\n\n"
-            f"✨ <b>Active Theme:</b> {theme_details.get(user.selected_theme or 'default', theme_details['default'])['name']}"
+            f"{get_emoji('sparkle')} <b>Active Theme:</b> {theme_details.get(user.selected_theme or 'default', theme_details['default'])['name']}"
         )
     )
 
@@ -1270,7 +1271,7 @@ async def cmd_settheme(message: Message, db: AsyncSession):
             label = f"🔒 {info['name']} (Lock)"
             builder.row(InlineKeyboardButton(text=label, callback_data="noop"))
     builder.row(
-        InlineKeyboardButton(text="🔙 Back to Profile", callback_data="dm_profile"),
+        InlineKeyboardButton(text="{get_emoji('back')} Back to Profile", callback_data="dm_profile"),
         InlineKeyboardButton(text="🏠 Hub", callback_data="dm_home")
     )
 
@@ -1282,10 +1283,10 @@ async def cb_themes_menu(callback: CallbackQuery, db: AsyncSession):
     unlocked = [t.strip().lower() for t in (user.unlocked_themes or "default").split(",") if t.strip()]
 
     theme_details = {
-        "default": {"name": "Default Theme", "emoji": "🏆"},
+        "default": {"name": "Default Theme", "emoji": "{get_emoji('trophy')}"},
         "sakura": {"name": "Sakura Theme", "emoji": "🌸"},
         "cosmic": {"name": "Cosmic Theme", "emoji": "🌌"},
-        "gold": {"name": "Gold VIP Theme", "emoji": "👑"},
+        "gold": {"name": "Gold VIP Theme", "emoji": "{get_emoji('crown')}"},
         "dark": {"name": "Dark Knight Theme", "emoji": "🦇"},
         "cyber": {"name": "Neon Cyber Theme", "emoji": "👾"},
         "phoenix": {"name": "Phoenix Theme", "emoji": "🐦‍🔥"}
@@ -1295,7 +1296,7 @@ async def cb_themes_menu(callback: CallbackQuery, db: AsyncSession):
         "🎨 <b>Choose Your Trainer Profile Theme</b>\n\n"
         + format_blockquote(
             "Select one of your unlocked profile card themes below to apply it dynamically to your profile card!\n\n"
-            f"✨ <b>Active Theme:</b> {theme_details.get(user.selected_theme or 'default', theme_details['default'])['name']}"
+            f"{get_emoji('sparkle')} <b>Active Theme:</b> {theme_details.get(user.selected_theme or 'default', theme_details['default'])['name']}"
         )
     )
 
@@ -1309,7 +1310,7 @@ async def cb_themes_menu(callback: CallbackQuery, db: AsyncSession):
             label = f"🔒 {info['name']} (Lock)"
             builder.row(InlineKeyboardButton(text=label, callback_data="noop"))
     builder.row(
-        InlineKeyboardButton(text="🔙 Back to Profile", callback_data="dm_profile"),
+        InlineKeyboardButton(text="{get_emoji('back')} Back to Profile", callback_data="dm_profile"),
         InlineKeyboardButton(text="🏠 Hub", callback_data="dm_home")
     )
 
@@ -1324,19 +1325,19 @@ async def cb_set_theme(callback: CallbackQuery, db: AsyncSession):
     unlocked = [t.strip().lower() for t in (user.unlocked_themes or "default").split(",") if t.strip()]
 
     if theme_key not in unlocked:
-        await callback.answer("❌ You haven't unlocked this theme yet!", show_alert=True)
+        await callback.answer("{get_emoji('error')} You fhaven't unlocked this theme yet!", show_alert=True)
         return
 
     user.selected_theme = theme_key
     await db.commit()
 
-    await callback.answer(f"✅ Applied theme successfully!", show_alert=True)
+    await callback.answer(f"{get_emoji('fsuccess')} Applied theme successfully!", show_alert=True)
     
     theme_details = {
-        "default": {"name": "Default Theme", "emoji": "🏆"},
+        "default": {"name": "Default Theme", "emoji": "{get_emoji('ftrophy')}"},
         "sakura": {"name": "Sakura Theme", "emoji": "🌸"},
         "cosmic": {"name": "Cosmic Theme", "emoji": "🌌"},
-        "gold": {"name": "Gold VIP Theme", "emoji": "👑"},
+        "gold": {"name": "Gold VIP Theme", "emoji": "{get_emoji('fcrown')}"},
         "dark": {"name": "Dark Knight Theme", "emoji": "🦇"},
         "cyber": {"name": "Neon Cyber Theme", "emoji": "👾"},
         "phoenix": {"name": "Phoenix Theme", "emoji": "🐦‍🔥"}
@@ -1345,7 +1346,7 @@ async def cb_set_theme(callback: CallbackQuery, db: AsyncSession):
         "🎨 <b>Choose Your Trainer Profile Theme</b>\n\n"
         + format_blockquote(
             "Select one of your unlocked profile card themes below to apply it dynamically to your profile card!\n\n"
-            f"✨ <b>Active Theme:</b> {theme_details.get(user.selected_theme or 'default', theme_details['default'])['name']}"
+            f"{get_emoji('sparkle')} <b>Active Theme:</b> {theme_details.get(user.selected_theme or 'default', theme_details['default'])['name']}"
         )
     )
 
@@ -1356,10 +1357,10 @@ async def cb_set_theme(callback: CallbackQuery, db: AsyncSession):
             label = f"{info['emoji']} {info['name']}" + (" (Active)" if is_active else "")
             builder.row(InlineKeyboardButton(text=label, callback_data=f"set_theme_{key}"))
         else:
-            label = f"🔒 {info['name']} (Lock)"
+            label = f"🔒 {info['fname']} (Lock)"
             builder.row(InlineKeyboardButton(text=label, callback_data="noop"))
     builder.row(
-        InlineKeyboardButton(text="🔙 Back to Profile", callback_data="dm_profile"),
+        InlineKeyboardButton(text="{get_emoji('fback')} Back to Profile", callback_data="dm_profile"),
         InlineKeyboardButton(text="🏠 Hub", callback_data="dm_home")
     )
 
@@ -1378,23 +1379,23 @@ async def cmd_pay(message: Message, db: AsyncSession):
     
     if message.reply_to_message:
         if len(parts) < 2:
-            await message.reply("⚠️ <b>Usage:</b> Reply to someone with <code>/pay &lt;amount&gt;</code>", parse_mode="HTML")
+            await message.reply("{get_emoji('fwarning')} <b>Usage:</b> Reply to someone with <code>/pay &lt;amount&gt;</code>", parse_mode="HTML")
             return
         amount_str = parts[1]
         if not amount_str.isdigit():
-            await message.reply("❌ Amount must be a valid positive number.")
+            await message.reply("{get_emoji('ferror')} Amount must be a valid positive number.")
             return
         amount = int(amount_str)
         target_user_id = message.reply_to_message.from_user.id
         target_name = message.reply_to_message.from_user.first_name
     else:
         if len(parts) < 3:
-            await message.reply("⚠️ <b>Usage:</b> <code>/pay &lt;@username or user_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
+            await message.reply("{get_emoji('fwarning')} <b>Usage:</b> <code>/pay &lt;@username or user_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
             return
         target_str = parts[1].strip()
         amount_str = parts[2].strip()
         if not amount_str.isdigit():
-            await message.reply("❌ Amount must be a valid positive number.")
+            await message.reply("{get_emoji('ferror')} Amount must be a valid positive number.")
             return
         amount = int(amount_str)
         
@@ -1409,24 +1410,24 @@ async def cmd_pay(message: Message, db: AsyncSession):
                 target_user_id = target_user.user_id
                 target_name = target_user.first_name
             else:
-                await message.reply(f"❌ Trainer with username <b>{target_str}</b> not found in bot database.", parse_mode="HTML")
+                await message.reply(f"{get_emoji('ferror')} Trainer with username <b>{target_str}</b> not found in bot database.", parse_mode="HTML")
                 return
         else:
-            await message.reply("❌ Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            await message.reply("{get_emoji('ferror')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
     if amount <= 0:
-        await message.reply("❌ Amount must be greater than 0.")
+        await message.reply("{get_emoji('ferror')} Amount must be greater than 0.")
         return
 
     sender_id = message.from_user.id
     if sender_id == target_user_id:
-        await message.reply("❌ You cannot pay yourself!")
+        await message.reply("{get_emoji('ferror')} You cannot pay yourself!")
         return
 
     sender = await get_or_create_user(db, sender_id, message.from_user.username, message.from_user.first_name)
     if sender.coins < amount:
-        await message.reply(f"❌ You do not have enough coins! Your balance: <b>{sender.coins:,}</b> Coins.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('ferror')} You do not have enough coins! Your balance: <b>{sender.coins:,}</b> Coins.", parse_mode="HTML")
         return
 
     target = None
@@ -1436,7 +1437,7 @@ async def cmd_pay(message: Message, db: AsyncSession):
         target = res.scalar_one_or_none()
 
     if not target:
-        await message.reply("❌ Target trainer not found in bot database.")
+        await message.reply("{get_emoji('ferror')} Target trainer not found in bot database.")
         return
 
     sender.coins -= amount
@@ -1449,9 +1450,9 @@ async def cmd_pay(message: Message, db: AsyncSession):
     text = (
         "💸 <b>COIN TRANSFER SUCCESSFUL!</b>\n\n"
         + format_blockquote(
-            f"👤 <b>Sender:</b> {sender_name}\n"
-            f"👤 <b>Recipient:</b> {target_first_name}\n"
-            f"💰 <b>Amount:</b> {amount:,} Coins\n\n"
+            f"{get_emoji('fuser')} <b>Sender:</b> {sender_name}\n"
+            f"{get_emoji('fuser')} <b>Recipient:</b> {target_first_name}\n"
+            f"{get_emoji('fcoin')} <b>Amount:</b> {amount:,} Coins\n\n"
             f"💳 <b>Your New Balance:</b> {sender.coins:,} Coins"
         )
     )
@@ -1481,21 +1482,21 @@ async def cmd_balance(message: Message, db: AsyncSession):
                     target_user_id = user_obj.user_id
                     is_self = (target_user_id == message.from_user.id)
                 else:
-                    await message.reply(f"❌ Trainer <b>{target_str}</b> not found.", parse_mode="HTML")
+                    await message.reply(f"{get_emoji('ferror')} Trainer <b>{target_str}</b> not found.", parse_mode="HTML")
                     return
 
     user = await get_or_create_user(db, target_user_id, None, None)
     if not user:
-        await message.reply("❌ Trainer not found in database.")
+        await message.reply("{get_emoji('error')} Trainer not found in database.")
         return
 
     name = "Your" if is_self else f"<b>{escape_html(user.first_name)}</b>'s"
     text = (
         f"💳 <b>BALANCE INQUIRY</b>\n\n"
         + format_blockquote(
-            f"👤 <b>Trainer:</b> {escape_html(user.first_name)}\n"
-            f"💰 <b>Coins:</b> {user.coins:,} Coins\n"
-            f"🏆 <b>Total Catches:</b> {user.total_catches:,} characters"
+            f"{get_emoji('user')} <b>Trainer:</b> {escape_html(user.first_name)}\n"
+            f"{get_emoji('coin')} <b>Coins:</b> {user.coins:,} Coins\n"
+            f"{get_emoji('trophy')} <b>Total Catches:</b> {user.total_catches:,} characters"
         )
     )
     await message.reply(text, parse_mode="HTML")
@@ -1509,22 +1510,22 @@ async def cmd_gift(message: Message, db: AsyncSession):
     
     if message.reply_to_message:
         if len(parts) < 2:
-            await message.reply("⚠️ <b>Usage:</b> Reply to someone with <code>/gift &lt;character_id&gt;</code>", parse_mode="HTML")
+            await message.reply("{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/gift &lt;character_id&gt;</code>", parse_mode="HTML")
             return
         char_str = parts[1]
         if not char_str.isdigit():
-            await message.reply("❌ Character ID must be a number.")
+            await message.reply("{get_emoji('error')} Character ID must be a number.")
             return
         char_id = int(char_str)
         target_user_id = message.reply_to_message.from_user.id
     else:
         if len(parts) < 3:
-            await message.reply("⚠️ <b>Usage:</b> <code>/gift &lt;@username or user_id&gt; &lt;character_id&gt;</code>", parse_mode="HTML")
+            await message.reply("{get_emoji('warning')} <b>Usage:</b> <code>/gift &lt;@username or user_id&gt; &lt;character_id&gt;</code>", parse_mode="HTML")
             return
         target_str = parts[1].strip()
         char_str = parts[2].strip()
         if not char_str.isdigit():
-            await message.reply("❌ Character ID must be a number.")
+            await message.reply("{get_emoji('error')} Character ID must be a number.")
             return
         char_id = int(char_str)
         
@@ -1538,22 +1539,22 @@ async def cmd_gift(message: Message, db: AsyncSession):
             if target_user:
                 target_user_id = target_user.user_id
             else:
-                await message.reply(f"❌ Trainer with username <b>{target_str}</b> not found.", parse_mode="HTML")
+                await message.reply(f"{get_emoji('error')} Trainer with username <b>{target_str}</b> not found.", parse_mode="HTML")
                 return
         else:
-            await message.reply("❌ Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            await message.reply("{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
     sender_id = message.from_user.id
     if sender_id == target_user_id:
-        await message.reply("❌ You cannot gift a character to yourself!")
+        await message.reply("{get_emoji('error')} You cannot gift a character to yourself!")
         return
 
     char_stmt = select(Character).where(Character.id == char_id)
     char_res = await db.execute(char_stmt)
     character = char_res.scalar_one_or_none()
     if not character:
-        await message.reply(f"❌ Character ID #{char_id} not found in database.")
+        await message.reply(f"{get_emoji('error')} Character ID #{char_id} not found in database.")
         return
 
     uc_stmt = select(UserCharacter).where(UserCharacter.user_id == sender_id, UserCharacter.character_id == char_id).limit(1)
@@ -1561,12 +1562,12 @@ async def cmd_gift(message: Message, db: AsyncSession):
     sender_uc = uc_res.scalar_one_or_none()
     
     if not sender_uc:
-        await message.reply(f"❌ You do not own character <b>{escape_html(character.name)}</b>!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You do not own character <b>{escape_html(character.name)}</b>!", parse_mode="HTML")
         return
 
     target_user = await get_or_create_user(db, target_user_id, None, None)
     if not target_user:
-        await message.reply("❌ Target trainer not found.")
+        await message.reply("{get_emoji('error')} Target trainer not found.")
         return
 
     sender_uc.user_id = target_user_id
@@ -1577,13 +1578,13 @@ async def cmd_gift(message: Message, db: AsyncSession):
     target_name = escape_html(target_user.first_name)
     
     text = (
-        "🎁 <b>CHARACTER GIFTED SUCCESSFUL!</b>\n\n"
+        "{get_emoji('gift')} <b>CHARACTER GIFTED SUCCESSFUL!</b>\n\n"
         + format_blockquote(
-            f"👤 <b>From:</b> {sender_name}\n"
-            f"👤 <b>To:</b> {target_name}\n\n"
+            f"{get_emoji('user')} <b>From:</b> {sender_name}\n"
+            f"{get_emoji('user')} <b>To:</b> {target_name}\n\n"
             f"👾 <b>Character:</b> {escape_html(character.name)}\n"
-            f"💎 <b>Rarity:</b> {r_emoji} {character.rarity}\n"
-            f"🆔 <b>ID:</b> #{character.id}"
+            f"{get_emoji('gem')} <b>Rarity:</b> {r_emoji} {character.rarity}\n"
+            f"{get_emoji('id')} <b>ID:</b> #{character.id}"
         )
     )
     

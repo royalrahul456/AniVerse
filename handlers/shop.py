@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputMediaVideo
@@ -17,7 +18,7 @@ router = Router()
 THEMES = {
     "sakura": {"name": "Sakura Theme", "price": 50000, "emoji": "🌸", "description": "Beautiful pink sakura blossoms and pink frame accents."},
     "cosmic": {"name": "Cosmic Theme", "price": 75000, "emoji": "🌌", "description": "Starry space aesthetics with celestial frame accents."},
-    "gold": {"name": "Gold VIP Theme", "price": 100000, "emoji": "👑", "description": "Shining gold crown borders and golden frame accents."},
+    "gold": {"name": "Gold VIP Theme", "price": 100000, "emoji": f"{get_emoji('crown')}", "description": "Shining gold crown borders and golden frame accents."},
     "dark": {"name": "Dark Knight Theme", "price": 120000, "emoji": "🦇", "description": "Dark gothic aesthetic with bat accents and black frame."},
     "cyber": {"name": "Neon Cyber Theme", "price": 150000, "emoji": "👾", "description": "Vibrant neon cyan and purple futuristic grid design."},
     "phoenix": {"name": "Phoenix Theme", "price": 200000, "emoji": "🐦‍🔥", "description": "Blazing fire crimson borders and phoenix emblem accents."}
@@ -72,7 +73,7 @@ async def cmd_shop(event, db: AsyncSession):
             "Give your trainer profile card a premium aesthetic makeover! Once purchased, you can apply themes using the <code>/settheme</code> command or from your profile.\n\n"
             f"🌸 <b>Sakura Theme:</b> 50,000 {config.CURRENCY_NAME} (50k)\n"
             f"🌌 <b>Cosmic Theme:</b> 75,000 {config.CURRENCY_NAME} (75k)\n"
-            f"👑 <b>Gold VIP Theme:</b> 100,000 {config.CURRENCY_NAME} (100k)\n"
+            f"{get_emoji('crown')} <b>Gold VIP Theme:</b> 100,000 {config.CURRENCY_NAME} (100k)\n"
             f"🦇 <b>Dark Knight Theme:</b> 120,000 {config.CURRENCY_NAME} (120k)\n"
             f"👾 <b>Neon Cyber Theme:</b> 150,000 {config.CURRENCY_NAME} (150k)\n"
             f"🐦‍🔥 <b>Phoenix Theme:</b> 200,000 {config.CURRENCY_NAME} (200k)\n\n"
@@ -94,7 +95,7 @@ async def cmd_shop(event, db: AsyncSession):
     if is_group:
         builder.row(InlineKeyboardButton(text="🗑️ Close Shop", callback_data="close_menu"))
     else:
-        builder.row(InlineKeyboardButton(text="🔙 Back to Hub Menu", callback_data="dm_home"))
+        builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
         
     kb = builder.as_markup()
     cover_media = get_cover_media("start")
@@ -116,12 +117,12 @@ async def cb_buy_theme(callback: CallbackQuery, db: AsyncSession):
     unlocked = [t.strip().lower() for t in (user.unlocked_themes or "default").split(",") if t.strip()]
 
     if theme_key in unlocked:
-        await callback.answer("❌ You have already unlocked this theme!", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} You have already unlocked this theme!", show_alert=True)
         return
 
     if user.coins < theme_info["price"]:
         from utils.formatters import format_currency
-        await callback.answer(f"❌ You need {format_currency(theme_info['price'])}! Balance: {format_currency(user.coins)}", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} You need {format_currency(theme_info['price'])}! Balance: {format_currency(user.coins)}", show_alert=True)
         return
     user.coins -= theme_info["price"]
     unlocked.append(theme_key)
@@ -129,7 +130,7 @@ async def cb_buy_theme(callback: CallbackQuery, db: AsyncSession):
     user.selected_theme = theme_key
     await db.commit()
 
-    await callback.answer(f"🎉 Unlocked & Applied {theme_info['name']} successfully!", show_alert=True)
+    await callback.answer(f"{get_emoji('party')} Unlocked & Applied {theme_info['name']} successfully!", show_alert=True)
     await cmd_shop(callback, db)
 
 @router.callback_query(F.data == "close_menu")

@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import html
 import config
 
@@ -7,7 +8,7 @@ FALLBACK_EMOJIS = {
     "amv": "🎬",
     "video": "📹",
     "special": "⭐",
-    "exclusive": "💎",
+    "exclusive": f"{get_emoji('gem')}",
     "celestial": "🌌",
     "cosmic": "🪐"
 }
@@ -35,7 +36,7 @@ def get_rarity_emoji(rarity: str) -> str:
     if r_lower in FALLBACK_EMOJIS:
         return FALLBACK_EMOJIS[r_lower]
             
-    return "✨"
+    return f"{get_emoji('sparkle')}"
 
 def format_blockquote(text: str) -> str:
     return f"<blockquote>{text}</blockquote>"

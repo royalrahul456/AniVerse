@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import asyncio
 import json
 import logging
@@ -157,7 +158,7 @@ class JoinCheckMiddleware:
             except Exception:
                 pass
             try:
-                await event.answer("⚠️ Please join the channel first!", show_alert=True)
+                await event.answer(f"{get_emoji('warning')} Please join the channel first!", show_alert=True)
             except Exception:
                 pass
         else:
@@ -245,41 +246,50 @@ async def main():
     except Exception as e:
         logger.error(f"Failed to pre-populate custom rarities: {e}")
 
+    # Load centralized bot emojis
+    from utils.emojis import load_emojis
+    try:
+        async with AsyncSessionLocal() as session:
+            await load_emojis(session)
+        logger.info("Loaded custom bot emojis into cache.")
+    except Exception as e:
+        logger.error(f"Failed to load custom bot emojis: {e}")
+
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
 
     # Set bot commands in Telegram menu
     commands = [
-        BotCommand(command="start", description="✨ Welcome & Main Menu Hub"),
+        BotCommand(command="start", description=f"{get_emoji('sparkle')} Welcome & Main Menu Hub"),
         BotCommand(command="help", description="📖 Guide & Help Center"),
-        BotCommand(command="profile", description="👤 View trainer profile card"),
+        BotCommand(command="profile", description=f"{get_emoji('user')} View trainer profile card"),
         BotCommand(command="harem", description="🎒 View your character collection"),
-        BotCommand(command="leaderboard", description="🏆 Global trainer rankings"),
+        BotCommand(command="leaderboard", description=f"{get_emoji('trophy')} Global trainer rankings"),
         BotCommand(command="check", description="🔍 Check character details & owners"),
-        BotCommand(command="cid", description="🆔 View character variants by ID"),
+        BotCommand(command="cid", description=f"{get_emoji('id')} View character variants by ID"),
         BotCommand(command="search", description="🔎 Search characters by name"),
-        BotCommand(command="anime", description="📺 Filter characters by anime title"),
-        BotCommand(command="claim", description="🎁 Claim a free daily character"),
-        BotCommand(command="guess", description="🎯 Catch wild character / start guessing"),
+        BotCommand(command="anime", description=f"{get_emoji('tv')} Filter characters by anime title"),
+        BotCommand(command="claim", description=f"{get_emoji('gift')} Claim a free daily character"),
+        BotCommand(command="guess", description=f"{get_emoji('target')} Catch wild character / start guessing"),
         BotCommand(command="spawnsettings", description="⚙️ View group spawn configuration"),
         BotCommand(command="setspawn", description="⚙️ Set group spawn threshold (Admin)"),
-        BotCommand(command="togglespawn", description="⚡ Toggle wild character spawns"),
+        BotCommand(command="togglespawn", description=f"{get_emoji('energy')} Toggle wild character spawns"),
         BotCommand(command="games", description="🎮 Open Arcade Games Center"),
-        BotCommand(command="mines", description="💣 Start a 5x5 Mines game"),
+        BotCommand(command="mines", description=f"{get_emoji('bomb')} Start a 5x5 Mines game"),
         BotCommand(command="endmines", description="🛑 Quit active Mines game"),
         BotCommand(command="spin", description="🌀 Spin the Lucky Wheel (3x daily)"),
         BotCommand(command="coinflip", description="🪙 Play coinflip bet (2x daily)"),
         BotCommand(command="dice", description="🎲 Play animated dice roll (2x daily)"),
-        BotCommand(command="dart", description="🎯 Play animated dart throw (2x daily)"),
+        BotCommand(command="dart", description=f"{get_emoji('target')} Play animated dart throw (2x daily)"),
         BotCommand(command="trivia", description="🧠 Play anime quiz trivia"),
         BotCommand(command="scramble", description="🧩 Play word scramble puzzle"),
         BotCommand(command="nameguess", description="💡 Start manual character guessing game"),
         BotCommand(command="togglenameguess", description="🔁 Toggle auto-guessing game loop"),
         BotCommand(command="pay", description="💸 Pay coins to another trainer"),
-        BotCommand(command="balance", description="💰 Check your coin balance"),
+        BotCommand(command="balance", description=f"{get_emoji('coin')} Check your coin balance"),
         BotCommand(command="chk", description="💳 Quick balance check"),
-        BotCommand(command="gift", description="🎁 Gift a character to another trainer"),
-        BotCommand(command="give", description="👑 Grant character or coins (Owner only)"),
+        BotCommand(command="gift", description=f"{get_emoji('gift')} Gift a character to another trainer"),
+        BotCommand(command="give", description=f"{get_emoji('crown')} Grant character or coins (Owner only)"),
         BotCommand(command="shop", description="🛒 Shop profile themes & items"),
         BotCommand(command="addchar", description="➕ Add new character (Admin only)"),
         BotCommand(command="editchar", description="✏️ Edit character details (Admin only)"),
@@ -288,17 +298,17 @@ async def main():
         BotCommand(command="setcover", description="🖼️ Set bot cover banners (Owner only)"),
         BotCommand(command="spawn", description="💥 Force spawn wild character (Admin)"),
         BotCommand(command="stats", description="📊 View bot database statistics (Owner)"),
-        BotCommand(command="addrarity", description="✨ Add custom rarity tier (Owner only)"),
+        BotCommand(command="addrarity", description=f"{get_emoji('sparkle')} Add custom rarity tier (Owner only)"),
         BotCommand(command="delrarity", description="🗑️ Delete custom rarity tier (Owner only)"),
         BotCommand(command="editrarityemoji", description="🎨 Edit custom rarity emoji (Owner only)"),
-        BotCommand(command="addtochance", description="🎯 Add rarity to spawn pool (Admin)"),
+        BotCommand(command="addtochance", description=f"{get_emoji('target')} Add rarity to spawn pool (Admin)"),
         BotCommand(command="removefromchance", description="🚫 Remove rarity from spawn pool (Admin)"),
         BotCommand(command="addtoclaim", description="➕ Add rarity to claim pool (Admin)"),
         BotCommand(command="removefromclaim", description="➖ Remove rarity from claim pool (Admin)"),
         BotCommand(command="promote", description="⭐ Promote user to admin (Owner only)"),
         BotCommand(command="demote", description="🔻 Demote user from admin (Owner only)"),
         BotCommand(command="adminlist", description="📋 List bot admin staff"),
-        BotCommand(command="ownerhelp", description="👑 View owner command guide (Owner only)")
+        BotCommand(command="ownerhelp", description=f"{get_emoji('crown')} View owner command guide (Owner only)")
     ]
     try:
         await bot.set_my_commands(commands)

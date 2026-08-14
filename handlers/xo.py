@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import random
 import asyncio
 import time
@@ -114,7 +115,7 @@ def get_minimax_move(board: list) -> int:
     return random.choice([i for i, cell in enumerate(board) if cell == ""])
 
 def get_ai_move(board: list, difficulty: str, is_owner: bool) -> int:
-    empty_cells = [i for i, cell in enumerate(board) if cell == ""]
+    empty_cells = [i for i, cell in enumerate(board) if cell == f""]
     if not empty_cells:
         return 0
 
@@ -140,7 +141,7 @@ def build_xo_board(game_id: str, board: list, is_game_over: bool = False) -> Inl
     builder = InlineKeyboardBuilder()
     for i in range(9):
         cell_val = board[i]
-        text = "❌" if cell_val == "X" else ("🔵" if cell_val == "O" else "⬜")
+        text = "{get_emoji('error')}" if cell_val == "X" else ("🔵" if cell_val == "O" else "⬜")
         cb_data = "xo_noop" if (is_game_over or cell_val != "") else f"xo_move_{game_id}_{i}"
         builder.add(InlineKeyboardButton(text=text, callback_data=cb_data))
     builder.adjust(3, 3, 3)
@@ -164,7 +165,7 @@ async def cmd_xo(message: Message, db: AsyncSession):
         if p.isdigit():
             wager = int(p)
         elif p.startswith("@"):
-            target_username = p.replace("@", "").strip()
+            target_username = p.replace("@", f"").strip()
         elif p.lower() in ["solo", "ai", "bot"]:
             force_ai = True
 
@@ -183,12 +184,12 @@ async def cmd_xo(message: Message, db: AsyncSession):
             if target_db_user:
                 target_user = target_db_user
             else:
-                await message.reply(f"⚠️ Could not find user @{target_username} in database!")
+                await message.reply(f"{get_emoji('warning')} Could not find user @{target_username} in database!")
                 return
 
         challenger = await get_or_create_user(db, user_id, message.from_user.username, message.from_user.first_name)
         if wager > 0 and challenger.coins < wager:
-            await message.reply(f"❌ You do not have enough coins! Balance: {challenger.coins:,} coins.")
+            await message.reply(f"{get_emoji('error')} You do not have enough coins! Balance: {challenger.coins:,} coins.")
             return
 
         if target_user:
@@ -196,10 +197,10 @@ async def cmd_xo(message: Message, db: AsyncSession):
             target_fname = target_user.first_name
 
             if target_id == user_id:
-                await message.reply("⚠️ You cannot challenge yourself!")
+                await message.reply("{get_emoji('warning')} You cannot challenge yourself!")
                 return
             if getattr(target_user, "is_bot", False) or target_id == message.bot.id:
-                await message.reply("⚠️ You cannot challenge a bot!")
+                await message.reply("{get_emoji('warning')} You cannot challenge a bot!")
                 return
 
             game_id = f"xo_pvp_{message.chat.id}_{message.message_id}"
@@ -220,17 +221,17 @@ async def cmd_xo(message: Message, db: AsyncSession):
                 "⚔️ <b>TIC-TAC-TOE WAGER CHALLENGE!</b> ⚔️\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
                 + format_blockquote(
-                    f"👤 Challenger: <b>{user_name}</b>\n"
-                    f"🎯 Opponent: <b>{escape_html(target_fname)}</b>\n"
-                    f"💰 Wager: <b>{wager:,} Coins</b> (Pot: {2*wager:,} Coins)\n\n"
-                    "👉 Challenge expires in 60 seconds!"
+                    f"{get_emoji('user')} Challenger: <b>{user_name}</b>\n"
+                    f"{get_emoji('target')} Opponent: <b>{escape_html(target_fname)}</b>\n"
+                    f"{get_emoji('coin')} Wager: <b>{wager:,} Coins</b> (Pot: {2*wager:,} Coins)\n\n"
+                    f"{get_emoji('pointer')} Challenge expires in 60 seconds!"
                 )
             )
 
             builder = InlineKeyboardBuilder()
             builder.row(
-                InlineKeyboardButton(text="✅ Accept", callback_data=f"xo_accept_{game_id}"),
-                InlineKeyboardButton(text="❌ Decline", callback_data=f"xo_decline_{game_id}")
+                InlineKeyboardButton(text=f"{get_emoji('success')} Accept", callback_data=f"xo_accept_{game_id}"),
+                InlineKeyboardButton(text=f"{get_emoji('error')} Decline", callback_data=f"xo_decline_{game_id}")
             )
         
             sent_msg = None
@@ -250,11 +251,11 @@ async def cmd_xo(message: Message, db: AsyncSession):
     # Solo AI Mode
     game_id = f"xo_ai_{message.chat.id}_{user_id}"
     if game_id in active_xo_games:
-        await message.reply("⚠️ You already have an active game in this chat!")
+        await message.reply(f"{get_emoji('warning')} You already have an active game in this chat!")
         return
 
     caption = (
-        "❌⭕ <b>TIC-TAC-TOE VS BOT AI</b> ❌⭕\n"
+        f"{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE VS BOT AI</b> {get_emoji('error')}{get_emoji('circle')}\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         + format_blockquote(
             "Select your game difficulty below:\n\n"
@@ -274,7 +275,7 @@ async def cmd_xo(message: Message, db: AsyncSession):
     if is_group:
         builder.row(InlineKeyboardButton(text="🗑️ Close", callback_data="close_menu"))
     else:
-        builder.row(InlineKeyboardButton(text="🔙 Back", callback_data="dm_home"))
+        builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back", callback_data="dm_home"))
 
     try:
         await message.reply_photo(cover_media, caption=caption, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -317,14 +318,14 @@ async def cb_xo_ai_difficulty(callback: CallbackQuery, db: AsyncSession):
     reward = rewards.get(difficulty, 150)
 
     caption = (
-        "❌⭕ <b>TIC-TAC-TOE VS BOT AI</b> ❌⭕\n"
+        f"{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE VS BOT AI</b> {get_emoji('error')}{get_emoji('circle')}\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         + format_blockquote(
-            f"👤 Player: <b>{user_name}</b> (❌)\n"
-            f"🤖 Bot AI: (⭕)\n"
+            f"{get_emoji('user')} Player: <b>{user_name}</b> ({get_emoji('error')})\n"
+            f"🤖 Bot AI: ({get_emoji('circle')})\n"
             f"🟢 Difficulty: <b>{difficulty.upper()}</b>\n"
-            f"💰 Win Reward: <b>+{reward:,} coins</b>\n\n"
-            f"👉 Turn: <b>{user_name}</b> (❌)"
+            f"{get_emoji('coin')} Win Reward: <b>+{reward:,} coins</b>\n\n"
+            f"{get_emoji('pointer')} Turn: <b>{user_name}</b> ({get_emoji('error')})"
         )
     )
     markup = build_xo_board(game_id, active_xo_games[game_id]["board"])
@@ -343,27 +344,27 @@ async def cb_xo_ai_difficulty(callback: CallbackQuery, db: AsyncSession):
 
 @router.callback_query(F.data.startswith("xo_accept_"))
 async def cb_xo_accept(callback: CallbackQuery, db: AsyncSession):
-    game_id = callback.data.replace("xo_accept_", "")
+    game_id = callback.data.replace("xo_accept_", f"")
     if game_id not in active_xo_games:
-        await callback.answer("❌ Challenge expired or finished!", show_alert=True)
+        await callback.answer("{get_emoji('error')} Challenge expired or finished!", show_alert=True)
         return
 
     game = active_xo_games[game_id]
     user_id = callback.from_user.id
 
     if game["p2_id"] is not None and user_id != game["p2_id"]:
-        await callback.answer("❌ You are not the challenged player!", show_alert=True)
+        await callback.answer("{get_emoji('error')} You are not the challenged player!", show_alert=True)
         return
 
     if game["p2_id"] is None:
         if user_id == game["p1_id"]:
-            await callback.answer("❌ You cannot accept your own challenge!", show_alert=True)
+            await callback.answer("{get_emoji('error')} You cannot accept your own challenge!", show_alert=True)
             return
         game["p2_id"] = user_id
         game["p2_name"] = escape_html(callback.from_user.first_name)
 
     if game["status"] != "pending":
-        await callback.answer("❌ This game already started!", show_alert=True)
+        await callback.answer("{get_emoji('error')} This game already started!", show_alert=True)
         return
 
     wager = game["wager"]
@@ -371,13 +372,13 @@ async def cb_xo_accept(callback: CallbackQuery, db: AsyncSession):
     p2 = await get_or_create_user(db, game["p2_id"], callback.from_user.username, callback.from_user.first_name)
 
     if p1.coins < wager:
-        await callback.answer("❌ Challenger no longer has enough coins!", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Challenger no longer has enough coins!", show_alert=True)
         del active_xo_games[game_id]
         await callback.message.delete()
         return
 
     if p2.coins < wager:
-        await callback.answer(f"❌ You do not have enough coins! Need: {wager:,} coins.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} You do not have enough coins! Need: {wager:,} coins.", show_alert=True)
         return
 
     p1.coins -= wager
@@ -386,12 +387,12 @@ async def cb_xo_accept(callback: CallbackQuery, db: AsyncSession):
     await db.commit()
 
     caption = (
-        "❌⭕ <b>TIC-TAC-TOE WAGER DUEL!</b> ❌⭕\n"
+        f"{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE WAGER DUEL!</b> {get_emoji('error')}{get_emoji('circle')}\n"
         "━━━━━━━━━━━━━━━━━━━\n"
         + format_blockquote(
-            f"⚔️ <b>{game['p1_name']}</b> (❌) vs <b>{game['p2_name']}</b> (⭕)\n"
-            f"💰 Wager: <b>{wager:,} Coins</b> (Pot: {2*wager:,} Coins)\n\n"
-            f"👉 Turn: <b>{game['p1_name']}</b> (❌)"
+            f"⚔️ <b>{game['p1_name']}</b> ({get_emoji('error')}) vs <b>{game['p2_name']}</b> ({get_emoji('circle')})\n"
+            f"{get_emoji('coin')} Wager: <b>{wager:,} Coins</b> (Pot: {2*wager:,} Coins)\n\n"
+            f"{get_emoji('pointer')} Turn: <b>{game['p1_name']}</b> ({get_emoji('error')})"
         )
     )
     markup = build_xo_board(game_id, game["board"])
@@ -410,9 +411,9 @@ async def cb_xo_accept(callback: CallbackQuery, db: AsyncSession):
 
 @router.callback_query(F.data.startswith("xo_decline_"))
 async def cb_xo_decline(callback: CallbackQuery):
-    game_id = callback.data.replace("xo_decline_", "")
+    game_id = callback.data.replace("xo_decline_", f"")
     if game_id not in active_xo_games:
-        await callback.answer("❌ Challenge expired!", show_alert=True)
+        await callback.answer("{get_emoji('error')} Challenge expired!", show_alert=True)
         return
 
     game = active_xo_games[game_id]
@@ -420,11 +421,11 @@ async def cb_xo_decline(callback: CallbackQuery):
 
     if game["p2_id"] is None:
         if user_id != game["p1_id"]:
-            await callback.answer("❌ Only the challenger can cancel this challenge!", show_alert=True)
+            await callback.answer("{get_emoji('error')} Only the challenger can cancel this challenge!", show_alert=True)
             return
     else:
         if user_id != game["p1_id"] and user_id != game["p2_id"]:
-            await callback.answer("❌ You are not part of this duel!", show_alert=True)
+            await callback.answer("{get_emoji('error')} You are not part of this duel!", show_alert=True)
             return
 
     del active_xo_games[game_id]
@@ -438,7 +439,7 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
     game_id = "_".join(parts[2:-1])
 
     if game_id not in active_xo_games:
-        await callback.answer("❌ Game has expired or finished!", show_alert=True)
+        await callback.answer("{get_emoji('error')} Game has expired or finished!", show_alert=True)
         return
 
     game = active_xo_games[game_id]
@@ -447,7 +448,7 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
 
     if game["mode"] == "ai":
         if user_id != game["p1_id"]:
-            await callback.answer("❌ This is not your AI game!", show_alert=True)
+            await callback.answer("{get_emoji('error')} This is not your AI game!", show_alert=True)
             return
 
         board[cell_idx] = "X"
@@ -463,11 +464,11 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
                 user = await get_or_create_user(db, user_id, callback.from_user.username, callback.from_user.first_name)
                 user.coins += reward
                 await db.commit()
-                text = f"🎉 <b>YOU WON VS BOT AI ({difficulty.upper()})!</b>\n+{reward:,} Coins added!"
+                text = f"{get_emoji('party')} <b>YOU WON VS BOT AI ({difficulty.upper()})!</b>\n+{reward:,} Coins added!"
             else:
                 text = "🤝 <b>IT'S A DRAW!</b> Good game!"
             
-            card = "❌⭕ <b>TIC-TAC-TOE GAME OVER</b>\n" + format_blockquote(text)
+            card = "{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE GAME OVER</b>\n" + format_blockquote(text)
             if callback.message.photo or callback.message.video:
                 await callback.message.edit_caption(caption=card, reply_markup=markup, parse_mode="HTML")
             else:
@@ -488,7 +489,7 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
             else:
                 text = "🤝 <b>IT'S A DRAW!</b> Good game!"
             
-            card = "❌⭕ <b>TIC-TAC-TOE GAME OVER</b>\n" + format_blockquote(text)
+            card = "{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE GAME OVER</b>\n" + format_blockquote(text)
             if callback.message.photo or callback.message.video:
                 await callback.message.edit_caption(caption=card, reply_markup=markup, parse_mode="HTML")
             else:
@@ -497,14 +498,14 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
 
         markup = build_xo_board(game_id, board)
         card = (
-            "❌⭕ <b>TIC-TAC-TOE VS BOT AI</b> ❌⭕\n"
+            "{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE VS BOT AI</b> {get_emoji('error')}{get_emoji('circle')}\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             + format_blockquote(
-                f"👤 Player: <b>{game['p1_name']}</b> (❌)\n"
-                f"🤖 Bot AI: (⭕)\n"
+                f"{get_emoji('user')} Player: <b>{game['p1_name']}</b> ({get_emoji('error')})\n"
+                f"🤖 Bot AI: ({get_emoji('circle')})\n"
                 f"🟢 Difficulty: <b>{difficulty.upper()}</b>\n"
-                f"💰 Win Reward: <b>+{reward:,} coins</b>\n\n"
-                f"👉 Turn: <b>{game['p1_name']}</b> (❌)"
+                f"{get_emoji('coin')} Win Reward: <b>+{reward:,} coins</b>\n\n"
+                f"{get_emoji('pointer')} Turn: <b>{game['p1_name']}</b> ({get_emoji('error')})"
             )
         )
         if callback.message.photo or callback.message.video:
@@ -515,7 +516,7 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
     elif game["mode"] == "pvp":
         current_turn_id = game["p1_id"] if game["turn"] == "X" else game["p2_id"]
         if user_id != current_turn_id:
-            await callback.answer("❌ It is not your turn!", show_alert=True)
+            await callback.answer("{get_emoji('error')} It is not your turn!", show_alert=True)
             return
 
         board[cell_idx] = game["turn"]
@@ -547,13 +548,13 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
                     reward = total_pot - tax
                     winner_user.coins += reward
                     await db.commit()
-                    text = f"👑 <b>{winner_name} WON THE XO DUEL!</b>\nClaims <b>{reward:,} coins</b> (Pot: {total_pot:,} - 5% tax)!"
+                    text = f"{get_emoji('crown')} <b>{winner_name} WON THE XO DUEL!</b>\nClaims <b>{reward:,} coins</b> (Pot: {total_pot:,} - 5% tax)!"
                 else:
                     winner_user.coins += 200
                     await db.commit()
-                    text = f"👑 <b>{winner_name} WON THE XO DUEL!</b>\nClaims +200 casual win coins!"
+                    text = f"{get_emoji('crown')} <b>{winner_name} WON THE XO DUEL!</b>\nClaims +200 casual win coins!"
 
-            card = "❌⭕ <b>TIC-TAC-TOE DUEL RESULT</b>\n" + format_blockquote(text)
+            card = f"{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE DUEL RESULT</b>\n" + format_blockquote(text)
             if callback.message.photo or callback.message.video:
                 await callback.message.edit_caption(caption=card, reply_markup=markup, parse_mode="HTML")
             else:
@@ -563,14 +564,14 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
         game["turn"] = "O" if game["turn"] == "X" else "X"
         next_turn_name = game["p1_name"] if game["turn"] == "X" else game["p2_name"]
         markup = build_xo_board(game_id, board)
-        wager_text = f"💰 Wager: <b>{wager:,} Coins</b> (Pot: {2*wager:,} Coins)" if wager > 0 else "Casual Mode"
+        wager_text = f"{get_emoji('coin')} Wager: <b>{wager:,} Coins</b> (Pot: {2*wager:,} Coins)" if wager > 0 else "Casual Mode"
         card = (
-            "❌⭕ <b>TIC-TAC-TOE DUEL!</b>\n"
+            f"{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE DUEL!</b>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             + format_blockquote(
-                f"⚔️ <b>{game['p1_name']}</b> (❌) vs <b>{game['p2_name']}</b> (⭕)\n"
+                f"⚔️ <b>{game['p1_name']}</b> ({get_emoji('error')}) vs <b>{game['p2_name']}</b> ({get_emoji('circle')})\n"
                 f"🎮 Mode: {wager_text}\n\n"
-                f"👉 Next Turn: <b>{next_turn_name}</b> ({game['turn']})"
+                f"{get_emoji('pointer')} Next Turn: <b>{next_turn_name}</b> ({game['turn']})"
             )
         )
         if callback.message.photo or callback.message.video:

@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import random
 import datetime
 import math
@@ -62,7 +63,7 @@ async def cmd_spin(event, db: AsyncSession):
             )
         )
         if isinstance(event, CallbackQuery):
-            await event.answer("❌ Spin limit reached!", show_alert=True)
+            await event.answer(f"{get_emoji('error')} Spin limit reached!", show_alert=True)
             await message_obj.edit_text(text, parse_mode="HTML")
         else:
             await message_obj.reply(text, parse_mode="HTML")
@@ -79,9 +80,9 @@ async def cmd_spin(event, db: AsyncSession):
         "🎰 <b>LUCKY WHEEL SPIN!</b> 🎰\n\n"
         + format_blockquote(
             f"🌀 <i>*The wheel spins rapidly...*</i>\n\n"
-            f"🎉 <b>Land:</b> +{won_coins} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
-            f"💰 <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}\n"
-            f"🎯 <b>Remaining spins today:</b> {2 - current_count}/3"
+            f"{get_emoji('party')} <b>Land:</b> +{won_coins} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
+            f"{get_emoji('coin')} <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}\n"
+            f"{get_emoji('target')} <b>Remaining spins today:</b> {2 - current_count}/3"
         )
     )
     if isinstance(event, CallbackQuery):
@@ -116,9 +117,9 @@ async def cmd_daily(message: Message, db: AsyncSession):
     text = (
         f"🔥 <b>{user.daily_streak}-Day Streak Claimed!</b>\n\n"
         + format_blockquote(
-            f"🎉 <b>Reward:</b> +{reward} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
-            f"🎯 <b>Keep your streak going tomorrow!</b>\n"
-            f"💰 <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"        )
+            f"{get_emoji('party')} <b>Reward:</b> +{reward} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
+            f"{get_emoji('target')} <b>Keep your streak going tomorrow!</b>\n"
+            f"{get_emoji('coin')} <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"        )
     )
     daily_msg = await message.answer(text, parse_mode="HTML")
     schedule_message_deletion(message.bot, message.chat.id, daily_msg.message_id, 120)
@@ -142,7 +143,7 @@ async def cmd_coinflip(event, db: AsyncSession):
             )
         )
         if is_callback:
-            await event.answer("❌ Coin Flip limit reached!", show_alert=True)
+            await event.answer(f"{get_emoji('error')} Coin Flip limit reached!", show_alert=True)
             await message_obj.edit_text(text, parse_mode="HTML")
         else:
             await message_obj.reply(text, parse_mode="HTML")
@@ -151,7 +152,7 @@ async def cmd_coinflip(event, db: AsyncSession):
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
     bet = 100
     if user.coins < bet:
-        text = f"❌ You need at least 100 {config.CURRENCY_NAME} to flip a coin!"
+        text = f"{get_emoji('error')} You need at least 100 {config.CURRENCY_NAME} to flip a coin!"
         if is_callback:
             await event.answer(text, show_alert=True)
         else:
@@ -162,7 +163,7 @@ async def cmd_coinflip(event, db: AsyncSession):
     outcome = "Heads" if win else "Tails"
     if win:
         user.coins += bet
-        res_text = f"🎉 <b>WIN!</b> It landed on {outcome}! You won +{bet} {config.CURRENCY_NAME}!"
+        res_text = f"{get_emoji('party')} <b>WIN!</b> It landed on {outcome}! You won +{bet} {config.CURRENCY_NAME}!"
     else:
         user.coins -= bet
         res_text = f"💀 <b>LOSS!</b> It landed on {outcome}! You lost {bet} {config.CURRENCY_NAME}."
@@ -174,8 +175,8 @@ async def cmd_coinflip(event, db: AsyncSession):
         f"🪙 <b>COIN FLIP CHALLENGE</b>\n\n" 
         + format_blockquote(
             f"{res_text}\n"
-            f"💰 <b>Balance:</b> {user.coins:,} {config.CURRENCY_NAME}\n"
-            f"🎯 <b>Remaining flips today:</b> {1 - current_count}/2"
+            f"{get_emoji('coin')} <b>Balance:</b> {user.coins:,} {config.CURRENCY_NAME}\n"
+            f"{get_emoji('target')} <b>Remaining flips today:</b> {1 - current_count}/2"
         )
     )
     if is_callback:
@@ -202,7 +203,7 @@ async def cmd_dice(event, db: AsyncSession):
             )
         )
         if is_callback:
-            await event.answer("❌ Dice limit reached!", show_alert=True)
+            await event.answer(f"{get_emoji('error')} Dice limit reached!", show_alert=True)
             await message_obj.edit_text(text, parse_mode="HTML")
         else:
             await message_obj.reply(text, parse_mode="HTML")
@@ -211,7 +212,7 @@ async def cmd_dice(event, db: AsyncSession):
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
     bet = 100
     if user.coins < bet:
-        text = "❌ You need at least 100 coins to roll the dice!"
+        text = f"{get_emoji('error')} You need at least 100 coins to roll the dice!"
         if is_callback:
             await event.answer(text, show_alert=True)
         else:
@@ -234,7 +235,7 @@ async def cmd_dice(event, db: AsyncSession):
     if roll >= 4:
         reward = 150
         user.coins += reward
-        res = f"🎲 You rolled a <b>{roll}</b>! 🎉 <b>WIN!</b> +{reward} Coins!"
+        res = f"🎲 You rolled a <b>{roll}</b>! {get_emoji('party')} <b>WIN!</b> +{reward} Coins!"
     else:
         loss = 50
         user.coins -= loss
@@ -247,8 +248,8 @@ async def cmd_dice(event, db: AsyncSession):
         "🎲 <b>DICE ROLL BET</b>\n\n" 
         + format_blockquote(
             f"{res}\n"
-            f"💰 <b>Balance:</b> {user.coins:,} Coins\n"
-            f"🎯 <b>Remaining rolls today:</b> {1 - current_count}/2"
+            f"{get_emoji('coin')} <b>Balance:</b> {user.coins:,} Coins\n"
+            f"{get_emoji('target')} <b>Remaining rolls today:</b> {1 - current_count}/2"
         )
     )
 
@@ -276,7 +277,7 @@ async def cmd_dart(event, db: AsyncSession):
             )
         )
         if is_callback:
-            await event.answer("❌ Dart limit reached!", show_alert=True)
+            await event.answer(f"{get_emoji('error')} Dart limit reached!", show_alert=True)
             await message_obj.edit_text(text, parse_mode="HTML")
         else:
             await message_obj.reply(text, parse_mode="HTML")
@@ -285,7 +286,7 @@ async def cmd_dart(event, db: AsyncSession):
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
     bet = 100
     if user.coins < bet:
-        text = "❌ You need at least 100 coins to throw a dart!"
+        text = f"{get_emoji('error')} You need at least 100 coins to throw a dart!"
         if is_callback:
             await event.answer(text, show_alert=True)
         else:
@@ -294,11 +295,11 @@ async def cmd_dart(event, db: AsyncSession):
 
     # Send dart emoji first
     if is_callback:
-        await message_obj.edit_text("🎯 <i>*Throwing the dart...*</i>", parse_mode="HTML")
-        dart_msg = await message_obj.reply_dice(emoji="🎯")
+        await message_obj.edit_text(f"{get_emoji('target')} <i>*Throwing the dart...*</i>", parse_mode="HTML")
+        dart_msg = await message_obj.reply_dice(emoji=f"{get_emoji('target')}")
         await event.answer()
     else:
-        dart_msg = await message_obj.reply_dice(emoji="🎯")
+        dart_msg = await message_obj.reply_dice(emoji=f"{get_emoji('target')}")
 
     # Wait for animation to finish
     import asyncio
@@ -308,21 +309,21 @@ async def cmd_dart(event, db: AsyncSession):
     if score >= 4:
         reward = 150
         user.coins += reward
-        res = f"🎯 You hit a <b>{score}</b>! 🎉 <b>WIN!</b> +150 Coins!"
+        res = f"{get_emoji('target')} You hit a <b>{score}</b>! {get_emoji('party')} <b>WIN!</b> +150 Coins!"
     else:
         loss = 50
         user.coins -= loss
-        res = f"🎯 You hit a <b>{score}</b>! 💀 <b>LOSS!</b> -{loss} Coins."
+        res = f"{get_emoji('target')} You hit a <b>{score}</b>! 💀 <b>LOSS!</b> -{loss} Coins."
 
     await db.commit()
     await record_game_play(db, user_id, "dart")
 
     card = (
-        "🎯 <b>DART ARENA CHALLENGE</b>\n\n" 
+        f"{get_emoji('target')} <b>DART ARENA CHALLENGE</b>\n\n" 
         + format_blockquote(
             f"{res}\n"
-            f"💰 <b>Balance:</b> {user.coins:,} Coins\n"
-            f"🎯 <b>Remaining throws today:</b> {1 - current_count}/2"
+            f"{get_emoji('coin')} <b>Balance:</b> {user.coins:,} Coins\n"
+            f"{get_emoji('target')} <b>Remaining throws today:</b> {1 - current_count}/2"
         )
     )
 
@@ -407,13 +408,13 @@ async def cmd_trivia(event, db: AsyncSession):
             text=opt,
             callback_data=f"t_a:{user_id}:{q_idx}:{opt_idx}"
         ))
-    builder.row(InlineKeyboardButton(text="🔙 Back to Games", callback_data="dm_games"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Games", callback_data="dm_games"))
     
     text = (
         "🧠 <b>ANIME TRIVIA CHALLENGE!</b>\n\n"
         + format_blockquote(
             f"❓ <b>Question:</b>\n{question_data['q']}\n\n"
-            f"💰 <b>Reward:</b> +{config.TRIVIA_REWARD} Coins!"
+            f"{get_emoji('coin')} <b>Reward:</b> +{config.TRIVIA_REWARD} Coins!"
         )
     )
     
@@ -427,7 +428,7 @@ async def cmd_trivia(event, db: AsyncSession):
 async def handle_trivia_answer(callback: CallbackQuery, db: AsyncSession):
     parts = callback.data.split(":")
     if len(parts) != 4:
-        await callback.answer("❌ Invalid game session.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Invalid game session.", show_alert=True)
         return
         
     _, play_id_str, q_idx_str, opt_idx_str = parts
@@ -436,11 +437,11 @@ async def handle_trivia_answer(callback: CallbackQuery, db: AsyncSession):
     opt_idx = int(opt_idx_str)
     
     if callback.from_user.id != play_id:
-        await callback.answer("❌ This trivia challenge is not yours! Start a new one with /trivia.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} This trivia challenge is not yours! Start a new one with /trivia.", show_alert=True)
         return
         
     if q_idx >= len(TRIVIA_QUESTIONS):
-        await callback.answer("❌ Question no longer exists.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Question no longer exists.", show_alert=True)
         return
         
     question_data = TRIVIA_QUESTIONS[q_idx]
@@ -461,9 +462,9 @@ async def handle_trivia_answer(callback: CallbackQuery, db: AsyncSession):
             "🧠 <b>ANIME TRIVIA CHALLENGE!</b>\n\n"
             + format_blockquote(
                 f"❓ <b>Question:</b> {question_data['q']}\n\n"
-                f"✅ <b>Your Answer:</b> {chosen_opt} (Correct!)\n"
-                f"🎉 <b>Reward:</b> +{reward} Coins!\n"
-                f"💰 <b>Balance:</b> {user.coins:,} Coins"
+                f"{get_emoji('success')} <b>Your Answer:</b> {chosen_opt} (Correct!)\n"
+                f"{get_emoji('party')} <b>Reward:</b> +{reward} Coins!\n"
+                f"{get_emoji('coin')} <b>Balance:</b> {user.coins:,} Coins"
             )
         )
     else:
@@ -471,10 +472,10 @@ async def handle_trivia_answer(callback: CallbackQuery, db: AsyncSession):
             "🧠 <b>ANIME TRIVIA CHALLENGE!</b>\n\n"
             + format_blockquote(
                 f"❓ <b>Question:</b> {question_data['q']}\n\n"
-                f"❌ <b>Your Answer:</b> {chosen_opt} (Incorrect!)\n"
+                f"{get_emoji('error')} <b>Your Answer:</b> {chosen_opt} (Incorrect!)\n"
                 f"💡 <b>Correct Answer:</b> {correct_opt}\n"
                 f"💀 <b>Reward:</b> 0 Coins\n"
-                f"💰 <b>Balance:</b> {user.coins:,} Coins"
+                f"{get_emoji('coin')} <b>Balance:</b> {user.coins:,} Coins"
             )
         )
         
@@ -513,7 +514,7 @@ async def cmd_endmines(message: Message, db: AsyncSession):
     game = res.scalar_one_or_none()
     
     if not game:
-        await message.reply("❌ You do not have any active Mines game!")
+        await message.reply(f"{get_emoji('error')} You do not have any active Mines game!")
         return
 
     state = json.loads(game.data)
@@ -535,7 +536,7 @@ async def cmd_mines(event, db: AsyncSession):
     # Enforce official group rule in group chats
     if not is_callback and message_obj.chat.type in ["group", "supergroup"]:
         if message_obj.chat.username != "AniVerseUnion":
-            await message_obj.reply("⚠️ Mines can only be played in private DM or in our official group chat @AniVerseUnion.")
+            await message_obj.reply(f"{get_emoji('warning')} Mines can only be played in private DM or in our official group chat @AniVerseUnion.")
             return
 
     bet = 100
@@ -545,8 +546,8 @@ async def cmd_mines(event, db: AsyncSession):
         parts = message_obj.text.strip().split()
         if len(parts) < 2:
             await message_obj.reply(
-                "⚠️ <b>Mines Game Usage:</b>\n"
-                "👉 <code>/mines &lt;bet&gt; [mines_count]</code>\n\n"
+                f"{get_emoji('warning')} <b>Mines Game Usage:</b>\n"
+                f"{get_emoji('pointer')} <code>/mines &lt;bet&gt; [mines_count]</code>\n\n"
                 "• <b>Bet range:</b> 10 to 100,000 coins\n"
                 "• <b>Mines count:</b> 1 to 24 (default is 3)",
                 parse_mode="HTML"
@@ -555,22 +556,22 @@ async def cmd_mines(event, db: AsyncSession):
             
         bet_str = parts[1]
         if not bet_str.isdigit():
-            await message_obj.reply("❌ Bet must be a valid positive number.")
+            await message_obj.reply(f"{get_emoji('error')} Bet must be a valid positive number.")
             return
         bet = int(bet_str)
         
         if bet < 10 or bet > 100000:
-            await message_obj.reply("❌ Bet must be between 10 and 100,000 coins.")
+            await message_obj.reply(f"{get_emoji('error')} Bet must be between 10 and 100,000 coins.")
             return
             
         if len(parts) >= 3:
             mines_str = parts[2]
             if not mines_str.isdigit():
-                await message_obj.reply("❌ Mines count must be a number between 1 and 24.")
+                await message_obj.reply(f"{get_emoji('error')} Mines count must be a number between 1 and 24.")
                 return
             mines_count = int(mines_str)
             if mines_count < 1 or mines_count > 24:
-                await message_obj.reply("❌ Mines count must be between 1 and 24.")
+                await message_obj.reply(f"{get_emoji('error')} Mines count must be between 1 and 24.")
                 return
     else:
         # Default options if clicked from button callback
@@ -582,12 +583,12 @@ async def cmd_mines(event, db: AsyncSession):
     game = res.scalar_one_or_none()
     
     if game:
-        await message_obj.reply("❌ You already have an active Mines game! End it first using /endmines.")
+        await message_obj.reply(f"{get_emoji('error')} You already have an active Mines game! End it first using /endmines.")
         return
 
     user = await get_or_create_user(db, user_id, event.from_user.username, event.from_user.first_name)
     if user.coins < bet:
-        await message_obj.reply(f"❌ You do not have enough coins to start this game! (Balance: {user.coins:,} coins)")
+        await message_obj.reply(f"{get_emoji('error')} You do not have enough coins to start this game! (Balance: {user.coins:,} coins)")
         return
 
     # Deduct bet
@@ -611,14 +612,14 @@ async def cmd_mines(event, db: AsyncSession):
 
     kb = render_mines_keyboard(user_id, game_state)
     card = (
-        "💣 <b>MINES GAME STARTED</b> 💣\n\n"
+        f"{get_emoji('bomb')} <b>MINES GAME STARTED</b> {get_emoji('bomb')}\n\n"
         + format_blockquote(
-            f"👤 Trainer: <b>{escape_html(first_name)}</b>\n"
-            f"💰 Bet: <b>{bet:,} coins</b>\n"
-            f"💣 Mines: <b>{mines_count} 💣</b>\n"
+            f"{get_emoji('user')} Trainer: <b>{escape_html(first_name)}</b>\n"
+            f"{get_emoji('coin')} Bet: <b>{bet:,} coins</b>\n"
+            f"{get_emoji('bomb')} Mines: <b>{mines_count} {get_emoji('bomb')}</b>\n"
             f"📈 Multiplier: <b>1.0x</b>"
         )
-        + "\n👉 Click on the tiles below to find diamonds! Avoid the mines!"
+        + f"\n{get_emoji('pointer')} Click on the tiles below to find diamonds! Avoid the mines!"
     )
 
     if is_callback:
@@ -641,16 +642,16 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
     for idx in range(25):
         if status == "playing":
             if idx in revealed:
-                buttons.append(InlineKeyboardButton(text="💎", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text=f"{get_emoji('gem')}", callback_data="noop"))
             else:
                 buttons.append(InlineKeyboardButton(text="❓", callback_data=f"mines_click:{user_id}:{idx}"))
         else:
             if idx == hit_tile:
-                buttons.append(InlineKeyboardButton(text="💣", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text=f"{get_emoji('bomb')}", callback_data="noop"))
             elif idx in mines:
-                buttons.append(InlineKeyboardButton(text="💣", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text=f"{get_emoji('bomb')}", callback_data="noop"))
             elif idx in revealed:
-                buttons.append(InlineKeyboardButton(text="💎", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text=f"{get_emoji('gem')}", callback_data="noop"))
             else:
                 buttons.append(InlineKeyboardButton(text="🟢", callback_data="noop"))
 
@@ -662,7 +663,7 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
         current_reward = int(state["bet"] * current_multiplier)
         if len(revealed) >= 1:
             builder.row(InlineKeyboardButton(
-                text=f"💰 Cashout (+{current_reward:,} Coins)",
+                text=f"{get_emoji('coin')} Cashout (+{current_reward:,} Coins)",
                 callback_data=f"mines_cashout:{user_id}"
             ))
     return builder.as_markup()
@@ -671,7 +672,7 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
 async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
     parts = callback.data.split(":")
     if len(parts) != 3:
-        await callback.answer("❌ Invalid session.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Invalid session.", show_alert=True)
         return
 
     _, play_id_str, idx_str = parts
@@ -679,19 +680,19 @@ async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
     idx = int(idx_str)
 
     if callback.from_user.id != play_id:
-        await callback.answer("❌ This game is not yours! Start a new one with /mines.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} This game is not yours! Start a new one with /mines.", show_alert=True)
         return
 
     stmt = select(ActiveGame).where(ActiveGame.user_id == play_id, ActiveGame.game_type == "mines")
     res = await db.execute(stmt)
     game = res.scalar_one_or_none()
     if not game:
-        await callback.answer("❌ Game not found. Start a new one with /mines.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Game not found. Start a new one with /mines.", show_alert=True)
         return
 
     state = json.loads(game.data)
     if state["status"] != "playing":
-        await callback.answer("❌ Game already finished.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Game already finished.", show_alert=True)
         return
 
     mines = state["mines"]
@@ -716,10 +717,10 @@ async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
         card = (
             "💥 <b>BOOM! GAME OVER</b> 💥\n\n"
             + format_blockquote(
-                f"👤 Trainer: <b>{escape_html(first_name)}</b>\n"
-                f"💣 Hit Tile: <b>#{idx}</b>\n"
+                f"{get_emoji('user')} Trainer: <b>{escape_html(first_name)}</b>\n"
+                f"{get_emoji('bomb')} Hit Tile: <b>#{idx}</b>\n"
                 f"💸 Lost Bet: <b>-{bet:,} coins</b>\n"
-                f"💰 New Balance: <b>💰 {user.coins:,} coins</b>"
+                f"{get_emoji('coin')} New Balance: <b>{get_emoji('coin')} {user.coins:,} coins</b>"
             )
         )
         await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
@@ -740,36 +741,36 @@ async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
 
             kb = render_mines_keyboard(play_id, state)
             card = (
-                "🏆 <b>MAXIMUM WIN!</b> 🏆\n\n"
+                f"{get_emoji('trophy')} <b>MAXIMUM WIN!</b> {get_emoji('trophy')}\n\n"
                 + format_blockquote(
-                    f"👤 Trainer: <b>{escape_html(first_name)}</b>\n"
+                    f"{get_emoji('user')} Trainer: <b>{escape_html(first_name)}</b>\n"
                     f"🌟 Result: <b>Cleared all safe tiles!</b>\n"
                     f"📈 Multiplier: <b>{multiplier}x</b>\n"
-                    f"💰 Earnings: <b>+{potential_win:,} coins</b>\n"
-                    f"💰 New Balance: <b>💰 {user.coins:,} coins</b>"
+                    f"{get_emoji('coin')} Earnings: <b>+{potential_win:,} coins</b>\n"
+                    f"{get_emoji('coin')} New Balance: <b>{get_emoji('coin')} {user.coins:,} coins</b>"
                 )
             )
             await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
-            await callback.answer("🏆 Maximum win! All safe tiles cleared!", show_alert=True)
+            await callback.answer(f"{get_emoji('trophy')} Maximum win! All safe tiles cleared!", show_alert=True)
         else:
             game.data = json.dumps(state)
             await db.commit()
 
             kb = render_mines_keyboard(play_id, state)
             card = (
-                "💣 <b>MINES GAME</b> 💣\n\n"
+                f"{get_emoji('bomb')} <b>MINES GAME</b> {get_emoji('bomb')}\n\n"
                 + format_blockquote(
-                    f"👤 Trainer: <b>{escape_html(first_name)}</b>\n"
-                    f"💰 Bet: <b>{bet:,} coins</b>\n"
-                    f"💣 Mines: <b>{mines_count} 💣</b>\n"
-                    f"💎 Diamonds: <b>{diamonds_found} 💎</b>\n"
+                    f"{get_emoji('user')} Trainer: <b>{escape_html(first_name)}</b>\n"
+                    f"{get_emoji('coin')} Bet: <b>{bet:,} coins</b>\n"
+                    f"{get_emoji('bomb')} Mines: <b>{mines_count} {get_emoji('bomb')}</b>\n"
+                    f"{get_emoji('gem')} Diamonds: <b>{diamonds_found} {get_emoji('gem')}</b>\n"
                     f"📈 Multiplier: <b>{multiplier}x</b>\n"
-                    f"💰 Potential Win: <b>{potential_win:,} coins</b>"
+                    f"{get_emoji('coin')} Potential Win: <b>{potential_win:,} coins</b>"
                 )
-                + "\n👉 Keep clicking or cash out!"
+                + f"\n{get_emoji('pointer')} Keep clicking or cash out!"
             )
             await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
-            await callback.answer("💎 Diamond found!")
+            await callback.answer(f"{get_emoji('gem')} Diamond found!")
 
 @router.callback_query(F.data.startswith("mines_cashout:"))
 async def handle_mines_cashout(callback: CallbackQuery, db: AsyncSession):
@@ -779,14 +780,14 @@ async def handle_mines_cashout(callback: CallbackQuery, db: AsyncSession):
 
     play_id = int(parts[1])
     if callback.from_user.id != play_id:
-        await callback.answer("❌ This game is not yours!", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} This game is not yours!", show_alert=True)
         return
 
     stmt = select(ActiveGame).where(ActiveGame.user_id == play_id, ActiveGame.game_type == "mines")
     res = await db.execute(stmt)
     game = res.scalar_one_or_none()
     if not game:
-        await callback.answer("❌ Game already finished.", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Game already finished.", show_alert=True)
         return
 
     state = json.loads(game.data)
@@ -809,12 +810,12 @@ async def handle_mines_cashout(callback: CallbackQuery, db: AsyncSession):
 
     kb = render_mines_keyboard(play_id, state)
     card = (
-        "💰 <b>CASHOUT SUCCESSFUL!</b> 💰\n\n"
+        f"{get_emoji('coin')} <b>CASHOUT SUCCESSFUL!</b> {get_emoji('coin')}\n\n"
         + format_blockquote(
-            f"👤 Trainer: <b>{escape_html(first_name)}</b>\n"
+            f"{get_emoji('user')} Trainer: <b>{escape_html(first_name)}</b>\n"
             f"📈 Multiplier: <b>{multiplier}x</b>\n"
-            f"💰 Earnings: <b>+{earnings:,} coins</b> (Profit: <b>+{profit:+,} coins</b>)\n"
-            f"💰 New Balance: <b>💰 {user.coins:,} coins</b>"
+            f"{get_emoji('coin')} Earnings: <b>+{earnings:,} coins</b> (Profit: <b>+{profit:+,} coins</b>)\n"
+            f"{get_emoji('coin')} New Balance: <b>{get_emoji('coin')} {user.coins:,} coins</b>"
         )
     )
     await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
@@ -835,8 +836,8 @@ async def cmd_scramble(event, db: AsyncSession):
         "🧩 <b>WORD SCRAMBLE ARENA</b>\n\n"
         + format_blockquote(
             "🔤 <b>Unscrambled:</b> N-A-R-U-T-O -> Naruto Uzumaki!\n"
-            f"🎉 <b>Reward:</b> +{reward} Coins!\n"
-            f"💰 <b>Balance:</b> {user.coins:,} Coins"
+            f"{get_emoji('party')} <b>Reward:</b> +{reward} Coins!\n"
+            f"{get_emoji('coin')} <b>Balance:</b> {user.coins:,} Coins"
         )
     )
     if isinstance(event, CallbackQuery):

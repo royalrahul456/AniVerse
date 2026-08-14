@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import random
 import time
 import asyncio
@@ -96,12 +97,12 @@ async def spawn_character(chat_id: int, db: AsyncSession, bot, custom_rarity: st
 
     r_emoji = get_rarity_emoji(character.rarity)
     caption = (
-        "✨ <b>A WILD CHARACTER HAS APPEARED!</b>\n\n"
+        f"{get_emoji('sparkle')} <b>A WILD CHARACTER HAS APPEARED!</b>\n\n"
         + format_blockquote(
-            f"📺 <b>Anime:</b> {escape_html(character.anime)}\n"
-            f"💎 <b>Rarity:</b> {r_emoji} {character.rarity}\n\n"
-            f"🎯 <b>Catch Command:</b>\n"
-            f"👉 <code>/guess &lt;name&gt;</code>"
+            f"{get_emoji('tv')} <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"{get_emoji('gem')} <b>Rarity:</b> {r_emoji} {character.rarity}\n\n"
+            f"{get_emoji('target')} <b>Catch Command:</b>\n"
+            f"{get_emoji('pointer')} <code>/guess &lt;name&gt;</code>"
         )
     )
     
@@ -210,7 +211,7 @@ async def start_nameguess_game(chat_id: int, db: AsyncSession, bot, is_auto: boo
         "───────────────\n"
         "💭 Think you know this character?\n"
         "⌛ You have 120 seconds!\n"
-        f"💰 Reward: <b>{reward}</b> coins"
+        f"{get_emoji('coin')} Reward: <b>{reward}</b> coins"
     )
 
     msg = None
@@ -284,11 +285,11 @@ async def cmd_nameguess(message: Message, db: AsyncSession, bot):
     try:
         chat_id = message.chat.id
         if message.chat.type not in ("group", "supergroup"):
-            await message.reply("⚠️ This command can only be used inside group chats.")
+            await message.reply(f"{get_emoji('warning')} This command can only be used inside group chats.")
             return
 
         if chat_id in active_games:
-            await message.reply("⚠️ There is already an active Nameguess game in this chat! Solve that one first.")
+            await message.reply(f"{get_emoji('warning')} There is already an active Nameguess game in this chat! Solve that one first.")
             return
 
         await start_nameguess_game(chat_id, db, bot, is_auto=False, reward=150)
@@ -296,18 +297,18 @@ async def cmd_nameguess(message: Message, db: AsyncSession, bot):
         tb = traceback.format_exc()
         if len(tb) > 3000:
             tb = tb[:3000] + "\n...(truncated)..."
-        error_msg = f"❌ <b>Error in nameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(tb)}</code>"
+        error_msg = f"{get_emoji('error')} <b>Error in nameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(tb)}</code>"
         await message.reply(error_msg, parse_mode="HTML")
 
 @router.message(Command("togglenameguess"))
 async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
     try:
         if message.chat.type not in ("group", "supergroup"):
-            await message.reply("⚠️ This command can only be used inside group chats.")
+            await message.reply(f"{get_emoji('warning')} This command can only be used inside group chats.")
             return
 
         if not await is_admin_or_owner(message, db):
-            await message.reply("❌ Only group administrators or bot owners can toggle this setting.")
+            await message.reply(f"{get_emoji('error')} Only group administrators or bot owners can toggle this setting.")
             return
 
         chat_id = message.chat.id
@@ -323,7 +324,7 @@ async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
         await db.commit()
 
         status = "ENABLED 🟢" if settings.auto_nameguess_enabled else "DISABLED 🔴"
-        await message.reply(f"ℹ️ <b>Auto Nameguess</b> is now <b>{status}</b> in this group chat.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('info')} <b>Auto Nameguess</b> is now <b>{status}</b> in this group chat.", parse_mode="HTML")
 
         if settings.auto_nameguess_enabled:
             if chat_id not in active_games:
@@ -340,7 +341,7 @@ async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
         tb = traceback.format_exc()
         if len(tb) > 3000:
             tb = tb[:3000] + "\n...(truncated)..."
-        error_msg = f"❌ <b>Error in togglenameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(tb)}</code>"
+        error_msg = f"{get_emoji('error')} <b>Error in togglenameguess command:</b>\n<code>{escape_html(str(e))}</code>\n\n<b>Traceback:</b>\n<code>{escape_html(tb)}</code>"
         await message.reply(error_msg, parse_mode="HTML")
 # ----------------------------------------------------
 # CALLBACK HANDLERS
@@ -352,12 +353,12 @@ async def cb_nameguess_hint(callback: CallbackQuery, db: AsyncSession):
         chat_id = int(callback.data.split(":")[1])
 
         if chat_id not in active_games:
-            await callback.answer("❌ There is no active game running here.", show_alert=True)
+            await callback.answer(f"{get_emoji('error')} There is no active game running here.", show_alert=True)
             return
 
         game = active_games[chat_id]
         if game.get("hint_requested"):
-            await callback.answer("⚠️ Hint has already been requested once for this game!", show_alert=True)
+            await callback.answer(f"{get_emoji('warning')} Hint has already been requested once for this game!", show_alert=True)
             return
 
         game["hint_requested"] = True
@@ -366,7 +367,7 @@ async def cb_nameguess_hint(callback: CallbackQuery, db: AsyncSession):
         card = (
             "💡 <b>Nameguess Hint</b>\n"
             "───────────────\n"
-            f"👉 <code>{escape_html(hint_text)}</code>\n\n"
+            f"{get_emoji('pointer')} <code>{escape_html(hint_text)}</code>\n\n"
             "<i>Hint can only be requested once per game</i>"
         )
         hint_msg = await callback.message.reply(card, parse_mode="HTML")
@@ -382,11 +383,11 @@ async def cb_nameguess_stop(callback: CallbackQuery, db: AsyncSession):
         chat_id = int(callback.data.split(":")[1])
 
         if chat_id not in active_games:
-            await callback.answer("❌ There is no active game running here.", show_alert=True)
+            await callback.answer(f"{get_emoji('error')} There is no active game running here.", show_alert=True)
             return
 
         if not await is_admin_or_owner(callback, db):
-            await callback.answer("❌ Only group admins or bot owners can stop the game.", show_alert=True)
+            await callback.answer(f"{get_emoji('error')} Only group admins or bot owners can stop the game.", show_alert=True)
             return
 
         game = active_games.pop(chat_id)
@@ -420,7 +421,7 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
         # No args → just show help on how to catch
         if len(parts) < 2:
             await message.reply(
-                "🎯 <b>How to catch wild characters:</b>\n\n"
+                f"{get_emoji('target')} <b>How to catch wild characters:</b>\n\n"
                 "When a wild character spawns in the chat, use:\n"
                 "<code>/guess &lt;character name&gt;</code>\n\n"
                 "<i>💡 Tip: Any single word from the name works!\n"
@@ -441,9 +442,9 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
 
         if not spawn:
             if message.chat.type == "private":
-                await message.reply("⚠️ Wild characters only spawn in group chats. Keep chatting to trigger a spawn!", parse_mode="HTML")
+                await message.reply(f"{get_emoji('warning')} Wild characters only spawn in group chats. Keep chatting to trigger a spawn!", parse_mode="HTML")
             else:
-                await message.reply("⚠️ No active wild character to catch right now! Keep chatting in group to spawn one.", parse_mode="HTML")
+                await message.reply(f"{get_emoji('warning')} No active wild character to catch right now! Keep chatting in group to spawn one.", parse_mode="HTML")
             return
 
         character = spawn.character
@@ -452,7 +453,7 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
             character = c_res.scalar_one_or_none()
 
         if not character:
-            await message.reply("⚠️ Error reading spawned character data.")
+            await message.reply(f"{get_emoji('warning')} Error reading spawned character data.")
             return
 
         # Flexible matching logic (single word match or full match)
@@ -472,10 +473,10 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
             is_correct = True
 
         if not is_correct:
-            await message.reply("❌ Wrong name! Try again. 💡 <i>Any word from the name works.</i>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('error')} Wrong name! Try again. 💡 <i>Any word from the name works.</i>", parse_mode="HTML")
             return
 
-        # ✅ Correct! Add character to harem
+        # {get_emoji('success')} Correct! Add character to harem
         user = await get_or_create_user(db, user_id,
             message.from_user.username if message.from_user else "",
             message.from_user.first_name if message.from_user else "")
@@ -497,11 +498,11 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
         card_text = (
             f"💥 🌟 <b>{nickname}</b> caught <b>{escape_html(character.name)}</b>!\n\n"
             + format_blockquote(
-                f"⛔ <b>NAME:</b> {escape_html(character.name)}\n"
+                f"{get_emoji('no_entry')} <b>NAME:</b> {escape_html(character.name)}\n"
                 f"🎦 <b>ANIME:</b> {escape_html(character.anime)}\n"
                 f"{r_emoji} <b>RARITY:</b> {character.rarity}\n"
                 f"⏱️ <b>TIME:</b> {seconds_taken}s\n"
-                f"💰 <b>+{coins_won} {config.CURRENCY_EMOJI}</b> earned!"
+                f"{get_emoji('coin')} <b>+{coins_won} {config.CURRENCY_EMOJI}</b> earned!"
             )
         )
         builder = InlineKeyboardBuilder()
@@ -510,7 +511,7 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
         schedule_message_deletion(bot, chat_id, catch_msg.message_id, 120)
     except Exception as e:
         logger.error(f"Error in cmd_catch command: {e}")
-        await message.reply("⚠️ An error occurred while trying to catch the character.")
+        await message.reply(f"{get_emoji('warning')} An error occurred while trying to catch the character.")
 
 async def is_user_allowed(message: Message, bot) -> bool:
     if message.from_user.id in config.ADMIN_IDS:
@@ -526,11 +527,11 @@ async def is_user_allowed(message: Message, bot) -> bool:
 @router.message(Command("spawnsettings"))
 async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
     if message.chat.type == "private":
-        await message.reply("⚠️ This command can only be used in group chats.")
+        await message.reply(f"{get_emoji('warning')} This command can only be used in group chats.")
         return
 
     if not await is_user_allowed(message, bot):
-        await message.reply("⚠️ Only group administrators or the bot owner can view spawn settings.")
+        await message.reply(f"{get_emoji('warning')} Only group administrators or the bot owner can view spawn settings.")
         return
 
     chat_id = message.chat.id
@@ -543,7 +544,7 @@ async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
         db.add(settings)
         await db.commit()
 
-    status_emoji = "✅ Enabled" if settings.spawns_enabled else "❌ Disabled"
+    status_emoji = f"{get_emoji('success')} Enabled" if settings.spawns_enabled else f"{get_emoji('error')} Disabled"
     text = (
         f"⚙️ <b>Group Spawn Settings</b>\n\n"
         f"● <b>Spawns:</b> {status_emoji}\n"
@@ -555,17 +556,17 @@ async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
 @router.message(Command("setspawn", "spawnchance", "changetime", "spawnrate", "spawnthreshold"))
 async def cmd_setspawn(message: Message, db: AsyncSession, bot):
     if message.chat.type == "private":
-        await message.reply("⚠️ This command can only be used in group chats.")
+        await message.reply(f"{get_emoji('warning')} This command can only be used in group chats.")
         return
 
     if not await is_user_allowed(message, bot):
-        await message.reply("⚠️ Only group administrators or the bot owner can change spawn settings.")
+        await message.reply(f"{get_emoji('warning')} Only group administrators or the bot owner can change spawn settings.")
         return
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         await message.reply(
-            "⚠️ <b>Format:</b>\n"
+            f"{get_emoji('warning')} <b>Format:</b>\n"
             "• <code>/setspawn on</code> / <code>/setspawn off</code>\n"
             "• <code>/setspawn &lt;threshold_number&gt;</code> (e.g. <code>/setspawn 15</code>)",
             parse_mode="HTML"
@@ -586,31 +587,31 @@ async def cmd_setspawn(message: Message, db: AsyncSession, bot):
     if arg in ["on", "enable", "true"]:
         settings.spawns_enabled = True
         await db.commit()
-        await message.reply("✅ Wild character spawns have been <b>enabled</b> for this group chat.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('success')} Wild character spawns have been <b>enabled</b> for this group chat.", parse_mode="HTML")
     elif arg in ["off", "disable", "false"]:
         settings.spawns_enabled = False
         await db.commit()
-        await message.reply("❌ Wild character spawns have been <b>disabled</b> for this group chat.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Wild character spawns have been <b>disabled</b> for this group chat.", parse_mode="HTML")
     elif arg.isdigit():
         val = int(arg)
         if val < 5:
-            await message.reply("⚠️ Minimum spawn threshold is 5 messages.")
+            await message.reply(f"{get_emoji('warning')} Minimum spawn threshold is 5 messages.")
             return
         settings.spawn_threshold = val
         await db.commit()
         await message.reply(f"⚙️ Spawn message threshold has been set to <b>{val}</b> messages.", parse_mode="HTML")
     else:
-        await message.reply("⚠️ Invalid argument. Use <code>on</code>, <code>off</code>, or a number.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('warning')} Invalid argument. Use <code>on</code>, <code>off</code>, or a number.", parse_mode="HTML")
 
 @router.message(Command("togglespawn"))
 async def cmd_togglespawn(message: Message, db: AsyncSession, bot):
     """Quick toggle for enabling/disabling wild character spawns in a group."""
     if message.chat.type == "private":
-        await message.reply("⚠️ This command can only be used in group chats.")
+        await message.reply(f"{get_emoji('warning')} This command can only be used in group chats.")
         return
 
     if not await is_user_allowed(message, bot):
-        await message.reply("⚠️ Only group administrators or the bot owner can toggle spawn settings.")
+        await message.reply(f"{get_emoji('warning')} Only group administrators or the bot owner can toggle spawn settings.")
         return
 
     chat_id = message.chat.id
@@ -626,10 +627,10 @@ async def cmd_togglespawn(message: Message, db: AsyncSession, bot):
     await db.commit()
 
     if settings.spawns_enabled:
-        status = "✅ <b>ENABLED</b>"
+        status = f"{get_emoji('success')} <b>ENABLED</b>"
         detail = f"Characters will spawn every <b>{settings.spawn_threshold}</b> messages."
     else:
-        status = "❌ <b>DISABLED</b>"
+        status = f"{get_emoji('error')} <b>DISABLED</b>"
         detail = "No wild characters will spawn until re-enabled."
 
     text = (
@@ -694,9 +695,9 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
 
                 trainer_name = escape_html(first_name)
                 ans_text = (
-                    f"🎉 <b>Correct! {trainer_name} guessed it!</b>\n"
+                    f"{get_emoji('party')} <b>Correct! {trainer_name} guessed it!</b>\n"
                     f"💡 Answer: <b>{escape_html(game['character_name'])}</b>\n"
-                    f"💰 <b>+{reward}</b> coins added!"
+                    f"{get_emoji('coin')} <b>+{reward}</b> coins added!"
                 )
                 ans_msg = await message.reply(ans_text, parse_mode="HTML")
                 schedule_message_deletion(bot, chat_id, ans_msg.message_id, 120)

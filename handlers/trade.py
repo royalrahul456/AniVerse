@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
@@ -29,7 +30,7 @@ async def cmd_trade(event):
 @router.callback_query(F.data == "dm_redeem_info")
 async def cmd_redeem(event):
     text = (
-        "🎁 <b>Promo Code Redemption</b>\n\n"
+        f"{get_emoji('gift')} <b>Promo Code Redemption</b>\n\n"
         + format_blockquote(
             "Have a secret promo code from our updates channel?\n\n"
             "🎟️ <b>Usage:</b> <code>/redeem &lt;promo_code&gt;</code>\n\n"

@@ -158,3 +158,10 @@ class BotAdmin(Base):
     user_id = Column(BigInteger, primary_key=True, index=True)
     role = Column(String(50), nullable=False)  # "snradmin" or "jradmin"
     promoted_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class BotEmoji(Base):
+    __tablename__ = "bot_emojis"
+
+    key = Column(String(50), primary_key=True, index=True)
+    emoji = Column(String(255), nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow)

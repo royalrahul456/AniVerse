@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import logging
 from aiogram import Router, F
 from aiogram.types import (
@@ -163,7 +164,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                         description=f"{owner_name}'s collection",
                         thumbnail_url=DEFAULT_THUMB,
                         input_message_content=InputTextMessageContent(
-                            message_text=f"🎒 <b>{owner_mention}'s Collection</b>\n\n{msg_text}",
+                            message_text=f"🎒 <b>{owner_mention}f's Collection</b>\n\n{msg_text}",
                             parse_mode="HTML"
                         )
                     )
@@ -175,10 +176,10 @@ async def handle_inline_query(inline_query: InlineQuery):
 
                 caption = (
                     f"🌟 <b>{escape_html(char.name)}</b> [{r_emoji}]\n"
-                    f"🆔 <b>ID:</b> #{char.id:03d}\n"
-                    f"📺 <b>Anime:</b> {escape_html(char.anime)}\n"
+                    f"{get_emoji('fid')} <b>ID:</b> #{char.id:03d}\n"
+                    f"{get_emoji('ftv')} <b>Anime:</b> {escape_html(char.anime)}\n"
                     f"{r_emoji} <b>Rarity:</b> {char.rarity}\n"
-                    f"👑 <b>Owner:</b> {owner_mention}"
+                    f"{get_emoji('crown')} <b>Owner:</b> {owner_mention}"
                 )
 
                 clean_name = clean_html_entities(char.name)
@@ -216,7 +217,7 @@ async def handle_inline_query(inline_query: InlineQuery):
                     InlineQueryResultArticle(
                         id="no_results",
                         title="No characters found",
-                        description=f"No matches for '{search_query}'",
+                        description=f"No matches for '{search_query}f'",
                         thumbnail_url=DEFAULT_THUMB,
                         input_message_content=InputTextMessageContent(
                             message_text=f"🔍 No characters found matching <b>{escape_html(search_query)}</b>.",
@@ -231,9 +232,9 @@ async def handle_inline_query(inline_query: InlineQuery):
 
                 caption = (
                     f"🌟 <b>{escape_html(char.name)}</b> [{r_emoji}]\n"
-                    f"🆔 <b>ID:</b> #{char.id:03d}\n"
-                    f"📺 <b>Anime:</b> {escape_html(char.anime)}\n"
-                    f"💎 <b>Rarity:</b> {r_emoji} {char.rarity}\n"
+                    f"{get_emoji('fid')} <b>ID:</b> #{char.id:03d}\n"
+                    f"{get_emoji('ftv')} <b>Anime:</b> {escape_html(char.anime)}\n"
+                    f"{get_emoji('gem')} <b>Rarity:</b> {r_emoji} {char.rarity}\n"
                     f"🤖 <b>Bot:</b> @AniVerse1bot"
                 )
 

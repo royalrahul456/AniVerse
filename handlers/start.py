@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import time
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
@@ -57,7 +58,7 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     cover_media = get_cover_media("start")
     bot_info = await message.bot.get_me()    
     caption = (
-        "🎉 <b>Welcome to AniVerse Universe!</b>\n\n"
+        f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
         + format_blockquote(
             "Snatch anime characters, build your harem,\n"
             "earn coins, and dominate the leaderboards!\n\n"
@@ -105,7 +106,7 @@ async def cb_dm_home(callback: CallbackQuery, db: AsyncSession):
     bot_info = await callback.bot.get_me()
     
     caption = (
-        "🎉 <b>Welcome to AniVerse Universe!</b>\n\n"
+        f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
         + format_blockquote(
             "Snatch anime characters, build your harem,\n"
             "earn coins, and dominate the leaderboards!\n\n"
@@ -168,7 +169,7 @@ def build_help_text(is_admin: bool) -> str:
     if is_admin:
         text += (
             "\n\n"
-            "╭───「 👑 Owner & Admin Tools 」───╮\n"
+            f"╭───「 {get_emoji('crown')} Owner & Admin Tools 」───╮\n"
             "├─➩ /addchar — Add new character\n"
             "├─➩ /editchar — Edit character details\n"
             "├─➩ /deletechar &lt;id&gt; — Delete character\n"
@@ -210,6 +211,6 @@ async def cmd_help(message: Message):
     if is_group:
         builder.row(InlineKeyboardButton(text="🗑️ Close Guide", callback_data="close_menu"))
     else:
-        builder.row(InlineKeyboardButton(text="🔙 Back to Hub Menu", callback_data="dm_home"))
+        builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
         
     await send_or_edit_start(message, cover_media, text, builder.as_markup(), is_callback=False)

@@ -1,3 +1,4 @@
+from utils.emojis import get_emoji
 import datetime
 import logging
 import asyncio
@@ -54,12 +55,12 @@ async def build_active_auction_card(auction: Auction, db: AsyncSession) -> str:
         "🔮 <b>ACTIVE AUCTION!</b>\n"
         "───────────────\n"
         + format_blockquote(
-            f"🆔 <b>Auction ID:</b> #{auction.id}\n"
+            f"{get_emoji('id')} <b>Auction ID:</b> #{auction.id}\n"
             f"📛 <b>Name:</b> {escape_html(character.name)}\n"
-            f"💎 <b>Rarity:</b> {r_emoji} {character.rarity}\n"
-            f"💰 <b>Starting:</b> {auction.starting_price:,}\n"
-            f"💣 <b>Current Bid:</b> {auction.current_bid:,}\n"
-            f"👑 <b>Leader:</b> {leader_name}\n"
+            f"{get_emoji('gem')} <b>Rarity:</b> {r_emoji} {character.rarity}\n"
+            f"{get_emoji('coin')} <b>Starting:</b> {auction.starting_price:,}\n"
+            f"{get_emoji('bomb')} <b>Current Bid:</b> {auction.current_bid:,}\n"
+            f"{get_emoji('crown')} <b>Leader:</b> {leader_name}\n"
             f"👥 <b>Seller:</b> {escape_html(seller.first_name)}\n"
             f"⏳ <b>Time Left:</b> {time_left_str}"
         )
@@ -70,9 +71,9 @@ async def build_active_auction_card(auction: Auction, db: AsyncSession) -> str:
 def build_auction_keyboard(auction: Auction) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="+1,000 💰", callback_data=f"bid_quick_{auction.id}_1000"),
-        InlineKeyboardButton(text="+5,000 💰", callback_data=f"bid_quick_{auction.id}_5000"),
-        InlineKeyboardButton(text="+10,000 💰", callback_data=f"bid_quick_{auction.id}_10000")
+        InlineKeyboardButton(text=f"+1,000 {get_emoji('coin')}", callback_data=f"bid_quick_{auction.id}_1000"),
+        InlineKeyboardButton(text=f"+5,000 {get_emoji('coin')}", callback_data=f"bid_quick_{auction.id}_5000"),
+        InlineKeyboardButton(text=f"+10,000 {get_emoji('coin')}", callback_data=f"bid_quick_{auction.id}_10000")
     )
     return builder.as_markup()
 
@@ -84,7 +85,7 @@ async def cmd_auction(message: Message, db: AsyncSession):
             "🔮 <b>AniVerse Character Auction House</b>\n\n"
             + format_blockquote(
                 "List your characters for global bidding!\n\n"
-                "⚡ <b>Usage:</b> <code>/auction &lt;character_id_or_name&gt; &lt;starting_price&gt;</code>\n"
+                f"{get_emoji('energy')} <b>Usage:</b> <code>/auction &lt;character_id_or_name&gt; &lt;starting_price&gt;</code>\n"
                 "<b>Example:</b> <code>/auction 1 10000</code>"
             ),
             parse_mode="HTML"
@@ -95,11 +96,11 @@ async def cmd_auction(message: Message, db: AsyncSession):
     price_str = parts[-1]
 
     if not price_str.isdigit():
-        await message.reply("❌ Starting price must be a positive number!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Starting price must be a positive number!", parse_mode="HTML")
         return
     starting_price = int(price_str)
     if starting_price < 100:
-        await message.reply("❌ Minimum starting price is 100 coins!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Minimum starting price is 100 coins!", parse_mode="HTML")
         return
 
     user_id = message.from_user.id
@@ -109,7 +110,7 @@ async def cmd_auction(message: Message, db: AsyncSession):
     limit_stmt = select(Auction).where(Auction.seller_id == user_id, Auction.status.in_(["pending", "active"]))
     limit_res = await db.execute(limit_stmt)
     if limit_res.scalars().all():
-        await message.reply("❌ You can only have one active or queued auction at a time!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You can only have one active or queued auction at a time!", parse_mode="HTML")
         return
 
     # Find character in user harem
@@ -128,7 +129,7 @@ async def cmd_auction(message: Message, db: AsyncSession):
     res = await db.execute(stmt)
     user_char = res.scalar_one_or_none()
     if not user_char:
-        await message.reply(f"❌ You do not own any character matching '<b>{escape_html(char_search)}</b>' in your harem!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You do not own any character matching '<b>{escape_html(char_search)}</b>' in your harem!", parse_mode="HTML")
         return
 
     character = await db.get(Character, user_char.character_id)
@@ -203,7 +204,7 @@ async def cmd_auction(message: Message, db: AsyncSession):
             "───────────────\n"
             + format_blockquote(
                 f"📛 Character: <b>{escape_html(character.name)}</b>\n"
-                f"💰 Starting Price: <b>{starting_price:,} coins</b>\n"
+                f"{get_emoji('coin')} Starting Price: <b>{starting_price:,} coins</b>\n"
                 f"🔢 Queue Position: <b>#{q_pos}</b>"
             )
             + "\nIt will start automatically once active auctions ahead of it finish."
@@ -214,7 +215,7 @@ async def cmd_auction(message: Message, db: AsyncSession):
 async def cmd_bid(message: Message, db: AsyncSession):
     parts = message.text.strip().split()
     if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
-        await message.reply("❌ Usage: <code>/bid &lt;auction_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Usage: <code>/bid &lt;auction_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
         return
 
     auction_id = int(parts[1])
@@ -225,11 +226,11 @@ async def cmd_bid(message: Message, db: AsyncSession):
 
     auction = await db.get(Auction, auction_id)
     if not auction or auction.status != "active":
-        await message.reply("❌ This auction is not active or does not exist!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} This auction is not active or does not exist!", parse_mode="HTML")
         return
 
     if auction.seller_id == user_id:
-        await message.reply("❌ You cannot bid on your own auction!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You cannot bid on your own auction!", parse_mode="HTML")
         return
 
     # Check minimum bid rules
@@ -238,11 +239,11 @@ async def cmd_bid(message: Message, db: AsyncSession):
         min_bid = auction.current_bid + 100
 
     if amount < min_bid:
-        await message.reply(f"❌ Minimum required bid is <b>{min_bid:,} coins</b>!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Minimum required bid is <b>{min_bid:,} coins</b>!", parse_mode="HTML")
         return
 
     if user.coins < amount:
-        await message.reply(f"❌ You do not have enough coins! Balance: {user.coins:,} coins.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You do not have enough coins! Balance: {user.coins:,} coins.", parse_mode="HTML")
         return
 
     # Process bid
@@ -264,13 +265,13 @@ async def cmd_bid(message: Message, db: AsyncSession):
     db.add(bid_log)
     await db.commit()
 
-    await message.reply(f"✅ Bid of <b>{amount:,} coins</b> placed successfully on Auction #{auction.id}!")
+    await message.reply(f"{get_emoji('success')} Bid of <b>{amount:,} coins</b> placed successfully on Auction #{auction.id}!")
 
 @router.message(Command("cancelauction"))
 async def cmd_cancelauction(message: Message, db: AsyncSession):
     parts = message.text.strip().split()
     if len(parts) < 2 or not parts[1].isdigit():
-        await message.reply("❌ Usage: <code>/cancelauction &lt;auction_id&gt;</code>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Usage: <code>/cancelauction &lt;auction_id&gt;</code>", parse_mode="HTML")
         return
 
     auction_id = int(parts[1])
@@ -278,20 +279,20 @@ async def cmd_cancelauction(message: Message, db: AsyncSession):
 
     auction = await db.get(Auction, auction_id)
     if not auction:
-        await message.reply("❌ Auction not found!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Auction not found!", parse_mode="HTML")
         return
 
     if auction.seller_id != user_id:
-        await message.reply("❌ You can only cancel your own auctions!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You can only cancel your own auctions!", parse_mode="HTML")
         return
 
     if auction.status not in ["pending", "active"]:
-        await message.reply("❌ This auction is already finished or cancelled!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} This auction is already finished or cancelled!", parse_mode="HTML")
         return
 
     # Check if there are any bids (only if active)
     if auction.status == "active" and auction.highest_bidder_id is not None:
-        await message.reply("❌ You cannot cancel an active auction that already has bids!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You cannot cancel an active auction that already has bids!", parse_mode="HTML")
         return
 
     # Cancel auction
@@ -307,7 +308,7 @@ async def cmd_cancelauction(message: Message, db: AsyncSession):
     db.add(user_char)
     await db.commit()
 
-    await message.reply("✅ Auction cancelled successfully! Your character has been returned to your harem.")
+    await message.reply(f"{get_emoji('success')} Auction cancelled successfully! Your character has been returned to your harem.")
 
 @router.message(Command("auctions", "auc"))
 async def cmd_auctions(message: Message, db: AsyncSession):
@@ -322,7 +323,7 @@ async def cmd_auctions(message: Message, db: AsyncSession):
         await message.reply(
             "🔮 <b>Active Auctions</b>\n━━━━━━━━━━━━━━━━━━━\n"
             + format_blockquote(
-                f"❌ There is no active auction globally right now.\n\n"
+                f"{get_emoji('error')} There is no active auction globally right now.\n\n"
                 f"🕒 <b>Queue Size:</b> {queue_size} pending listings."
             ),
             parse_mode="HTML"
@@ -354,11 +355,11 @@ async def cb_bid_quick(callback: CallbackQuery, db: AsyncSession):
 
     auction = await db.get(Auction, auction_id)
     if not auction or auction.status != "active":
-        await callback.answer("❌ This auction is no longer active!", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} This auction is no longer active!", show_alert=True)
         return
 
     if auction.seller_id == user_id:
-        await callback.answer("❌ You cannot bid on your own auction!", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} You cannot bid on your own auction!", show_alert=True)
         return
 
     # Calculate bid amount
@@ -368,7 +369,7 @@ async def cb_bid_quick(callback: CallbackQuery, db: AsyncSession):
 
     user = await get_or_create_user(db, user_id, callback.from_user.username, callback.from_user.first_name)
     if user.coins < amount:
-        await callback.answer(f"❌ Not enough coins! Balance: {user.coins:,}", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} Not enough coins! Balance: {user.coins:,}", show_alert=True)
         return
 
     # Refund previous highest bidder
@@ -389,7 +390,7 @@ async def cb_bid_quick(callback: CallbackQuery, db: AsyncSession):
     db.add(bid_log)
     await db.commit()
 
-    await callback.answer(f"🎉 Bid of {amount:,} placed!", show_alert=False)
+    await callback.answer(f"{get_emoji('party')} Bid of {amount:,} placed!", show_alert=False)
     
     # Update active auction card caption
     card = await build_active_auction_card(auction, db)
@@ -433,14 +434,14 @@ async def process_auctions_tick(bot):
                     
                     # Notify
                     win_card = (
-                        "🎉 <b>Auction Won!</b> 🎉\n"
+                        f"{get_emoji('party')} <b>Auction Won!</b> {get_emoji('party')}\n"
                         "───────────────\n"
                         + format_blockquote(
-                            f"👑 <b>{escape_html(bidder.first_name)}</b> won!\n"
+                            f"{get_emoji('crown')} <b>{escape_html(bidder.first_name)}</b> won!\n"
                             f"🙇 <b>{escape_html(character.name)}</b> added to collection\n"
-                            f"💰 Paid: <b>{active.current_bid:,} coins</b>\n"
-                            f"💰 Seller <b>{escape_html(seller.first_name)}</b> received <b>{payout:,} coins</b> (5% tax deducted)\n"
-                            f"🎉 Congratulations!"
+                            f"{get_emoji('coin')} Paid: <b>{active.current_bid:,} coins</b>\n"
+                            f"{get_emoji('coin')} Seller <b>{escape_html(seller.first_name)}</b> received <b>{payout:,} coins</b> (5% tax deducted)\n"
+                            f"{get_emoji('party')} Congratulations!"
                         )
                     )
                     try:
@@ -461,7 +462,7 @@ async def process_auctions_tick(bot):
                         "───────────────\n"
                         + format_blockquote(
                             f"📛 Character: <b>{escape_html(character.name)}</b>\n"
-                            f"⚠️ Status: <b>No bids received.</b>\n"
+                            f"{get_emoji('warning')} Status: <b>No bids received.</b>\n"
                             f"🏡 Character returned to seller <a href=\"tg://user?id={seller.user_id}\">{escape_html(seller.first_name)}</a>."
                         )
                     )
