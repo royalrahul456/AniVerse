@@ -253,7 +253,7 @@ async def main():
             await load_emojis(session)
         logger.info("Loaded custom bot emojis into cache.")
     except Exception as e:
-        logger.error(f"Failed to load custom bot emojis: {e}")
+        logger.error(f"Failed to load custom bot emojis (falling back to unicode defaults): {e}")
 
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()

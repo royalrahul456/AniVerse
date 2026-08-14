@@ -38,5 +38,9 @@ async def load_emojis(db: AsyncSession):
         EMOJI_CACHE[em.key] = em.emoji
 
 def get_emoji(key: str) -> str:
-    """Get the custom or default emoji for a given key."""
-    return EMOJI_CACHE.get(key, DEFAULT_EMOJIS.get(key, "✨"))
+    """Get the default unicode emoji for a given key.
+    Note: Custom premium emojis via HTML tags are disabled because Telegram API 
+    forbids bots from using them in text messages unless the bot has a purchased 
+    Fragment collectible username.
+    """
+    return DEFAULT_EMOJIS.get(key, "✨")
