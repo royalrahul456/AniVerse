@@ -15,9 +15,8 @@ engine = create_async_engine(
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
 
-from database.models import BotEmoji
-
 async def init_db():
+    from database.models import BotEmoji
     """Create all tables if they don't exist. Works for both SQLite and PostgreSQL."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
