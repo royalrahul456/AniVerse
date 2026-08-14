@@ -21,6 +21,18 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bot_emojis (
+                key VARCHAR(50) PRIMARY KEY,
+                emoji VARCHAR(255) NOT NULL,
+                updated_at TIMESTAMP
+            )
+            """))
+        except Exception as e:
+            print(f"Error creating bot_emojis table: {e}")
+            
     # Safely alter tables to add new columns if they do not exist.
     # Note: Each alteration must run in its own transaction block (engine.begin()) 
     # to prevent PostgreSQL from aborting the entire block if one column already exists.

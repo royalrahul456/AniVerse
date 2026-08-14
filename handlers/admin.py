@@ -2409,37 +2409,40 @@ async def cmd_autoemojis(message: Message, db: AsyncSession):
     from utils.emojis import DEFAULT_EMOJIS, load_emojis
     from database.models import BotEmoji
     
-    # Invert DEFAULT_EMOJIS to map emoji char -> key
     emoji_to_key = {v: k for k, v in DEFAULT_EMOJIS.items()}
     
     mapped_count = 0
     mapped_keys = []
 
-    for sticker in pack.stickers:
-        if sticker.emoji in emoji_to_key and sticker.custom_emoji_id:
-            key = emoji_to_key[sticker.emoji]
-            
-            tag = f'<tg-emoji emoji_id="{sticker.custom_emoji_id}">{sticker.emoji}</tg-emoji>'
-            
-            stmt = select(BotEmoji).where(BotEmoji.key == key)
-            res = await db.execute(stmt)
-            existing = res.scalar_one_or_none()
-            
-            if existing:
-                existing.emoji = tag
-            else:
-                db.add(BotEmoji(key=key, emoji=tag))
-            
-            mapped_count += 1
-            mapped_keys.append(key)
-            # Remove from mapping so we only map the first matching sticker in the pack
-            del emoji_to_key[sticker.emoji]
+    try:
+        for sticker in pack.stickers:
+            if sticker.emoji in emoji_to_key and sticker.custom_emoji_id:
+                key = emoji_to_key[sticker.emoji]
+                
+                tag = f'<tg-emoji emoji_id="{sticker.custom_emoji_id}">{sticker.emoji}</tg-emoji>'
+                
+                stmt = select(BotEmoji).where(BotEmoji.key == key)
+                res = await db.execute(stmt)
+                existing = res.scalar_one_or_none()
+                
+                if existing:
+                    existing.emoji = tag
+                else:
+                    db.add(BotEmoji(key=key, emoji=tag))
+                
+                mapped_count += 1
+                mapped_keys.append(key)
+                # Remove from mapping so we only map the first matching sticker in the pack
+                del emoji_to_key[sticker.emoji]
 
-    await db.commit()
-    await load_emojis(db)  # Reload into cache
+        await db.commit()
+        await load_emojis(db)  # Reload into cache
 
-    if mapped_count > 0:
-        keys_str = ", ".join(mapped_keys)
-        await message.reply(f"{get_emoji('success')} <b>Successfully auto-mapped {mapped_count} emojis!</b>\n\nAssigned: {keys_str}", parse_mode="HTML")
-    else:
-        await message.reply(f"{get_emoji('warning')} Found the pack, but no standard UI emojis ({''.join(DEFAULT_EMOJIS.values())}) matched the stickers inside.")
+        if mapped_count > 0:
+            keys_str = ", ".join(mapped_keys)
+            await message.reply(f"{get_emoji('success')} <b>Successfully auto-mapped {mapped_count} emojis!</b>\n\nAssigned: {keys_str}", parse_mode="HTML")
+        else:
+            await message.reply(f"{get_emoji('warning')} Found the pack, but no standard UI emojis ({''.join(DEFAULT_EMOJIS.values())}) matched the stickers inside.")
+    except Exception as e:
+        await db.rollback()
+        await message.reply(f"{get_emoji('error')} An unexpected database error occurred during mapping:\n\n<code>{e}</code>", parse_mode="HTML")
