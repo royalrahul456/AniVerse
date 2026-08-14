@@ -2391,6 +2391,10 @@ async def cmd_autoemojis(message: Message, db: AsyncSession):
     # Try parsing full link if provided
     if "addstickers/" in pack_name:
         pack_name = pack_name.split("addstickers/")[-1].split("?")[0]
+    elif "addemoji/" in pack_name:
+        pack_name = pack_name.split("addemoji/")[-1].split("?")[0]
+    
+    pack_name = pack_name.strip("/")
 
     try:
         pack = await message.bot.get_sticker_set(pack_name)
