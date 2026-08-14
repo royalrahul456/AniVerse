@@ -12,6 +12,7 @@ from database.models import User, Character, UserCharacter, Auction, Bid
 from utils.formatters import format_blockquote, get_rarity_emoji, escape_html
 from handlers.start import get_or_create_user
 from utils.settings import get_cover_media
+from handlers.admin import is_owner
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -115,24 +116,43 @@ async def cmd_auction(message: Message, db: AsyncSession):
 
     # Find character in user harem
     char_id_val = int(char_search) if char_search.isdigit() else None
-    if char_id_val is not None:
-        stmt = select(UserCharacter).join(Character).where(
-            UserCharacter.user_id == user_id,
-            Character.id == char_id_val
-        ).limit(1)
-    else:
-        stmt = select(UserCharacter).join(Character).where(
-            UserCharacter.user_id == user_id,
-            Character.name.ilike(char_search)
-        ).limit(1)
+    
+    # OWNER BYPASS: If the owner searches for a character, they can auction ANY character globally, even if they don't own it!
+    owner_bypass = False
+    if is_owner(message):
+        if char_id_val is not None:
+            stmt = select(Character).where(Character.id == char_id_val)
+        else:
+            stmt = select(Character).where(Character.name.ilike(f"%{char_search}%"))
+        
+        res = await db.execute(stmt)
+        character = res.scalars().first()
+        if character:
+            owner_bypass = True
+            # Create a synthetic UserCharacter for the auction referencing the bot
+            bot_user = await get_or_create_user(db, message.bot.id, "AniVerse_Bot", "Auction House")
+            user_char = UserCharacter(user_id=bot_user.user_id, character_id=character.id, nickname=character.name)
+            db.add(user_char)
+            await db.flush()
 
-    res = await db.execute(stmt)
-    user_char = res.scalar_one_or_none()
-    if not user_char:
-        await message.reply(f"{get_emoji('error')} You do not own any character matching '<b>{escape_html(char_search)}</b>' in your harem!", parse_mode="HTML")
-        return
-
-    character = await db.get(Character, user_char.character_id)
+    if not owner_bypass:
+        if char_id_val is not None:
+            stmt = select(UserCharacter).join(Character).where(
+                UserCharacter.user_id == user_id,
+                Character.id == char_id_val
+            )
+        else:
+            stmt = select(UserCharacter).join(Character).where(
+                UserCharacter.user_id == user_id,
+                Character.name.ilike(f"%{char_search}%")
+            )
+    
+        res = await db.execute(stmt)
+        user_char = res.scalars().first()
+        if not user_char:
+            await message.reply(f"{get_emoji('error')} You do not own any character matching '<b>{escape_html(char_search)}</b>' in your harem!", parse_mode="HTML")
+            return
+        character = await db.get(Character, user_char.character_id)
 
     # Check if there is already an active global auction
     active_stmt = select(Auction).where(Auction.status == "active")
@@ -149,9 +169,9 @@ async def cmd_auction(message: Message, db: AsyncSession):
         started_at = datetime.datetime.utcnow()
         expires_at = started_at + datetime.timedelta(minutes=5)
 
-    # Delete UserCharacter to lock/hold it
-    nickname = user_char.nickname or character.name
-    await db.delete(user_char)
+    # Transfer UserCharacter to the bot account (Auction House) to hold it, preventing duplicates while avoiding Postgres ForeignKey integrity errors from deletion
+    bot_user = await get_or_create_user(db, message.bot.id, "AniVerse_Bot", "Auction House")
+    user_char.user_id = bot_user.user_id
     await db.flush()
 
     # Create Auction record
@@ -299,13 +319,18 @@ async def cmd_cancelauction(message: Message, db: AsyncSession):
     auction.status = "cancelled"
     
     # Return character to seller
-    character = await db.get(Character, auction.character_id)
-    user_char = UserCharacter(
-        user_id=user_id,
-        character_id=character.id,
-        nickname=character.name
-    )
-    db.add(user_char)
+    # Return character to seller
+    user_char = await db.get(UserCharacter, auction.user_character_id)
+    if user_char:
+        user_char.user_id = user_id
+    else:
+        character = await db.get(Character, auction.character_id)
+        user_char = UserCharacter(
+            user_id=user_id,
+            character_id=character.id,
+            nickname=character.name
+        )
+        db.add(user_char)
     await db.commit()
 
     await message.reply(f"{get_emoji('success')} Auction cancelled successfully! Your character has been returned to your harem.")
@@ -424,8 +449,12 @@ async def process_auctions_tick(bot):
                     bidder = await db.get(User, active.highest_bidder_id)
                     
                     # Distribute character to bidder
-                    user_char = UserCharacter(user_id=active.highest_bidder_id, character_id=active.character_id, nickname=nickname)
-                    db.add(user_char)
+                    user_char = await db.get(UserCharacter, active.user_character_id)
+                    if user_char:
+                        user_char.user_id = active.highest_bidder_id
+                    else:
+                        user_char = UserCharacter(user_id=active.highest_bidder_id, character_id=active.character_id, nickname=nickname)
+                        db.add(user_char)
                     
                     # Pay seller (5% tax)
                     payout = int(active.current_bid * 0.95)
@@ -453,8 +482,13 @@ async def process_auctions_tick(bot):
                     active.status = "cancelled"
                     
                     # Return character to seller
-                    user_char = UserCharacter(user_id=active.seller_id, character_id=active.character_id, nickname=nickname)
-                    db.add(user_char)
+                    # Return character to seller
+                    user_char = await db.get(UserCharacter, active.user_character_id)
+                    if user_char:
+                        user_char.user_id = active.seller_id
+                    else:
+                        user_char = UserCharacter(user_id=active.seller_id, character_id=active.character_id, nickname=nickname)
+                        db.add(user_char)
                     await db.commit()
                     
                     cancel_card = (
