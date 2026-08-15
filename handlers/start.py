@@ -1,5 +1,6 @@
 from utils.emojis import get_emoji
 import time
+import datetime
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import CommandStart, Command
@@ -14,6 +15,20 @@ from utils.settings import get_cover_media
 
 START_TIME = time.time()
 router = Router()
+
+def get_uptime_str() -> str:
+    uptime_seconds = int(time.time() - START_TIME)
+    hours, remainder = divmod(uptime_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    parts = []
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 or hours > 0:
+        parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    
+    return " ".join(parts)
 
 async def get_or_create_user(session: AsyncSession, user_id: int, username: str = "", first_name: str = "") -> User:
     stmt = select(User).where(User.user_id == user_id)
@@ -57,17 +72,29 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     
     cover_media = get_cover_media("start")
     bot_info = await message.bot.get_me()    
+    
+    # Calculate Ping for start message
+    start_ping_time = time.time()
+    # Dummy async call to measure ping to telegram servers
+    _ = await message.bot.get_me()
+    ping_ms = round((time.time() - start_ping_time) * 1000, 2)
+    uptime_str = get_uptime_str()
+    
     caption = (
-        f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
-        + format_blockquote(
-            "Snatch anime characters, build your harem,\n"
-            "earn coins, and dominate the leaderboards!\n\n"
-            "Use /help to see all commands!"
-        )
+        f"🍃 Greetings, I'm <b>AniVerse Bot</b> 🫧\n"
+        f"───────── ▨ ─────────\n"
+        f"◎ <b>WHERE:</b> I spawn waifus in your chat for users to grab.\n"
+        f"◎ <b>HOW TO USE:</b> Add me to your group and use /help for commands.\n"
+        f"───────── ▨ ─────────\n"
+        f"⚡ <b>PING:</b> {ping_ms} ms\n"
+        f"⏳ <b>UPTIME:</b> {uptime_str}"
     )
     
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"))
+    builder.row(
+        InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"),
+        InlineKeyboardButton(text="⚡ Ping", callback_data="ping_bot")
+    )
     
     await send_or_edit_start(message, cover_media, caption, builder.as_markup(), is_callback=False)
 
@@ -214,3 +241,51 @@ async def cmd_help(message: Message):
         builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
         
     await send_or_edit_start(message, cover_media, text, builder.as_markup(), is_callback=False)
+
+@router.message(Command("ping"))
+async def cmd_ping(message: Message):
+    start_ping_time = time.time()
+    _ = await message.bot.get_me()
+    ping_ms = round((time.time() - start_ping_time) * 1000, 2)
+    uptime_str = get_uptime_str()
+    
+    text = (
+        f"⚡ <b>PING:</b> {ping_ms} ms\n"
+        f"⏳ <b>UPTIME:</b> {uptime_str}"
+    )
+    await message.reply(text, parse_mode="HTML")
+
+@router.callback_query(F.data == "ping_bot")
+async def cb_ping(callback: CallbackQuery):
+    start_ping_time = time.time()
+    _ = await callback.bot.get_me()
+    ping_ms = round((time.time() - start_ping_time) * 1000, 2)
+    uptime_str = get_uptime_str()
+    
+    # Update the caption of the start message
+    caption = (
+        f"🍃 Greetings, I'm <b>AniVerse Bot</b> 🫧\n"
+        f"───────── ▨ ─────────\n"
+        f"◎ <b>WHERE:</b> I spawn waifus in your chat for users to grab.\n"
+        f"◎ <b>HOW TO USE:</b> Add me to your group and use /help for commands.\n"
+        f"───────── ▨ ─────────\n"
+        f"⚡ <b>PING:</b> {ping_ms} ms\n"
+        f"⏳ <b>UPTIME:</b> {uptime_str}"
+    )
+    
+    bot_info = await callback.bot.get_me()
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"),
+        InlineKeyboardButton(text="⚡ Ping", callback_data="ping_bot")
+    )
+    
+    try:
+        if callback.message.photo or callback.message.video or callback.message.animation:
+            await callback.message.edit_caption(caption=caption, reply_markup=builder.as_markup(), parse_mode="HTML")
+        else:
+            await callback.message.edit_text(text=caption, reply_markup=builder.as_markup(), parse_mode="HTML")
+        await callback.answer("Ping updated!", show_alert=False)
+    except Exception:
+        # Message content is the same, so Telegram throws MessageNotModified
+        await callback.answer("Ping is unchanged!", show_alert=False)

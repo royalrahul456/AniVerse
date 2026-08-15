@@ -263,6 +263,7 @@ async def main():
     # Set bot commands in Telegram menu
     commands = [
         BotCommand(command="start", description=f"{DEFAULT_EMOJIS['sparkle']} Welcome & Main Menu Hub"),
+        BotCommand(command="ping", description="⚡ Check bot ping & uptime"),
         BotCommand(command="help", description="📖 Guide & Help Center"),
         BotCommand(command="profile", description=f"{DEFAULT_EMOJIS['user']} View trainer profile card"),
         BotCommand(command="harem", description="🎒 View your character collection"),
