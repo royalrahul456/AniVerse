@@ -274,6 +274,8 @@ async def main():
         BotCommand(command="anime", description=f"{DEFAULT_EMOJIS['tv']} Filter characters by anime title"),
         BotCommand(command="claim", description=f"{DEFAULT_EMOJIS['gift']} Claim a free daily character"),
         BotCommand(command="guess", description=f"{DEFAULT_EMOJIS['target']} Catch wild character / start guessing"),
+        BotCommand(command="rob", description="🥷 Steal coins from another user"),
+        BotCommand(command="broadcast", description="📢 Send a global message (Owner only)"),
         BotCommand(command="spawnsettings", description="⚙️ View group spawn configuration"),
         BotCommand(command="setspawn", description="⚙️ Set group spawn threshold (Admin)"),
         BotCommand(command="togglespawn", description=f"{DEFAULT_EMOJIS['energy']} Toggle wild character spawns"),

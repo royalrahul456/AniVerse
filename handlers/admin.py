@@ -2448,3 +2448,55 @@ async def cmd_autoemojis(message: Message, db: AsyncSession):
         import html
         safe_error = html.escape(str(e))
         await message.reply(f"{get_emoji('error')} An unexpected database error occurred during mapping:\n\n<code>{safe_error}</code>", parse_mode="HTML")
+
+@router.message(Command("broadcast"))
+async def cmd_broadcast(message: Message, db: AsyncSession):
+    if not is_owner(message):
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2 and not message.reply_to_message:
+        await message.reply(
+            "📢 <b>Global Broadcast Tool</b>\n\n"
+            "Use this to send an announcement to every group the bot is in.\n\n"
+            "<b>Usage:</b>\n"
+            "1. <code>/broadcast &lt;message&gt;</code>\n"
+            "2. Or reply to an existing message (text, photo, etc.) with <code>/broadcast</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    # Fetch all groups
+    stmt = select(GroupSettings.chat_id)
+    res = await db.execute(stmt)
+    chat_ids = res.scalars().all()
+
+    if not chat_ids:
+        await message.reply("There are no registered groups to broadcast to.")
+        return
+
+    status_msg = await message.reply(f"⏳ Starting broadcast to {len(chat_ids)} groups. This may take a while...")
+
+    success_count = 0
+    fail_count = 0
+    import asyncio
+
+    for chat_id in chat_ids:
+        try:
+            if message.reply_to_message:
+                await message.reply_to_message.copy_to(chat_id)
+            else:
+                await message.bot.send_message(chat_id, parts[1], parse_mode="HTML")
+            success_count += 1
+        except Exception:
+            fail_count += 1
+        
+        # Avoid rate limits (Telegram limit is ~30 msgs/sec, safe sleep is 0.05s)
+        await asyncio.sleep(0.05)
+
+    await status_msg.edit_text(
+        f"✅ <b>Broadcast Complete!</b>\n\n"
+        f"📣 <b>Success:</b> {success_count} groups\n"
+        f"❌ <b>Failed:</b> {fail_count} groups (Bot kicked/permissions missing)",
+        parse_mode="HTML"
+    )

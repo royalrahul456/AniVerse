@@ -846,3 +846,92 @@ async def cmd_scramble(event, db: AsyncSession):
     else:
         scram_msg = await message_obj.answer(card, parse_mode="HTML")
         schedule_message_deletion(message_obj.bot, message_obj.chat.id, scram_msg.message_id, 120)
+
+@router.message(Command("rob"))
+async def cmd_rob(message: Message, db: AsyncSession):
+    user_id = message.from_user.id
+    target_id = None
+    target_name = None
+
+    if message.reply_to_message:
+        target_id = message.reply_to_message.from_user.id
+        target_name = message.reply_to_message.from_user.first_name
+    else:
+        parts = message.text.split()
+        if len(parts) > 1:
+            if message.entities:
+                for entity in message.entities:
+                    if entity.type == "text_mention":
+                        target_id = entity.user.id
+                        target_name = entity.user.first_name
+                        break
+        if not target_id:
+            await message.reply(f"{get_emoji('warning')} You must reply to a user or @mention them to rob them!")
+            return
+
+    if user_id == target_id:
+        await message.reply(f"{get_emoji('warning')} You can't rob yourself!")
+        return
+
+    # Check cooldown
+    from database.models import UserDailyLimit
+    import time
+    limit_stmt = select(UserDailyLimit).where(UserDailyLimit.user_id == user_id)
+    limit_res = await db.execute(limit_stmt)
+    limit = limit_res.scalar_one_or_none()
+
+    now_ts = int(time.time())
+    if limit and limit.last_rob_at:
+        elapsed = now_ts - limit.last_rob_at
+        if elapsed < 3600:
+            remaining = 3600 - elapsed
+            m, s = divmod(remaining, 60)
+            await message.reply(f"⏳ The cops are still looking for you! Wait <b>{m}m {s}s</b> before robbing again.", parse_mode="HTML")
+            return
+
+    # Get users
+    robber = await get_or_create_user(db, user_id, message.from_user.username, message.from_user.first_name)
+    target = await db.get(User, target_id)
+
+    if not target:
+        await message.reply(f"{get_emoji('warning')} That user isn't registered in the database.")
+        return
+
+    if robber.coins < 100:
+        await message.reply(f"{get_emoji('error')} You need at least 100 coins to pay the fine if you get caught!")
+        return
+
+    if target.coins < 100:
+        await message.reply(f"{get_emoji('error')} That user is too poor to rob. They need at least 100 coins!")
+        return
+
+    # Update cooldown
+    if not limit:
+        limit = UserDailyLimit(user_id=user_id, last_rob_at=now_ts, rob_count=1)
+        db.add(limit)
+    else:
+        limit.last_rob_at = now_ts
+        limit.rob_count += 1
+
+    # Execute rob logic
+    success = random.random() < 0.50 # 50% chance
+    if success:
+        # Steal 15% to 35%, max 5000
+        percent = random.uniform(0.15, 0.35)
+        steal_amount = int(target.coins * percent)
+        if steal_amount > 5000:
+            steal_amount = 5000
+
+        target.coins -= steal_amount
+        robber.coins += steal_amount
+        await db.commit()
+        await message.reply(f"🥷 <b>HEIST SUCCESSFUL!</b>\n\nYou sneaked in and stole <b>{steal_amount}</b> coins from {escape_html(target_name)}!", parse_mode="HTML")
+    else:
+        # Fine 10%, max 5000
+        fine_amount = int(robber.coins * 0.10)
+        if fine_amount > 5000:
+            fine_amount = 5000
+        
+        robber.coins -= fine_amount
+        await db.commit()
+        await message.reply(f"🚨 <b>BUSTED!</b>\n\nYou got caught trying to rob {escape_html(target_name)}!\nYou paid a fine of <b>{fine_amount}</b> coins to the cops.", parse_mode="HTML")
