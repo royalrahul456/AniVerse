@@ -306,12 +306,13 @@ async def cmd_dart(event, db: AsyncSession):
     await asyncio.sleep(3.5)
     
     score = dart_msg.dice.value
+    # Multipliers applied: 150 * 1.05 = 157.5 -> 157; 50 * 1.05 = 52.5 -> 52
     if score >= 4:
-        reward = 150
+        reward = 157
         user.coins += reward
-        res = f"{get_emoji('target')} You hit a <b>{score}</b>! {get_emoji('party')} <b>WIN!</b> +150 Coins!"
+        res = f"{get_emoji('target')} You hit a <b>{score}</b>! {get_emoji('party')} <b>WIN!</b> +{reward} Coins!"
     else:
-        loss = 50
+        loss = 52
         user.coins -= loss
         res = f"{get_emoji('target')} You hit a <b>{score}</b>! 💀 <b>LOSS!</b> -{loss} Coins."
 

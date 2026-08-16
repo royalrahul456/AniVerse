@@ -19,21 +19,21 @@ DATABASE_URL = _db_url
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "6593485710").split(",") if x.strip().isdigit()]
 
 # Gameplay Rewards Configuration
-DAILY_REWARD_MIN = 250
+DAILY_REWARD_MIN = 262
 
 # Currency Configuration
 CURRENCY_NAME = "Gold"
 CURRENCY_EMOJI = "🪙"
 # Official Group Chat ID (Daily claim restriction)
 OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1003616974453"))
-DAILY_REWARD_MAX = 550
-CATCH_REWARD_MIN = 80
-CATCH_REWARD_MAX = 130
+DAILY_REWARD_MAX = 577
+CATCH_REWARD_MIN = 84
+CATCH_REWARD_MAX = 136
 
-SPIN_REWARDS = [100, 150, 200, 250, 350, 550]
+SPIN_REWARDS = [105, 157, 210, 262, 367, 577]
 
-TRIVIA_REWARD = 150
-GUESS_REWARD = 200
+TRIVIA_REWARD = 157
+GUESS_REWARD = 210
 DICE_WIN_MULTIPLIER = 2
 
 # Default Rarity Emojis & Colors/Weights

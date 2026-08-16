@@ -550,9 +550,9 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
                     await db.commit()
                     text = f"{get_emoji('crown')} <b>{winner_name} WON THE XO DUEL!</b>\nClaims <b>{reward:,} coins</b> (Pot: {total_pot:,} - 5% tax)!"
                 else:
-                    winner_user.coins += 200
+                    winner_user.coins += 210
                     await db.commit()
-                    text = f"{get_emoji('crown')} <b>{winner_name} WON THE XO DUEL!</b>\nClaims +200 casual win coins!"
+                    text = f"{get_emoji('crown')} <b>{winner_name} WON THE XO DUEL!</b>\nClaims +210 casual win coins!"
 
             card = f"{get_emoji('error')}{get_emoji('circle')} <b>TIC-TAC-TOE DUEL RESULT</b>\n" + format_blockquote(text)
             if callback.message.photo or callback.message.video:
