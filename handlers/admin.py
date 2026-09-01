@@ -129,7 +129,7 @@ async def process_setcover_category(callback: CallbackQuery, state: FSMContext):
 async def process_setcover_media(message: Message, state: FSMContext):
     if message.text and message.text == "/cancel":
         await state.clear()
-        await message.reply("{get_emoji('error')} Cover configuration cancelled.")
+        await message.reply(f"{get_emoji('error')} Cover configuration cancelled.")
         return
 
     media_value = None
@@ -143,7 +143,7 @@ async def process_setcover_media(message: Message, state: FSMContext):
         media_value = message.text.strip()
 
     if not media_value:
-        await message.reply("{get_emoji('warning')} Please upload a valid photo/video/GIF or send a link starting with http!")
+        await message.reply(f"{get_emoji('warning')} Please upload a valid photo/video/GIF or send a link starting with http!")
         return
 
     data = await state.get_data()
@@ -170,14 +170,14 @@ async def cmd_give(message: Message, db: AsyncSession):
 
     if not raw_args and not reply:
         card = (
-            "{get_emoji('gift')} <b>OWNER GIVE CONSOLE</b>\n\n"
+            f"{get_emoji('gift')} <b>OWNER GIVE CONSOLE</b>\n\n"
             + format_blockquote(
                 "Grant characters or coins directly to players!\n\n"
-                "{get_emoji('user')} <b>Give Character by ID:</b>\n"
+                f"{get_emoji('user')} <b>Give Character by ID:</b>\n"
                 "• <code>/giv &lt;user_id&gt; &lt;character_id&gt;</code>\n"
                 "• <code>/giv char &lt;user_id&gt; &lt;character_id&gt;</code>\n"
                 "• Reply to a user's message with: <code>/giv &lt;character_id&gt;</code>\n\n"
-                "{get_emoji('coin')} <b>Give Coins:</b>\n"
+                f"{get_emoji('coin')} <b>Give Coins:</b>\n"
                 "• <code>/giv coins &lt;user_id&gt; &lt;amount&gt;</code>\n"
                 "• Reply to a user's message with: <code>/giv coins &lt;amount&gt;</code>"
             )
@@ -217,7 +217,7 @@ async def cmd_give(message: Message, db: AsyncSession):
             value_str = tokens[0]
 
     if not target_user_id:
-        await message.reply("{get_emoji('warning')} Target user missing! Either reply to a player's message or specify the User ID.\n<i>Example: /giv 6593485710 55</i>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('warning')} Target user missing! Either reply to a player's message or specify the User ID.\n<i>Example: /giv 6593485710 55</i>", parse_mode="HTML")
         return
 
     if not value_str or not value_str.isdigit():
@@ -281,15 +281,15 @@ async def cmd_give(message: Message, db: AsyncSession):
 @router.message(Command("addrarity"))
 async def cmd_addrarity(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
-        await message.answer("{get_emoji('no_entry')} Only bot owners and admins can add custom rarity types!")
+        await message.answer(f"{get_emoji('no_entry')} Only bot owners and admins can add custom rarity types!")
         return
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         await message.answer(
-            "{get_emoji('sparkle')} <b>ADD CUSTOM RARITY CONSOLE</b>\n\n"
+            f"{get_emoji('sparkle')} <b>ADD CUSTOM RARITY CONSOLE</b>\n\n"
             + format_blockquote(
                 "Define a new custom rarity tier for your bot!\n\n"
-                "{get_emoji('energy')} <b>Usage:</b> <code>/addrarity Name | Emoji</code>\n"
+                f"{get_emoji('energy')} <b>Usage:</b> <code>/addrarity Name | Emoji</code>\n"
                 "<b>Example:</b> <code>/addrarity Celestial | 🌌</code>"
             ),
             parse_mode="HTML"
@@ -298,7 +298,7 @@ async def cmd_addrarity(message: Message, db: AsyncSession):
 
     args = [x.strip() for x in parts[1].split("|")]
     if len(args) < 2:
-        await message.answer("{get_emoji('error')} Please provide at least <b>Name | Emoji</b> separated by <code>|</code>", parse_mode="HTML")
+        await message.answer(f"{get_emoji('error')} Please provide at least <b>Name | Emoji</b> separated by <code>|</code>", parse_mode="HTML")
         return
 
     name = args[0].title()
@@ -340,12 +340,12 @@ async def cmd_addrarity(message: Message, db: AsyncSession):
 @router.message(Command("addtochance", "addchance"))
 async def cmd_addtochance(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
-        await message.answer("{get_emoji('no_entry')} Only bot owners and admins can manage spawn chance!")
+        await message.answer(f"{get_emoji('no_entry')} Only bot owners and admins can manage spawn chance!")
         return
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("{get_emoji('warning')} <b>Usage:</b> <code>/addtochance &lt;rarity_name&gt;</code>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/addtochance &lt;rarity_name&gt;</code>", parse_mode="HTML")
         return
 
     rarity_name = parts[1].strip()
@@ -354,7 +354,7 @@ async def cmd_addtochance(message: Message, db: AsyncSession):
     rarity_item = res.scalar_one_or_none()
 
     if not rarity_item:
-        rarity_item = RarityType(name=rarity_name.title(), emoji="{get_emoji('sparkle')}", spawn_enabled=True)
+        rarity_item = RarityType(name=rarity_name.title(), emoji=f"{get_emoji('sparkle')}", spawn_enabled=True)
         db.add(rarity_item)
     else:
         rarity_item.spawn_enabled = True
@@ -365,12 +365,12 @@ async def cmd_addtochance(message: Message, db: AsyncSession):
 @router.message(Command("removefromchance", "remchance", "delchance"))
 async def cmd_removefromchance(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
-        await message.answer("{get_emoji('no_entry')} Only bot owners and admins can manage spawn chance!")
+        await message.answer(f"{get_emoji('no_entry')} Only bot owners and admins can manage spawn chance!")
         return
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("{get_emoji('warning')} <b>Usage:</b> <code>/removefromchance &lt;rarity_name&gt;</code>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/removefromchance &lt;rarity_name&gt;</code>", parse_mode="HTML")
         return
 
     rarity_name = parts[1].strip()
@@ -387,12 +387,12 @@ async def cmd_removefromchance(message: Message, db: AsyncSession):
 @router.message(Command("addtoclaim", "addclaim"))
 async def cmd_addtoclaim(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
-        await message.answer("{get_emoji('no_entry')} Only bot owners and admins can manage claim chance!")
+        await message.answer(f"{get_emoji('no_entry')} Only bot owners and admins can manage claim chance!")
         return
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("{get_emoji('warning')} <b>Usage:</b> <code>/addtoclaim &lt;rarity_name&gt;</code>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/addtoclaim &lt;rarity_name&gt;</code>", parse_mode="HTML")
         return
 
     rarity_name = parts[1].strip()
@@ -401,7 +401,7 @@ async def cmd_addtoclaim(message: Message, db: AsyncSession):
     rarity_item = res.scalar_one_or_none()
 
     if not rarity_item:
-        rarity_item = RarityType(name=rarity_name.title(), emoji="{get_emoji('sparkle')}", claim_enabled=True)
+        rarity_item = RarityType(name=rarity_name.title(), emoji=f"{get_emoji('sparkle')}", claim_enabled=True)
         db.add(rarity_item)
     else:
         rarity_item.claim_enabled = True
@@ -412,12 +412,12 @@ async def cmd_addtoclaim(message: Message, db: AsyncSession):
 @router.message(Command("removefromclaim", "remclaim", "delclaim"))
 async def cmd_removefromclaim(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
-        await message.answer("{get_emoji('no_entry')} Only bot owners and admins can manage claim pool!")
+        await message.answer(f"{get_emoji('no_entry')} Only bot owners and admins can manage claim pool!")
         return
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("{get_emoji('warning')} <b>Usage:</b> <code>/removefromclaim &lt;rarity_name&gt;</code>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/removefromclaim &lt;rarity_name&gt;</code>", parse_mode="HTML")
         return
 
     rarity_name = parts[1].strip()
@@ -447,7 +447,7 @@ async def cmd_cancel(message: Message, state: FSMContext):
     if current_state is None:
         return
     await state.clear()
-    await message.reply("{get_emoji('error')} Character registration process has been cancelled.")
+    await message.reply(f"{get_emoji('error')} Character registration process has been cancelled.")
 
 async def find_existing_character_anime(name: str, db: AsyncSession) -> str | None:
     if not name:
@@ -495,7 +495,7 @@ async def send_rarity_keyboard(message: Message, name: str, anime: str, state_da
     builder.adjust(2)
 
     has_media = state_data.get("media_file_id") is not None
-    media_status_str = " (Pre-loaded from reply) {get_emoji('success')}" if has_media else ""
+    media_status_str = f" (Pre-loaded from reply) {get_emoji('success')}" if has_media else ""
 
     text = (
         "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
@@ -785,12 +785,12 @@ async def process_name(message: Message, state: FSMContext, db: AsyncSession):
             text_source = message.text or message.caption
             if text_source:
                 if text_source.startswith("/"):
-                    await message.reply("{get_emoji('warning')} Invalid name! Please type a text name for the character:")
+                    await message.reply(f"{get_emoji('warning')} Invalid name! Please type a text name for the character:")
                     return
                 name = text_source.strip()
 
         if not name:
-            await message.reply("{get_emoji('warning')} Could not extract a character name. Please type the name of the character:")
+            await message.reply(f"{get_emoji('warning')} Could not extract a character name. Please type the name of the character:")
             return
 
         state_data = await state.get_data()
@@ -812,7 +812,7 @@ async def process_name(message: Message, state: FSMContext, db: AsyncSession):
             await message.reply(
                 "⛩️ <b>ADD ANIME CHARACTER CONSOLE</b>\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
-                "{get_emoji('tv')} <b>[Step 2/4] Anime Series</b>\n\n"
+                f"{get_emoji('tv')} <b>[Step 2/4] Anime Series</b>\n\n"
                 "Please type the name of the anime series this character belongs to:",
                 parse_mode="HTML"
             )
@@ -825,7 +825,7 @@ async def process_anime(message: Message, state: FSMContext, db: AsyncSession):
     try:
         if message.text and message.text.strip() == "/cancel":
             await state.clear()
-            await message.reply("{get_emoji('error')} Character registration process has been cancelled.")
+            await message.reply(f"{get_emoji('error')} Character registration process has been cancelled.")
             return
 
         if message.chat.type in ["group", "supergroup"]:
@@ -838,7 +838,7 @@ async def process_anime(message: Message, state: FSMContext, db: AsyncSession):
                 return
 
         if not message.text or message.text.startswith("/"):
-            await message.reply("{get_emoji('warning')} Invalid anime! Please type the name of the anime series:")
+            await message.reply(f"{get_emoji('warning')} Invalid anime! Please type the name of the anime series:")
             return
 
         anime_name = message.text.strip()
@@ -857,7 +857,7 @@ async def process_rarity_callback(callback: CallbackQuery, state: FSMContext, db
     try:
         current_state = await state.get_state()
         if current_state != AddCharStates.waiting_for_rarity.state:
-            await callback.answer("{get_emoji('warning')} This menu is no longer active.", show_alert=True)
+            await callback.answer(f"{get_emoji('warning')} This menu is no longer active.", show_alert=True)
             return
 
         rarity_val = callback.data.replace("sel_rarity_", "").title()
@@ -1950,7 +1950,7 @@ async def process_edit_rarity_cb(callback: CallbackQuery, state: FSMContext, db:
         by_user = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
         await send_character_edit_announcement(callback.bot, character, "Rarity", old_rarity, new_rarity, by_user)
     else:
-        await callback.message.reply("{get_emoji('error')} Error: Character not found.")
+        await callback.message.reply(f"{get_emoji('error')} Error: Character not found.")
     await state.clear()
     await callback.answer()
 
@@ -1959,9 +1959,9 @@ async def process_edit_rarity_text(message: Message, state: FSMContext, db: Asyn
     if message.text.startswith("/"):
         if message.text == "/cancel":
             await state.clear()
-            await message.reply("{get_emoji('error')} Edit cancelled.")
+            await message.reply(f"{get_emoji('error')} Edit cancelled.")
             return
-        await message.reply("{get_emoji('warning')} Invalid option! Please select a rarity or type one manually:")
+        await message.reply(f"{get_emoji('warning')} Invalid option! Please select a rarity or type one manually:")
         return
 
     new_rarity = message.text.strip().title()
@@ -1981,7 +1981,7 @@ async def process_edit_rarity_text(message: Message, state: FSMContext, db: Asyn
         by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
         await send_character_edit_announcement(message.bot, character, "Rarity", old_rarity, new_rarity, by_user)
     else:
-        await message.reply("{get_emoji('error')} Error: Character not found.")
+        await message.reply(f"{get_emoji('error')} Error: Character not found.")
     await state.clear()
 
 @router.message(EditCharStates.waiting_for_new_media, F.photo | F.video | F.animation)
@@ -1995,7 +1995,7 @@ async def process_edit_media(message: Message, state: FSMContext, db: AsyncSessi
         file_id = message.animation.file_id
 
     if not file_id:
-        await message.reply("{get_emoji('warning')} Please send a valid photo, video, or GIF!")
+        await message.reply(f"{get_emoji('warning')} Please send a valid photo, video, or GIF!")
         return
 
     data = await state.get_data()
@@ -2008,12 +2008,12 @@ async def process_edit_media(message: Message, state: FSMContext, db: AsyncSessi
         character.image_url = file_id
         await db.commit()
         clear_character_cache()
-        await message.reply("{get_emoji('success')} Character media has been updated successfully!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('success')} Character media has been updated successfully!", parse_mode="HTML")
         await send_edit_char_menu(message, character, db, is_callback=False)
         by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
         await send_character_edit_announcement(message.bot, character, "Media", "Old Media File", "New Media File", by_user)
     else:
-        await message.reply("{get_emoji('error')} Error: Character not found.")
+        await message.reply(f"{get_emoji('error')} Error: Character not found.")
     await state.clear()
 
 async def send_character_edit_announcement(bot, character: Character, field_name: str, old_val: str, new_val: str, by_user_str: str):
@@ -2072,7 +2072,7 @@ async def send_character_edit_announcement(bot, character: Character, field_name
 @router.message(Command("promote"))
 async def cmd_promote(message: Message, db: AsyncSession, bot):
     if not is_owner(message):
-        await message.reply("{get_emoji('no_entry')} Only bot owners can promote admins!")
+        await message.reply(f"{get_emoji('no_entry')} Only bot owners can promote admins!")
         return
 
     parts = message.text.strip().split()
@@ -2083,7 +2083,7 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
 
     if message.reply_to_message:
         if len(parts) < 2:
-            await message.reply("{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/promote &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/promote &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
             return
         role = parts[1].strip().lower()
         target_user_id = message.reply_to_message.from_user.id
@@ -2091,7 +2091,7 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
         target_first_name = message.reply_to_message.from_user.first_name
     else:
         if len(parts) < 3:
-            await message.reply("{get_emoji('warning')} <b>Usage:</b> <code>/promote &lt;@username or user_id&gt; &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/promote &lt;@username or user_id&gt; &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
             return
         target_str = parts[1].strip()
         role = parts[2].strip().lower()
@@ -2111,15 +2111,15 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
                 await message.reply(f"{get_emoji('error')} Trainer with username <b>{target_str}</b> not found in bot database.", parse_mode="HTML")
                 return
         else:
-            await message.reply("{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            await message.reply(f"{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
     if role not in ["snradmin", "jradmin"]:
-        await message.reply("{get_emoji('error')} Invalid role! Choose either <code>snradmin</code> or <code>jradmin</code>.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Invalid role! Choose either <code>snradmin</code> or <code>jradmin</code>.", parse_mode="HTML")
         return
 
     if target_user_id in config.ADMIN_IDS:
-        await message.reply("{get_emoji('error')} This user is a bot owner! They already have full privileges.")
+        await message.reply(f"{get_emoji('error')} This user is a bot owner! They already have full privileges.")
         return
 
     if not target_first_name:
@@ -2184,7 +2184,7 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
 @router.message(Command("demote"))
 async def cmd_demote(message: Message, db: AsyncSession):
     if not is_owner(message):
-        await message.reply("{get_emoji('no_entry')} Only bot owners can demote admins!")
+        await message.reply(f"{get_emoji('no_entry')} Only bot owners can demote admins!")
         return
 
     parts = message.text.strip().split()
@@ -2196,7 +2196,7 @@ async def cmd_demote(message: Message, db: AsyncSession):
         target_first_name = message.reply_to_message.from_user.first_name
     else:
         if len(parts) < 2:
-            await message.reply("{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/demote</code> or type <code>/demote &lt;@username or user_id&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/demote</code> or type <code>/demote &lt;@username or user_id&gt;</code>", parse_mode="HTML")
             return
         target_str = parts[1].strip()
 
@@ -2214,7 +2214,7 @@ async def cmd_demote(message: Message, db: AsyncSession):
                 await message.reply(f"{get_emoji('error')} Trainer with username <b>{target_str}</b> not found.", parse_mode="HTML")
                 return
         else:
-            await message.reply("{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            await message.reply(f"{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
     stmt = delete(BotAdmin).where(BotAdmin.user_id == target_user_id)
@@ -2226,7 +2226,7 @@ async def cmd_demote(message: Message, db: AsyncSession):
             target_first_name = f"User {target_user_id}"
         await message.reply(f"{get_emoji('success')} Successfuly demoted <a href=\"tg://user?id={target_user_id}\">{escape_html(target_first_name)}</a>! They no longer have bot admin privileges.", parse_mode="HTML")
     else:
-        await message.reply("{get_emoji('error')} User is not an active admin in the database.")
+        await message.reply(f"{get_emoji('error')} User is not an active admin in the database.")
 
 @router.message(Command("adminlist", "admins"))
 async def cmd_adminlist(message: Message, db: AsyncSession):
