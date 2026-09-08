@@ -97,8 +97,9 @@ async def cmd_daily(message: Message, db: AsyncSession):
     user = await get_or_create_user(db, message.from_user.id, message.from_user.username, message.from_user.first_name)
     now = datetime.datetime.utcnow()
 
-    if user.last_daily and (now - user.last_daily).total_seconds() < 86400:
-        remaining = 86400 - (now - user.last_daily).total_seconds()
+    cooldown = 86400  # 24 hours
+    if user.last_daily and (now - user.last_daily).total_seconds() < cooldown:
+        remaining = cooldown - (now - user.last_daily).total_seconds()
         hours = int(remaining // 3600)
         minutes = int((remaining % 3600) // 60)
         await message.answer(
@@ -119,11 +120,114 @@ async def cmd_daily(message: Message, db: AsyncSession):
         + format_blockquote(
             f"{get_emoji('party')} <b>Reward:</b> +{reward} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
             f"{get_emoji('target')} <b>Keep your streak going tomorrow!</b>\n"
-            f"{get_emoji('coin')} <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"        )
+            f"{get_emoji('coin')} <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"
+        )
     )
     daily_msg = await message.answer(text, parse_mode="HTML")
     schedule_message_deletion(message.bot, message.chat.id, daily_msg.message_id, 120)
 
+@router.message(Command("weekly"))
+async def cmd_weekly(message: Message, db: AsyncSession):
+    user = await get_or_create_user(db, message.from_user.id, message.from_user.username, message.from_user.first_name)
+    now = datetime.datetime.utcnow()
+
+    cooldown = 7 * 86400  # 7 days
+    if user.last_weekly and (now - user.last_weekly).total_seconds() < cooldown:
+        remaining = cooldown - (now - user.last_weekly).total_seconds()
+        days = int(remaining // 86400)
+        hours = int((remaining % 86400) // 3600)
+        minutes = int((remaining % 3600) // 60)
+        await message.answer(
+            f"🎁 <b>Weekly Reward Cooldown</b>\n\n"
+            + format_blockquote(f"You've already claimed your weekly reward! Come back in <b>{days}d {hours}h {minutes}m</b>."),
+            parse_mode="HTML"
+        )
+        return
+
+    reward = random.randint(config.WEEKLY_REWARD_MIN, config.WEEKLY_REWARD_MAX)
+    user.coins += reward
+    user.last_weekly = now
+    await db.commit()
+
+    text = (
+        f"🎁 <b>Weekly Bonus Reward Claimed!</b>\n\n"
+        + format_blockquote(
+            f"{get_emoji('party')} <b>Reward:</b> +{reward} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
+            f"{get_emoji('target')} <b>Come back next week for more!</b>\n"
+            f"{get_emoji('coin')} <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"
+        )
+    )
+    weekly_msg = await message.answer(text, parse_mode="HTML")
+    schedule_message_deletion(message.bot, message.chat.id, weekly_msg.message_id, 120)
+
+@router.message(Command("monthly"))
+async def cmd_monthly(message: Message, db: AsyncSession):
+    user = await get_or_create_user(db, message.from_user.id, message.from_user.username, message.from_user.first_name)
+    now = datetime.datetime.utcnow()
+
+    cooldown = 30 * 86400  # 30 days
+    if user.last_monthly and (now - user.last_monthly).total_seconds() < cooldown:
+        remaining = cooldown - (now - user.last_monthly).total_seconds()
+        days = int(remaining // 86400)
+        hours = int((remaining % 86400) // 3600)
+        minutes = int((remaining % 3600) // 60)
+        await message.answer(
+            f"💎 <b>Monthly Reward Cooldown</b>\n\n"
+            + format_blockquote(f"You've already claimed your monthly reward! Come back in <b>{days}d {hours}h {minutes}m</b>."),
+            parse_mode="HTML"
+        )
+        return
+
+    reward = random.randint(config.MONTHLY_REWARD_MIN, config.MONTHLY_REWARD_MAX)
+    user.coins += reward
+    user.last_monthly = now
+    await db.commit()
+
+    text = (
+        f"💎 <b>Monthly Mega Reward Claimed!</b>\n\n"
+        + format_blockquote(
+            f"{get_emoji('party')} <b>Reward:</b> +{reward} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
+            f"{get_emoji('target')} <b>Come back next month for another huge boost!</b>\n"
+            f"{get_emoji('coin')} <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"
+        )
+    )
+    monthly_msg = await message.answer(text, parse_mode="HTML")
+    schedule_message_deletion(message.bot, message.chat.id, monthly_msg.message_id, 120)
+
+@router.message(Command("yearly"))
+async def cmd_yearly(message: Message, db: AsyncSession):
+    user = await get_or_create_user(db, message.from_user.id, message.from_user.username, message.from_user.first_name)
+    now = datetime.datetime.utcnow()
+
+    cooldown = 365 * 86400  # 365 days
+    if user.last_yearly and (now - user.last_yearly).total_seconds() < cooldown:
+        remaining = cooldown - (now - user.last_yearly).total_seconds()
+        days = int(remaining // 86400)
+        hours = int((remaining % 86400) // 3600)
+        minutes = int((remaining % 3600) // 60)
+        await message.answer(
+            f"👑 <b>Yearly Mega Reward Cooldown</b>\n\n"
+            + format_blockquote(f"You've already claimed your yearly mega reward! Come back in <b>{days}d {hours}h {minutes}m</b>."),
+            parse_mode="HTML"
+        )
+        return
+
+    reward = random.randint(config.YEARLY_REWARD_MIN, config.YEARLY_REWARD_MAX)
+    user.coins += reward
+    user.last_yearly = now
+    await db.commit()
+
+    text = (
+        f"👑 <b>Yearly Grand Reward Claimed!</b>\n\n"
+        + format_blockquote(
+            f"{get_emoji('party')} <b>Reward:</b> +{reward:,} {config.CURRENCY_EMOJI} {config.CURRENCY_NAME}!\n"
+            f"{get_emoji('crown')} <b>Thank you for playing AniVerse for another year!</b>\n"
+            f"{get_emoji('coin')} <b>Total Balance:</b> {user.coins:,} {config.CURRENCY_NAME}"
+        )
+    )
+    yearly_msg = await message.answer(text, parse_mode="HTML")
+    schedule_message_deletion(message.bot, message.chat.id, yearly_msg.message_id, 120)
+    
 @router.callback_query(F.data == "game_coinflip")
 @router.message(Command("coinflip"))
 async def cmd_coinflip(event, db: AsyncSession):
