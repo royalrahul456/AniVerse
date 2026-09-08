@@ -3,13 +3,12 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy import text
 import config
 
-# Supports both SQLite (local dev) and PostgreSQL (Railway production)
 engine = create_async_engine(
     config.DATABASE_URL,
     echo=False,
-    pool_pre_ping=True,       # Auto-reconnect on dropped connections
-    pool_size=5,              # Max 5 persistent connections
-    max_overflow=10,          # Up to 10 extra connections under load
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -17,7 +16,6 @@ Base = declarative_base()
 
 async def init_db():
     from database.models import BotEmoji
-    """Create all tables if they don't exist. Works for both SQLite and PostgreSQL."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
@@ -33,10 +31,31 @@ async def init_db():
         except Exception as e:
             print(f"Error creating bot_emojis table: {e}")
             
-    # Safely alter tables to add new columns if they do not exist.
-    # Note: Each alteration must run in its own transaction block (engine.begin()) 
-    # to prevent PostgreSQL from aborting the entire block if one column already exists.
-    
+    # Auto-migrations for periodic rewards and schema updates
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_weekly TIMESTAMP"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_monthly TIMESTAMP"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_yearly TIMESTAMP"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE active_spawns ADD COLUMN message_id INTEGER"))
+        except Exception:
+            pass
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE rarity_types ADD COLUMN claim_enabled BOOLEAN DEFAULT FALSE"))
