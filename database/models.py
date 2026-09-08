@@ -12,6 +12,9 @@ class User(Base):
     coins = Column(Integer, default=500)
     daily_streak = Column(Integer, default=0)
     last_daily = Column(DateTime, nullable=True)
+    last_weekly = Column(DateTime, nullable=True)
+    last_monthly = Column(DateTime, nullable=True)
+    last_yearly = Column(DateTime, nullable=True)
     total_catches = Column(Integer, default=0)
     favorite_character_id = Column(Integer, ForeignKey("characters.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -57,12 +60,14 @@ class RarityType(Base):
     spawn_enabled = Column(Boolean, default=False)
     claim_enabled = Column(Boolean, default=False)
     claim_weight = Column(Integer, default=10)
+
 class ActiveSpawn(Base):
     __tablename__ = "active_spawns"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     chat_id = Column(BigInteger, nullable=False, unique=True, index=True)
     character_id = Column(Integer, ForeignKey("characters.id"), nullable=False)
+    message_id = Column(Integer, nullable=True)
     spawned_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     character = relationship("Character")
@@ -75,6 +80,7 @@ class GroupSettings(Base):
     message_counter = Column(Integer, default=0)
     spawns_enabled = Column(Boolean, default=True)
     auto_nameguess_enabled = Column(Boolean, default=False)
+
 class ActiveGame(Base):
     __tablename__ = "active_games"
 
@@ -88,7 +94,7 @@ class RedeemCode(Base):
     __tablename__ = "redeem_codes"
 
     code = Column(String(50), primary_key=True, index=True)
-    reward_type = Column(String(50), nullable=False)  # "character" or "coins"
+    reward_type = Column(String(50), nullable=False)
     reward_id = Column(Integer, ForeignKey("characters.id"), nullable=True)
     reward_amount = Column(Integer, nullable=True)
     max_uses = Column(Integer, nullable=False, default=1)
@@ -115,7 +121,7 @@ class Auction(Base):
     starting_price = Column(Integer, nullable=False)
     current_bid = Column(Integer, nullable=False)
     highest_bidder_id = Column(BigInteger, ForeignKey("users.user_id"), nullable=True)
-    status = Column(String(50), default="pending")  # "pending", "active", "completed", "cancelled"
+    status = Column(String(50), default="pending")
     started_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -158,7 +164,7 @@ class BotAdmin(Base):
     __tablename__ = "bot_admins"
 
     user_id = Column(BigInteger, primary_key=True, index=True)
-    role = Column(String(50), nullable=False)  # "snradmin" or "jradmin"
+    role = Column(String(50), nullable=False)
     promoted_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class BotEmoji(Base):
