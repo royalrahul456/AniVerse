@@ -15,10 +15,12 @@ AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_co
 Base = declarative_base()
 
 async def init_db():
-    from database.models import BotEmoji
+    # Import all models so Base.metadata is fully populated before create_all
+    import database.models
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("""
@@ -30,8 +32,8 @@ async def init_db():
             """))
         except Exception as e:
             print(f"Error creating bot_emojis table: {e}")
-            
-    # Auto-migrations for periodic rewards and schema updates
+
+    # Safe dynamic column migrations
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE users ADD COLUMN last_weekly TIMESTAMP"))
@@ -61,19 +63,19 @@ async def init_db():
             await conn.execute(text("ALTER TABLE rarity_types ADD COLUMN claim_enabled BOOLEAN DEFAULT FALSE"))
         except Exception:
             pass
-            
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE rarity_types ADD COLUMN claim_weight INTEGER DEFAULT 10"))
         except Exception:
             pass
-            
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE group_settings ADD COLUMN auto_nameguess_enabled BOOLEAN DEFAULT FALSE"))
         except Exception:
             pass
-            
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_user_id ON user_characters (user_id)"))
@@ -85,19 +87,19 @@ async def init_db():
             await conn.execute(text("ALTER TABLE user_daily_limits ADD COLUMN rob_count INTEGER DEFAULT 0"))
         except Exception:
             pass
-            
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE user_daily_limits ADD COLUMN last_rob_at BIGINT DEFAULT 0"))
         except Exception:
             pass
-            
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_character_id ON user_characters (character_id)"))
         except Exception:
             pass
-            
+
     async with engine.begin() as conn:
         try:
             if "sqlite" in str(engine.url):
