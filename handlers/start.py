@@ -80,25 +80,42 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     ping_ms = round((time.time() - start_ping_time) * 1000, 2)
     uptime_str = get_uptime_str()
     
-    caption = (
-        f"🍃 Greetings, I'm <b>AniVerse Bot</b> 🫧\n"
-        + format_blockquote(
-            f"───────── ▨ ─────────\n"
-            f"◎ <b>WHERE:</b> I spawn waifus in your chat for users to grab.\n"
-            f"◎ <b>HOW TO USE:</b> Add me to your group and use /help for commands.\n"
-            f"───────── ▨ ─────────\n"
-            f"⚡ <b>PING:</b> {ping_ms} ms\n"
-            f"⏳ <b>UPTIME:</b> {uptime_str}"
+    from handlers.admin import is_admin_id
+    is_user_admin = await is_admin_id(message.from_user.id, db) if message.from_user else False
+
+    if message.chat.type == "private":
+        from keyboards.inline import get_dm_menu_keyboard
+        markup = get_dm_menu_keyboard(is_admin=is_user_admin)
+        caption = (
+            f"🍃 Greetings, <b>{escape_html(message.from_user.first_name if message.from_user else 'Trainer')}</b>! 🫧\n"
+            + format_blockquote(
+                "Welcome to <b>AniVerse Universe</b>!\n"
+                "Snatch anime characters, build your harem,\n"
+                "earn coins, and dominate the leaderboards!\n\n"
+                f"⚡ <b>PING:</b> {ping_ms} ms | ⏳ <b>UPTIME:</b> {uptime_str}\n\n"
+                "💡 <i>Use the interactive menu buttons below to navigate!</i>"
+            )
         )
-    )
+    else:
+        builder = InlineKeyboardBuilder()
+        builder.row(
+            InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"),
+            InlineKeyboardButton(text="⚡ Ping", callback_data="ping_bot")
+        )
+        markup = builder.as_markup()
+        caption = (
+            f"🍃 Greetings, I'm <b>AniVerse Bot</b> 🫧\n"
+            + format_blockquote(
+                f"───────── ▨ ─────────\n"
+                f"◎ <b>WHERE:</b> I spawn waifus in your chat for users to grab.\n"
+                f"◎ <b>HOW TO USE:</b> Add me to your group and use /help for commands.\n"
+                f"───────── ▨ ─────────\n"
+                f"⚡ <b>PING:</b> {ping_ms} ms\n"
+                f"⏳ <b>UPTIME:</b> {uptime_str}"
+            )
+        )
     
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"),
-        InlineKeyboardButton(text="⚡ Ping", callback_data="ping_bot")
-    )
-    
-    await send_or_edit_start(message, cover_media, caption, builder.as_markup(), is_callback=False)
+    await send_or_edit_start(message, cover_media, caption, markup, is_callback=False)
 
 async def send_or_edit_start(message_obj, cover_media: str, text: str, reply_markup, is_callback: bool):
     if is_callback:
@@ -134,19 +151,34 @@ async def send_or_edit_start(message_obj, cover_media: str, text: str, reply_mar
 async def cb_dm_home(callback: CallbackQuery, db: AsyncSession):
     bot_info = await callback.bot.get_me()
     
-    caption = (
-        f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
-        + format_blockquote(
-            "Snatch anime characters, build your harem,\n"
-            "earn coins, and dominate the leaderboards!\n\n"
-            "Use /help to see all commands!"
+    from handlers.admin import is_admin_id
+    is_user_admin = await is_admin_id(callback.from_user.id, db) if callback.from_user else False
+
+    if callback.message.chat.type == "private":
+        from keyboards.inline import get_dm_menu_keyboard
+        markup = get_dm_menu_keyboard(is_admin=is_user_admin)
+        caption = (
+            f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
+            + format_blockquote(
+                "Snatch anime characters, build your harem,\n"
+                "earn coins, and dominate the leaderboards!\n\n"
+                "Use /help to see all commands!"
+            )
         )
-    )
+    else:
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"))
+        markup = builder.as_markup()
+        caption = (
+            f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
+            + format_blockquote(
+                "Snatch anime characters, build your harem,\n"
+                "earn coins, and dominate the leaderboards!\n\n"
+                "Use /help to see all commands!"
+            )
+        )
     
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"))
-    
-    await send_or_edit_start(callback.message, get_cover_media("start"), caption, builder.as_markup(), is_callback=True)
+    await send_or_edit_start(callback.message, get_cover_media("start"), caption, markup, is_callback=True)
     await callback.answer()
 
 def build_help_text(is_admin: bool) -> str:
@@ -219,17 +251,19 @@ def build_help_text(is_admin: bool) -> str:
     return text
 
 @router.callback_query(F.data == "dm_help")
-async def cb_dm_help(callback: CallbackQuery):
+async def cb_dm_help(callback: CallbackQuery, db: AsyncSession):
     from keyboards.inline import get_back_to_hub_keyboard
-    is_admin = callback.from_user.id in config.ADMIN_IDS if callback.from_user else False
+    from handlers.admin import is_admin_id
+    is_admin = await is_admin_id(callback.from_user.id, db) if callback.from_user else False
     text = build_help_text(is_admin)
     cover_media = get_cover_media("help")
     await send_or_edit_start(callback.message, cover_media, text, get_back_to_hub_keyboard(), is_callback=True)
     await callback.answer()
 
 @router.message(Command("help"))
-async def cmd_help(message: Message):
-    is_admin = message.from_user.id in config.ADMIN_IDS if message.from_user else False
+async def cmd_help(message: Message, db: AsyncSession):
+    from handlers.admin import is_admin_id
+    is_admin = await is_admin_id(message.from_user.id, db) if message.from_user else False
     text = build_help_text(is_admin)
     cover_media = get_cover_media("help")
     
