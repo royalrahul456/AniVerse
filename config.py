@@ -16,12 +16,19 @@ DATABASE_URL = _db_url
 # Admin IDs (Telegram User IDs)
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "6593485710").split(",") if x.strip().isdigit()]
 
+# Pre-configured Bot Administrative Staff
+DEFAULT_BOT_ADMINS = {
+    8365981430: {"username": "Sylveon_sy", "first_name": "Sylveon", "role": "snradmin"}
+}
+
+# Official Channels & Groups
+OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1003616974453"))
+OFFICIAL_CHANNEL_ID = int(os.getenv("OFFICIAL_CHANNEL_ID", "-1003616974453"))
+OFFICIAL_CHANNEL_LINK = os.getenv("OFFICIAL_CHANNEL_LINK", "https://t.me/AniVerseUnion")
+
 # Currency Configuration
 CURRENCY_NAME = "Gold"
 CURRENCY_EMOJI = "🪙"
-
-# Official Group Chat ID
-OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1003616974453"))
 
 # Periodic Rewards Configuration
 DAILY_REWARD_MIN = 288

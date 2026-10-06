@@ -227,7 +227,7 @@ async def cmd_yearly(message: Message, db: AsyncSession):
     )
     yearly_msg = await message.answer(text, parse_mode="HTML")
     schedule_message_deletion(message.bot, message.chat.id, yearly_msg.message_id, 120)
-    
+
 @router.callback_query(F.data == "game_coinflip")
 @router.message(Command("coinflip"))
 async def cmd_coinflip(event, db: AsyncSession):

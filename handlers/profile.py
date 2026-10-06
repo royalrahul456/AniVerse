@@ -1325,19 +1325,19 @@ async def cb_set_theme(callback: CallbackQuery, db: AsyncSession):
     unlocked = [t.strip().lower() for t in (user.unlocked_themes or "default").split(",") if t.strip()]
 
     if theme_key not in unlocked:
-        await callback.answer(f"{get_emoji('error')} You fhaven't unlocked this theme yet!", show_alert=True)
+        await callback.answer(f"{get_emoji('error')} You haven't unlocked this theme yet!", show_alert=True)
         return
 
     user.selected_theme = theme_key
     await db.commit()
 
-    await callback.answer(f"{get_emoji('fsuccess')} Applied theme successfully!", show_alert=True)
+    await callback.answer(f"{get_emoji('success')} Applied theme successfully!", show_alert=True)
     
     theme_details = {
-        "default": {"name": "Default Theme", "emoji": f"{get_emoji('ftrophy')}"},
+        "default": {"name": "Default Theme", "emoji": f"{get_emoji('trophy')}"},
         "sakura": {"name": "Sakura Theme", "emoji": "🌸"},
         "cosmic": {"name": "Cosmic Theme", "emoji": "🌌"},
-        "gold": {"name": "Gold VIP Theme", "emoji": f"{get_emoji('fcrown')}"},
+        "gold": {"name": "Gold VIP Theme", "emoji": f"{get_emoji('crown')}"},
         "dark": {"name": "Dark Knight Theme", "emoji": "🦇"},
         "cyber": {"name": "Neon Cyber Theme", "emoji": "👾"},
         "phoenix": {"name": "Phoenix Theme", "emoji": "🐦‍🔥"}
@@ -1357,10 +1357,10 @@ async def cb_set_theme(callback: CallbackQuery, db: AsyncSession):
             label = f"{info['emoji']} {info['name']}" + (" (Active)" if is_active else "")
             builder.row(InlineKeyboardButton(text=label, callback_data=f"set_theme_{key}"))
         else:
-            label = f"🔒 {info['fname']} (Lock)"
+            label = f"🔒 {info['name']} (Lock)"
             builder.row(InlineKeyboardButton(text=label, callback_data="noop"))
     builder.row(
-        InlineKeyboardButton(text=f"{get_emoji('fback')} Back to Profile", callback_data="dm_profile"),
+        InlineKeyboardButton(text=f"{get_emoji('back')} Back to Profile", callback_data="dm_profile"),
         InlineKeyboardButton(text="🏠 Hub", callback_data="dm_home")
     )
 
@@ -1379,23 +1379,23 @@ async def cmd_pay(message: Message, db: AsyncSession):
     
     if message.reply_to_message:
         if len(parts) < 2:
-            await message.reply(f"{get_emoji('fwarning')} <b>Usage:</b> Reply to someone with <code>/pay &lt;amount&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/pay &lt;amount&gt;</code>", parse_mode="HTML")
             return
         amount_str = parts[1]
         if not amount_str.isdigit():
-            await message.reply(f"{get_emoji('ferror')} Amount must be a valid positive number.")
+            await message.reply(f"{get_emoji('error')} Amount must be a valid positive number.")
             return
         amount = int(amount_str)
         target_user_id = message.reply_to_message.from_user.id
         target_name = message.reply_to_message.from_user.first_name
     else:
         if len(parts) < 3:
-            await message.reply(f"{get_emoji('fwarning')} <b>Usage:</b> <code>/pay &lt;@username or user_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/pay &lt;@username or user_id&gt; &lt;amount&gt;</code>", parse_mode="HTML")
             return
         target_str = parts[1].strip()
         amount_str = parts[2].strip()
         if not amount_str.isdigit():
-            await message.reply(f"{get_emoji('ferror')} Amount must be a valid positive number.")
+            await message.reply(f"{get_emoji('error')} Amount must be a valid positive number.")
             return
         amount = int(amount_str)
         
@@ -1410,24 +1410,24 @@ async def cmd_pay(message: Message, db: AsyncSession):
                 target_user_id = target_user.user_id
                 target_name = target_user.first_name
             else:
-                await message.reply(f"{get_emoji('ferror')} Trainer with username <b>{target_str}</b> not found in bot database.", parse_mode="HTML")
+                await message.reply(f"{get_emoji('error')} Trainer with username <b>{target_str}</b> not found in bot database.", parse_mode="HTML")
                 return
         else:
-            await message.reply(f"{get_emoji('ferror')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
+            await message.reply(f"{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
     if amount <= 0:
-        await message.reply(f"{get_emoji('ferror')} Amount must be greater than 0.")
+        await message.reply(f"{get_emoji('error')} Amount must be greater than 0.")
         return
 
     sender_id = message.from_user.id
     if sender_id == target_user_id:
-        await message.reply(f"{get_emoji('ferror')} You cannot pay yourself!")
+        await message.reply(f"{get_emoji('error')} You cannot pay yourself!")
         return
 
     sender = await get_or_create_user(db, sender_id, message.from_user.username, message.from_user.first_name)
     if sender.coins < amount:
-        await message.reply(f"{get_emoji('ferror')} You do not have enough coins! Your balance: <b>{sender.coins:,}</b> Coins.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You do not have enough coins! Your balance: <b>{sender.coins:,}</b> Coins.", parse_mode="HTML")
         return
 
     target = None
@@ -1437,7 +1437,7 @@ async def cmd_pay(message: Message, db: AsyncSession):
         target = res.scalar_one_or_none()
 
     if not target:
-        await message.reply(f"{get_emoji('ferror')} Target trainer not found in bot database.")
+        await message.reply(f"{get_emoji('error')} Target trainer not found in bot database.")
         return
 
     sender.coins -= amount
@@ -1450,9 +1450,9 @@ async def cmd_pay(message: Message, db: AsyncSession):
     text = (
         "💸 <b>COIN TRANSFER SUCCESSFUL!</b>\n\n"
         + format_blockquote(
-            f"{get_emoji('fuser')} <b>Sender:</b> {sender_name}\n"
-            f"{get_emoji('fuser')} <b>Recipient:</b> {target_first_name}\n"
-            f"{get_emoji('fcoin')} <b>Amount:</b> {amount:,} Coins\n\n"
+            f"{get_emoji('user')} <b>Sender:</b> {sender_name}\n"
+            f"{get_emoji('user')} <b>Recipient:</b> {target_first_name}\n"
+            f"{get_emoji('coin')} <b>Amount:</b> {amount:,} Coins\n\n"
             f"💳 <b>Your New Balance:</b> {sender.coins:,} Coins"
         )
     )
@@ -1482,7 +1482,7 @@ async def cmd_balance(message: Message, db: AsyncSession):
                     target_user_id = user_obj.user_id
                     is_self = (target_user_id == message.from_user.id)
                 else:
-                    await message.reply(f"{get_emoji('ferror')} Trainer <b>{target_str}</b> not found.", parse_mode="HTML")
+                    await message.reply(f"{get_emoji('error')} Trainer <b>{target_str}</b> not found.", parse_mode="HTML")
                     return
 
     user = await get_or_create_user(db, target_user_id, None, None)

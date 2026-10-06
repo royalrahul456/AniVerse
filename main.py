@@ -10,11 +10,11 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BotCommand
-from sqlalchemy import select
+from sqlalchemy import select, delete, func
 
 import config
 from database.database import init_db, AsyncSessionLocal
-from database.models import Character, RarityType, UserDailyLimit, BotAdmin, GroupSettings
+from database.models import Character, RarityType, UserDailyLimit, BotAdmin, GroupSettings, User
 from handlers import start, profile, catch, shop, games, trade, admin, xo, inline_query, redeem, auction
 
 if sys.platform == "win32":
@@ -198,8 +198,64 @@ async def start_health_server():
     await site.start()
     logger.info(f"Consolidated API & Health Server running on port {port}...")
 
+async def sync_bot_admins():
+    """Ensure DEFAULT_BOT_ADMINS are seeded, and purge any old/deleted user records holding the same username."""
+    try:
+        async with AsyncSessionLocal() as session:
+            for admin_id, admin_info in config.DEFAULT_BOT_ADMINS.items():
+                target_username = admin_info.get("username", "").lstrip("@").strip()
+                role = admin_info.get("role", "snradmin")
+                first_name = admin_info.get("first_name", f"Admin {admin_id}")
+
+                if target_username:
+                    # Look for old/deleted users with the same username but different user_id
+                    stmt_old = select(User).where(
+                        func.lower(User.username) == target_username.lower(),
+                        User.user_id != admin_id
+                    )
+                    res_old = await session.execute(stmt_old)
+                    old_users = res_old.scalars().all()
+                    for old_u in old_users:
+                        logger.info(f"Purging old/deleted user {old_u.user_id} with username @{old_u.username} from admin rights...")
+                        # Remove from BotAdmin if present
+                        await session.execute(delete(BotAdmin).where(BotAdmin.user_id == old_u.user_id))
+                        # Detach username to prevent collision
+                        old_u.username = None
+
+                # Seed/Upsert User record
+                stmt_u = select(User).where(User.user_id == admin_id)
+                res_u = await session.execute(stmt_u)
+                existing_u = res_u.scalar_one_or_none()
+                if not existing_u:
+                    existing_u = User(
+                        user_id=admin_id,
+                        username=target_username if target_username else None,
+                        first_name=first_name
+                    )
+                    session.add(existing_u)
+                else:
+                    if target_username and existing_u.username != target_username:
+                        existing_u.username = target_username
+                    if first_name and not existing_u.first_name:
+                        existing_u.first_name = first_name
+
+                # Seed/Upsert BotAdmin record
+                stmt_ba = select(BotAdmin).where(BotAdmin.user_id == admin_id)
+                res_ba = await session.execute(stmt_ba)
+                existing_ba = res_ba.scalar_one_or_none()
+                if not existing_ba:
+                    session.add(BotAdmin(user_id=admin_id, role=role))
+                else:
+                    existing_ba.role = role
+
+            await session.commit()
+            logger.info("Bot admin synchronization completed successfully.")
+    except Exception as e:
+        logger.error(f"Failed to synchronize bot admins: {e}")
+
 async def main():
     await init_db()
+    await sync_bot_admins()
     
     # Complete cleanup of the Video rarity
     try:
@@ -306,6 +362,7 @@ async def main():
         BotCommand(command="setimg", description="🖼️ Update character media (Admin only)"),
         BotCommand(command="setcover", description="🖼️ Set bot cover banners (Owner only)"),
         BotCommand(command="spawn", description="💥 Force spawn wild character (Admin)"),
+        BotCommand(command="transfersnatches", description="🔄 Transfer all snatches between users (Admin)"),
         BotCommand(command="stats", description="📊 View bot database statistics (Owner)"),
         BotCommand(command="addrarity", description="✨ Add custom rarity tier (Owner only)"),
         BotCommand(command="delrarity", description="🗑️ Delete custom rarity tier (Owner only)"),

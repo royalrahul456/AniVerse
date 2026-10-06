@@ -83,7 +83,7 @@ async def cmd_gen(message: Message, db: AsyncSession):
     # Else fit's character reward
     char_id_str, limit_str = parts[1], parts[2]
     if not char_id_str.isdigit() or not limit_str.isdigit():
-        await message.reply(f"{get_emoji('ferror')} Character ID and Limit must be positive numbers!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Character ID and Limit must be positive numbers!", parse_mode="HTML")
         return
     char_id = int(char_id_str)
     limit = int(limit_str)
@@ -92,7 +92,7 @@ async def cmd_gen(message: Message, db: AsyncSession):
     res = await db.execute(stmt)
     character = res.scalar_one_or_none()
     if not character:
-        await message.reply(f"{get_emoji('ferror')} Character ID <b>#{char_id}</b> not found in database!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Character ID <b>#{char_id}</b> not found in database!", parse_mode="HTML")
         return
 
     code_str = generate_random_code()
@@ -108,10 +108,10 @@ async def cmd_gen(message: Message, db: AsyncSession):
 
     r_emoji = get_rarity_emoji(character.rarity)
     card = (
-        f"{get_emoji('fparty')} <b>Redeem Code Created!</b>\n"
+        f"{get_emoji('party')} <b>Redeem Code Created!</b>\n"
         + format_blockquote(
             f"{get_emoji('gift')} <b>Character:</b> {escape_html(character.name)}\n"
-            f"{get_emoji('fsparkle')} <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"{get_emoji('sparkle')} <b>Anime:</b> {escape_html(character.anime)}\n"
             f"{r_emoji} <b>Rarity:</b> {r_emoji} {character.rarity}\n"
             f"🔢 <b>Limit:</b> {limit}\n"
             f"🔐 <b>Code:</b> <code>{code_str}</code>"
@@ -133,7 +133,7 @@ async def cmd_gen(message: Message, db: AsyncSession):
 async def cmd_redeem(message: Message, db: AsyncSession):
     parts = message.text.strip().split()
     if len(parts) < 2:
-        await message.reply(f"{get_emoji('ferror')} Usage: <code>/redeem &lt;code&gt;</code>", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Usage: <code>/redeem &lt;code&gt;</code>", parse_mode="HTML")
         return
 
     code_str = parts[1].strip().upper()
@@ -145,11 +145,11 @@ async def cmd_redeem(message: Message, db: AsyncSession):
     redeem_code = res.scalar_one_or_none()
 
     if not redeem_code:
-        await message.reply(f"{get_emoji('ferror')} Invalid or expired redeem code!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Invalid or expired redeem code!", parse_mode="HTML")
         return
 
     if redeem_code.uses_count >= redeem_code.max_uses:
-        await message.reply(f"{get_emoji('ferror')} This redeem code has already expired!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} This redeem code has already expired!", parse_mode="HTML")
         return
 
     # Check if user already claimed
@@ -158,7 +158,7 @@ async def cmd_redeem(message: Message, db: AsyncSession):
     already_used = usage_res.scalar_one_or_none()
 
     if already_used:
-        await message.reply(f"{get_emoji('ferror')} You have already claimed this redeem code!", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} You have already claimed this redeem code!", parse_mode="HTML")
         return
 
     # Claim logic
@@ -174,13 +174,13 @@ async def cmd_redeem(message: Message, db: AsyncSession):
         await db.commit()
 
         success_card = (
-            f"{get_emoji('fparty')} <b>REDEEM SUCCESSFUL!</b> {get_emoji('fparty')}\n"
+            f"{get_emoji('party')} <b>REDEEM SUCCESSFUL!</b> {get_emoji('party')}\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             + format_blockquote(
-                f"{get_emoji('fuser')} Trainer: <b>{escape_html(user.first_name)}</b>\n"
+                f"{get_emoji('user')} Trainer: <b>{escape_html(user.first_name)}</b>\n"
                 f"🎫 Code: <code>{code_str}</code>\n"
-                f"{get_emoji('gift')} Reward: {get_emoji('fcoin')} <b>{amount:,} Coins</b>\n"
-                f"{get_emoji('fcoin')} New Balance: <code>{user.coins:,} Coins</code>"
+                f"{get_emoji('gift')} Reward: {get_emoji('coin')} <b>{amount:,} Coins</b>\n"
+                f"{get_emoji('coin')} New Balance: <code>{user.coins:,} Coins</code>"
             )
         )
         cover = get_cover_media("start")
@@ -202,7 +202,7 @@ async def cmd_redeem(message: Message, db: AsyncSession):
         character = char_res.scalar_one_or_none()
         
         if not character:
-            await message.reply(f"{get_emoji('ferror')} Failed to claim character: character no longer exists in database.", parse_mode="HTML")
+            await message.reply(f"{get_emoji('error')} Failed to claim character: character no longer exists in database.", parse_mode="HTML")
             return
 
         user.total_catches += 1
@@ -216,10 +216,10 @@ async def cmd_redeem(message: Message, db: AsyncSession):
 
         r_emoji = get_rarity_emoji(character.rarity)
         success_card = (
-            f"{get_emoji('fparty')} <b>REDEEM SUCCESSFUL!</b> {get_emoji('fparty')}\n"
+            f"{get_emoji('party')} <b>REDEEM SUCCESSFUL!</b> {get_emoji('party')}\n"
             "━━━━━━━━━━━━━━━━━━━\n"
             + format_blockquote(
-                f"{get_emoji('fuser')} Trainer: <b>{escape_html(user.first_name)}</b>\n"
+                f"{get_emoji('user')} Trainer: <b>{escape_html(user.first_name)}</b>\n"
                 f"🎫 Code: <code>{code_str}</code>\n"
                 f"{get_emoji('gift')} Reward: {r_emoji} <b>{escape_html(character.name)}</b> [{escape_html(character.anime)}]\n"
                 f"🎫 <b>Character ID:</b> <code>#{character.id}</code>"

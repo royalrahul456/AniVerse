@@ -8,7 +8,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, update
 import config
 from database.models import User, Character, UserCharacter, GroupSettings, RarityType, BotAdmin
 from utils.formatters import format_blockquote, get_rarity_emoji, escape_html, get_clean_name, RARITY_CACHE
@@ -36,7 +36,7 @@ def is_owner(message: Message) -> bool:
     return False
 
 async def is_admin_id(user_id: int, db: AsyncSession) -> bool:
-    if user_id in config.ADMIN_IDS:
+    if user_id in config.ADMIN_IDS or user_id in getattr(config, "DEFAULT_BOT_ADMINS", {}):
         return True
     stmt = select(BotAdmin).where(BotAdmin.user_id == user_id)
     res = await db.execute(stmt)
@@ -277,6 +277,161 @@ async def cmd_give(message: Message, db: AsyncSession):
                         await message.reply_photo(DEFAULT_FALLBACK_PHOTO, caption=card_text, parse_mode="HTML")
         except Exception:
             await message.reply(card_text, parse_mode="HTML")
+
+async def resolve_target_user(target_str: str, db: AsyncSession, bot) -> tuple[int | None, str | None, str | None]:
+    """Resolves a user ID or @username into (user_id, username, first_name)."""
+    target_str = target_str.strip()
+    clean_username = target_str.lstrip("@").lower()
+
+    # 1. Check if configured in DEFAULT_BOT_ADMINS
+    default_admins = getattr(config, "DEFAULT_BOT_ADMINS", {})
+    for def_id, def_info in default_admins.items():
+        if def_info.get("username", "").lower() == clean_username or str(def_id) == target_str:
+            return def_id, def_info.get("username"), def_info.get("first_name")
+
+    # 2. Check if numeric user ID
+    if target_str.isdigit():
+        uid = int(target_str)
+        stmt = select(User).where(User.user_id == uid)
+        res = await db.execute(stmt)
+        u = res.scalar_one_or_none()
+        if u:
+            return u.user_id, u.username, u.first_name
+        try:
+            chat = await bot.get_chat(uid)
+            return chat.id, chat.username, chat.first_name or f"User {uid}"
+        except Exception:
+            return uid, None, f"User {uid}"
+
+    # 3. Check by username in database
+    stmt = select(User).where(func.lower(User.username) == clean_username)
+    res = await db.execute(stmt)
+    u = res.scalar_one_or_none()
+    if u:
+        return u.user_id, u.username, u.first_name
+
+    # 4. Fallback to Telegram get_chat lookup
+    try:
+        chat = await bot.get_chat(f"@{clean_username}")
+        return chat.id, chat.username, chat.first_name or f"@{clean_username}"
+    except Exception:
+        return None, None, None
+
+@router.message(Command("transfersnatches", "transfersnatch", "transferall", "transfercatches"))
+async def cmd_transfersnatches(message: Message, db: AsyncSession):
+    if not await is_admin(message, db):
+        await message.reply(f"{get_emoji('no_entry')} Only bot owners and admins can transfer snatches!")
+        return
+
+    text = message.text.strip()
+    tokens = text.split()
+    args = tokens[1:]
+
+    reply = message.reply_to_message
+
+    from_user_id, from_username, from_first_name = None, None, None
+    to_user_id, to_username, to_first_name = None, None, None
+
+    if len(args) >= 2:
+        # Format: /transfersnatches <from_user> <to_user>
+        from_user_id, from_username, from_first_name = await resolve_target_user(args[0], db, message.bot)
+        to_user_id, to_username, to_first_name = await resolve_target_user(args[1], db, message.bot)
+    elif len(args) == 1 and reply and reply.from_user and not reply.from_user.is_bot:
+        # Format: Reply to donor with /transfersnatches <to_user>
+        from_user_id = reply.from_user.id
+        from_username = reply.from_user.username
+        from_first_name = reply.from_user.first_name
+        to_user_id, to_username, to_first_name = await resolve_target_user(args[0], db, message.bot)
+    else:
+        card = (
+            f"{get_emoji('energy')} <b>TRANSFER ALL SNATCHES CONSOLE</b>\n\n"
+            + format_blockquote(
+                "Transfer all characters/snatches from one trainer to another!\n"
+                "<i>(Bot Owners and Admins only)</i>\n\n"
+                f"{get_emoji('pointer')} <b>Usage Formats:</b>\n"
+                "• <code>/transfersnatches &lt;from_user&gt; &lt;to_user&gt;</code>\n"
+                "• Reply to donor with: <code>/transfersnatches &lt;to_user&gt;</code>\n\n"
+                "<b>Examples:</b>\n"
+                "• <code>/transfersnatches 123456789 8365981430</code>\n"
+                "• <code>/transfersnatches @OldTrainer @Sylveon_sy</code>\n"
+                "• <code>/transfersnatches @OldTrainer 8365981430</code>\n\n"
+                "💡 <i>Accepts either numeric User IDs or @usernames!</i>"
+            )
+        )
+        await message.reply(card, parse_mode="HTML")
+        return
+
+    if not from_user_id:
+        await message.reply(f"{get_emoji('error')} Could not find source trainer (donor). Please verify the User ID or @username.", parse_mode="HTML")
+        return
+
+    if not to_user_id:
+        await message.reply(f"{get_emoji('error')} Could not find destination trainer (recipient). Please verify the User ID or @username.", parse_mode="HTML")
+        return
+
+    if from_user_id == to_user_id:
+        await message.reply(f"{get_emoji('error')} Source and destination trainers are the same user!", parse_mode="HTML")
+        return
+
+    # Count snatches to transfer
+    stmt = select(func.count(UserCharacter.id)).where(UserCharacter.user_id == from_user_id)
+    snatches_count = (await db.execute(stmt)).scalar() or 0
+
+    if snatches_count == 0:
+        d_name = escape_html(from_first_name or f"User {from_user_id}")
+        await message.reply(f"{get_emoji('warning')} <b>{d_name}</b> has <b>0</b> snatches/characters in their collection to transfer.", parse_mode="HTML")
+        return
+
+    # Transfer all UserCharacter rows
+    await db.execute(
+        update(UserCharacter)
+        .where(UserCharacter.user_id == from_user_id)
+        .values(user_id=to_user_id)
+    )
+
+    # Ensure both user objects exist in users table
+    from_user_obj = await get_or_create_user(db, from_user_id, from_username or "", from_first_name or f"User {from_user_id}")
+    to_user_obj = await get_or_create_user(db, to_user_id, to_username or "", to_first_name or f"User {to_user_id}")
+
+    # Adjust total_catches counts
+    to_user_obj.total_catches = (to_user_obj.total_catches or 0) + snatches_count
+    from_user_obj.total_catches = max(0, (from_user_obj.total_catches or 0) - snatches_count)
+
+    # Clear favorite character if donor had one set
+    from_user_obj.favorite_character_id = None
+
+    await db.commit()
+
+    from_display = f"<a href=\"tg://user?id={from_user_id}\">{escape_html(from_user_obj.first_name)}</a>" + (f" (@{from_user_obj.username})" if from_user_obj.username else "")
+    to_display = f"<a href=\"tg://user?id={to_user_id}\">{escape_html(to_user_obj.first_name)}</a>" + (f" (@{to_user_obj.username})" if to_user_obj.username else "")
+    admin_name = escape_html(message.from_user.first_name if message.from_user else "Admin")
+
+    card = (
+        f"{get_emoji('success')} <b>SNATCHES TRANSFERRED SUCCESSFULLY!</b>\n\n"
+        + format_blockquote(
+            f"🎒 <b>Total Snatches Transferred:</b> <code>{snatches_count:,}</code> characters\n\n"
+            f"📤 <b>From:</b> {from_display}\n"
+            f"• ID: <code>{from_user_id}</code>\n"
+            f"• Remaining Snatches: <code>0</code>\n\n"
+            f"📥 <b>To:</b> {to_display}\n"
+            f"• ID: <code>{to_user_id}</code>\n"
+            f"• New Total Snatches: <code>{to_user_obj.total_catches:,}</code>\n\n"
+            f"👑 <b>Authorized By:</b> {admin_name}"
+        )
+    )
+    await message.reply(card, parse_mode="HTML")
+
+    try:
+        dm_notify = (
+            f"{get_emoji('gift')} <b>COLLECTION TRANSFER RECEIVED!</b>\n\n"
+            + format_blockquote(
+                f"You have received <b>{snatches_count:,}</b> characters/snatches into your harem!\n\n"
+                f"View your updated collection with <code>/harem</code>!"
+            )
+        )
+        await message.bot.send_message(to_user_id, dm_notify, parse_mode="HTML")
+    except Exception:
+        pass
 
 @router.message(Command("addrarity"))
 async def cmd_addrarity(message: Message, db: AsyncSession):
@@ -1174,7 +1329,8 @@ async def cb_admin_tools(callback: CallbackQuery, db: AsyncSession):
             "🗑️ <b>Delete Character:</b>\n<code>/deletechar &lt;char_id_or_name&gt;</code>\n\n"
             f"{get_emoji('energy')} <b>Add Custom Rarity Tier:</b>\n<code>/addrarity Name | Emoji</code>\n\n"
             f"{get_emoji('energy')} <b>Add Anime Character:</b>\n<code>/addchar Name | Anime | Rarity</code>\n\n"
-            "🌀 <b>Force Spawn:</b>\n<code>/spawn [rarity]</code>"
+            "🌀 <b>Force Spawn:</b>\n<code>/spawn [rarity]</code>\n\n"
+            f"🔄 <b>Transfer Snatches:</b>\n<code>/transfersnatches &lt;from&gt; &lt;to&gt;</code>"
         )
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
@@ -1300,6 +1456,7 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
         f"│  {get_emoji('energy')} <b>ADMIN COMMANDS (You can use these):</b>\n"
         "│  ├─➩ <code>/stats</code> — View bot stats\n"
         "│  ├─➩ <code>/spawn</code> — Force spawn wild character\n"
+        "│  ├─➩ <code>/transfersnatches &lt;from&gt; &lt;to&gt;</code> — Transfer all catches\n"
         "│  ├─➩ <code>/addchar &lt;details&gt;</code> — Create character\n"
         "│  ├─➩ <code>/editchar &lt;id&gt;</code> — Edit name/anime/rarity/media\n"
         "│  ├─➩ <code>/deletechar &lt;id&gt;</code> — Delete character\n"
@@ -2232,9 +2389,18 @@ async def cmd_demote(message: Message, db: AsyncSession):
 async def cmd_adminlist(message: Message, db: AsyncSession):
     stmt = select(BotAdmin)
     res = await db.execute(stmt)
-    admins = res.scalars().all()
+    admins = list(res.scalars().all())
 
-    admin_ids = [a.user_id for a in admins]
+    db_admin_ids = {a.user_id for a in admins}
+    
+    # Merge default config admins if not already loaded in db query
+    for def_id, def_info in config.DEFAULT_BOT_ADMINS.items():
+        if def_id not in db_admin_ids:
+            # Create a mock-like or temporary instance for display
+            admins.append(BotAdmin(user_id=def_id, role=def_info.get("role", "snradmin")))
+            db_admin_ids.add(def_id)
+
+    admin_ids = list(db_admin_ids)
     user_map = {}
     if admin_ids:
         u_stmt = select(User).where(User.user_id.in_(admin_ids))
@@ -2254,8 +2420,12 @@ async def cmd_adminlist(message: Message, db: AsyncSession):
     jr_list = []
     for a in admins:
         u = user_map.get(a.user_id)
-        name = escape_html(u.first_name) if u else f"User ID {a.user_id}"
-        username_text = f" (@{u.username})" if u and u.username else ""
+        def_info = config.DEFAULT_BOT_ADMINS.get(a.user_id, {})
+        first_name = u.first_name if (u and u.first_name) else def_info.get("first_name", f"Admin {a.user_id}")
+        uname = u.username if (u and u.username) else def_info.get("username", "")
+        
+        name = escape_html(first_name)
+        username_text = f" (@{uname})" if uname else ""
         line = f"• {name}{username_text} (<code>{a.user_id}</code>)"
         if a.role == "snradmin":
             snr_list.append(line)

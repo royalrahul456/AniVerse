@@ -17,7 +17,6 @@ Base = declarative_base()
 async def init_db():
     # Import all models so Base.metadata is fully populated before create_all
     import database.models
-
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -34,6 +33,30 @@ async def init_db():
             print(f"Error creating bot_emojis table: {e}")
 
     # Safe dynamic column migrations
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_weekly TIMESTAMP"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_monthly TIMESTAMP"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_yearly TIMESTAMP"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("ALTER TABLE active_spawns ADD COLUMN message_id INTEGER"))
+        except Exception:
+            pass
+
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE users ADD COLUMN last_weekly TIMESTAMP"))
