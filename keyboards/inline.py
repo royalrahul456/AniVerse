@@ -29,7 +29,8 @@ def get_dm_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     )
     if is_admin:
         builder.row(
-            InlineKeyboardButton(text="🛠️ Admin Tools", callback_data="admin_tools")
+            InlineKeyboardButton(text="🛠️ Admin Tools", callback_data="admin_tools"),
+            InlineKeyboardButton(text="🔄 Transfer Snatches", callback_data="admin_transfersnatches")
         )
     return builder.as_markup()
 

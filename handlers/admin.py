@@ -278,8 +278,12 @@ async def cmd_give(message: Message, db: AsyncSession):
         except Exception:
             await message.reply(card_text, parse_mode="HTML")
 
-async def resolve_target_user(target_str: str, db: AsyncSession, bot) -> tuple[int | None, str | None, str | None]:
+async def resolve_target_user(target_str: str, db: AsyncSession, bot, entity_user=None) -> tuple[int | None, str | None, str | None]:
     """Resolves a user ID or @username into (user_id, username, first_name)."""
+    # 0. If Telegram provided the user entity directly (e.g. text_mention)
+    if entity_user:
+        return entity_user.id, entity_user.username, entity_user.first_name
+
     target_str = target_str.strip()
     clean_username = target_str.lstrip("@").lower()
 
@@ -303,19 +307,23 @@ async def resolve_target_user(target_str: str, db: AsyncSession, bot) -> tuple[i
         except Exception:
             return uid, None, f"User {uid}"
 
-    # 3. Check by username in database
-    stmt = select(User).where(func.lower(User.username) == clean_username)
-    res = await db.execute(stmt)
-    u = res.scalar_one_or_none()
-    if u:
-        return u.user_id, u.username, u.first_name
+    # 3. Check by username in database (case-insensitive)
+    if clean_username:
+        stmt = select(User).where(func.lower(User.username) == clean_username)
+        res = await db.execute(stmt)
+        u = res.scalar_one_or_none()
+        if u:
+            return u.user_id, u.username, u.first_name
 
     # 4. Fallback to Telegram get_chat lookup
-    try:
-        chat = await bot.get_chat(f"@{clean_username}")
-        return chat.id, chat.username, chat.first_name or f"@{clean_username}"
-    except Exception:
-        return None, None, None
+    if clean_username:
+        try:
+            chat = await bot.get_chat(f"@{clean_username}")
+            return chat.id, chat.username, chat.first_name or f"@{clean_username}"
+        except Exception:
+            pass
+
+    return None, None, None
 
 @router.message(Command("transfersnatches", "transfersnatch", "transferall", "transfercatches"))
 async def cmd_transfersnatches(message: Message, db: AsyncSession):
@@ -323,115 +331,150 @@ async def cmd_transfersnatches(message: Message, db: AsyncSession):
         await message.reply(f"{get_emoji('no_entry')} Only bot owners and admins can transfer snatches!")
         return
 
-    text = message.text.strip()
-    tokens = text.split()
-    args = tokens[1:]
+    try:
+        text = message.text or ""
+        tokens = text.strip().split()
+        args = tokens[1:]
+        reply = message.reply_to_message
 
-    reply = message.reply_to_message
+        # Helper to extract mention entities if present
+        def get_entity_user_for_arg(arg_index: int):
+            if not message.entities or not text:
+                return None
+            # Find offset of the argument
+            # We check entities of type text_mention
+            current_idx = 0
+            for entity in message.entities:
+                if entity.type == "text_mention" and entity.user:
+                    # check if this entity matches arg
+                    entity_str = text[entity.offset:entity.offset + entity.length]
+                    if len(args) > arg_index and entity_str == args[arg_index]:
+                        return entity.user
+            return None
 
-    from_user_id, from_username, from_first_name = None, None, None
-    to_user_id, to_username, to_first_name = None, None, None
+        from_user_id, from_username, from_first_name = None, None, None
+        to_user_id, to_username, to_first_name = None, None, None
 
-    if len(args) >= 2:
-        # Format: /transfersnatches <from_user> <to_user>
-        from_user_id, from_username, from_first_name = await resolve_target_user(args[0], db, message.bot)
-        to_user_id, to_username, to_first_name = await resolve_target_user(args[1], db, message.bot)
-    elif len(args) == 1 and reply and reply.from_user and not reply.from_user.is_bot:
-        # Format: Reply to donor with /transfersnatches <to_user>
-        from_user_id = reply.from_user.id
-        from_username = reply.from_user.username
-        from_first_name = reply.from_user.first_name
-        to_user_id, to_username, to_first_name = await resolve_target_user(args[0], db, message.bot)
-    else:
+        if len(args) >= 2:
+            # Format: /transfersnatches <from_user> <to_user>
+            u1_entity = get_entity_user_for_arg(0)
+            u2_entity = get_entity_user_for_arg(1)
+            from_user_id, from_username, from_first_name = await resolve_target_user(args[0], db, message.bot, entity_user=u1_entity)
+            to_user_id, to_username, to_first_name = await resolve_target_user(args[1], db, message.bot, entity_user=u2_entity)
+        elif len(args) == 1 and reply and reply.from_user and not reply.from_user.is_bot:
+            # Format: Reply to donor with /transfersnatches <to_user>
+            from_user_id = reply.from_user.id
+            from_username = reply.from_user.username
+            from_first_name = reply.from_user.first_name
+            u2_entity = get_entity_user_for_arg(0)
+            to_user_id, to_username, to_first_name = await resolve_target_user(args[0], db, message.bot, entity_user=u2_entity)
+        else:
+            card = (
+                f"{get_emoji('energy')} <b>TRANSFER ALL SNATCHES CONSOLE</b>\n\n"
+                + format_blockquote(
+                    "Transfer all characters/snatches from one trainer to another!\n"
+                    "<i>(Bot Owners and Admins only)</i>\n\n"
+                    f"{get_emoji('pointer')} <b>Usage Formats:</b>\n"
+                    "• <code>/transfersnatches &lt;from_user&gt; &lt;to_user&gt;</code>\n"
+                    "• Reply to donor with: <code>/transfersnatches &lt;to_user&gt;</code>\n\n"
+                    "<b>Examples:</b>\n"
+                    "• <code>/transfersnatches 123456789 8365981430</code>\n"
+                    "• <code>/transfersnatches @OldTrainer @Sylveon_sy</code>\n"
+                    "• <code>/transfersnatches @OldTrainer 8365981430</code>\n\n"
+                    "💡 <i>Accepts either numeric User IDs, @usernames, or message replies!</i>"
+                )
+            )
+            builder = InlineKeyboardBuilder()
+            builder.row(InlineKeyboardButton(text="🛠️ Admin Tools", callback_data="admin_tools"))
+            await message.reply(card, parse_mode="HTML", reply_markup=builder.as_markup())
+            return
+
+        if not from_user_id:
+            await message.reply(
+                f"{get_emoji('error')} Could not resolve source trainer (donor) from <code>{escape_html(args[0] if args else 'N/A')}</code>.\n"
+                "💡 <i>Make sure the user ID is correct or the user has started the bot so their username can be found.</i>",
+                parse_mode="HTML"
+            )
+            return
+
+        target_arg_to = args[1] if len(args) >= 2 else (args[0] if args else "N/A")
+        if not to_user_id:
+            await message.reply(
+                f"{get_emoji('error')} Could not resolve destination trainer (recipient) from <code>{escape_html(target_arg_to)}</code>.\n"
+                "💡 <i>Make sure the user ID is correct or the user has started the bot so their username can be found.</i>",
+                parse_mode="HTML"
+            )
+            return
+
+        if from_user_id == to_user_id:
+            await message.reply(f"{get_emoji('error')} Source and destination trainers are the same user (ID: <code>{from_user_id}</code>)!", parse_mode="HTML")
+            return
+
+        # Count snatches to transfer
+        stmt = select(func.count(UserCharacter.id)).where(UserCharacter.user_id == from_user_id)
+        snatches_count = (await db.execute(stmt)).scalar() or 0
+
+        if snatches_count == 0:
+            d_name = escape_html(from_first_name or f"User {from_user_id}")
+            await message.reply(f"{get_emoji('warning')} <b>{d_name}</b> (<code>{from_user_id}</code>) has <b>0</b> snatches/characters in their collection to transfer.", parse_mode="HTML")
+            return
+
+        # Transfer all UserCharacter rows
+        await db.execute(
+            update(UserCharacter)
+            .where(UserCharacter.user_id == from_user_id)
+            .values(user_id=to_user_id)
+        )
+
+        # Ensure both user objects exist in users table
+        from_user_obj = await get_or_create_user(db, from_user_id, from_username or "", from_first_name or f"User {from_user_id}")
+        to_user_obj = await get_or_create_user(db, to_user_id, to_username or "", to_first_name or f"User {to_user_id}")
+
+        # Adjust total_catches counts
+        to_user_obj.total_catches = (to_user_obj.total_catches or 0) + snatches_count
+        from_user_obj.total_catches = max(0, (from_user_obj.total_catches or 0) - snatches_count)
+
+        # Clear favorite character if donor had one set
+        from_user_obj.favorite_character_id = None
+
+        await db.commit()
+
+        from_display = f"<a href=\"tg://user?id={from_user_id}\">{escape_html(from_user_obj.first_name)}</a>" + (f" (@{from_user_obj.username})" if from_user_obj.username else "")
+        to_display = f"<a href=\"tg://user?id={to_user_id}\">{escape_html(to_user_obj.first_name)}</a>" + (f" (@{to_user_obj.username})" if to_user_obj.username else "")
+        admin_name = escape_html(message.from_user.first_name if message.from_user else "Admin")
+
         card = (
-            f"{get_emoji('energy')} <b>TRANSFER ALL SNATCHES CONSOLE</b>\n\n"
+            f"{get_emoji('success')} <b>SNATCHES TRANSFERRED SUCCESSFULLY!</b>\n\n"
             + format_blockquote(
-                "Transfer all characters/snatches from one trainer to another!\n"
-                "<i>(Bot Owners and Admins only)</i>\n\n"
-                f"{get_emoji('pointer')} <b>Usage Formats:</b>\n"
-                "• <code>/transfersnatches &lt;from_user&gt; &lt;to_user&gt;</code>\n"
-                "• Reply to donor with: <code>/transfersnatches &lt;to_user&gt;</code>\n\n"
-                "<b>Examples:</b>\n"
-                "• <code>/transfersnatches 123456789 8365981430</code>\n"
-                "• <code>/transfersnatches @OldTrainer @Sylveon_sy</code>\n"
-                "• <code>/transfersnatches @OldTrainer 8365981430</code>\n\n"
-                "💡 <i>Accepts either numeric User IDs or @usernames!</i>"
+                f"🎒 <b>Total Snatches Transferred:</b> <code>{snatches_count:,}</code> characters\n\n"
+                f"📤 <b>From:</b> {from_display}\n"
+                f"• ID: <code>{from_user_id}</code>\n"
+                f"• Remaining Snatches: <code>0</code>\n\n"
+                f"📥 <b>To:</b> {to_display}\n"
+                f"• ID: <code>{to_user_id}</code>\n"
+                f"• New Total Snatches: <code>{to_user_obj.total_catches:,}</code>\n\n"
+                f"👑 <b>Authorized By:</b> {admin_name}"
             )
         )
         await message.reply(card, parse_mode="HTML")
-        return
 
-    if not from_user_id:
-        await message.reply(f"{get_emoji('error')} Could not find source trainer (donor). Please verify the User ID or @username.", parse_mode="HTML")
-        return
-
-    if not to_user_id:
-        await message.reply(f"{get_emoji('error')} Could not find destination trainer (recipient). Please verify the User ID or @username.", parse_mode="HTML")
-        return
-
-    if from_user_id == to_user_id:
-        await message.reply(f"{get_emoji('error')} Source and destination trainers are the same user!", parse_mode="HTML")
-        return
-
-    # Count snatches to transfer
-    stmt = select(func.count(UserCharacter.id)).where(UserCharacter.user_id == from_user_id)
-    snatches_count = (await db.execute(stmt)).scalar() or 0
-
-    if snatches_count == 0:
-        d_name = escape_html(from_first_name or f"User {from_user_id}")
-        await message.reply(f"{get_emoji('warning')} <b>{d_name}</b> has <b>0</b> snatches/characters in their collection to transfer.", parse_mode="HTML")
-        return
-
-    # Transfer all UserCharacter rows
-    await db.execute(
-        update(UserCharacter)
-        .where(UserCharacter.user_id == from_user_id)
-        .values(user_id=to_user_id)
-    )
-
-    # Ensure both user objects exist in users table
-    from_user_obj = await get_or_create_user(db, from_user_id, from_username or "", from_first_name or f"User {from_user_id}")
-    to_user_obj = await get_or_create_user(db, to_user_id, to_username or "", to_first_name or f"User {to_user_id}")
-
-    # Adjust total_catches counts
-    to_user_obj.total_catches = (to_user_obj.total_catches or 0) + snatches_count
-    from_user_obj.total_catches = max(0, (from_user_obj.total_catches or 0) - snatches_count)
-
-    # Clear favorite character if donor had one set
-    from_user_obj.favorite_character_id = None
-
-    await db.commit()
-
-    from_display = f"<a href=\"tg://user?id={from_user_id}\">{escape_html(from_user_obj.first_name)}</a>" + (f" (@{from_user_obj.username})" if from_user_obj.username else "")
-    to_display = f"<a href=\"tg://user?id={to_user_id}\">{escape_html(to_user_obj.first_name)}</a>" + (f" (@{to_user_obj.username})" if to_user_obj.username else "")
-    admin_name = escape_html(message.from_user.first_name if message.from_user else "Admin")
-
-    card = (
-        f"{get_emoji('success')} <b>SNATCHES TRANSFERRED SUCCESSFULLY!</b>\n\n"
-        + format_blockquote(
-            f"🎒 <b>Total Snatches Transferred:</b> <code>{snatches_count:,}</code> characters\n\n"
-            f"📤 <b>From:</b> {from_display}\n"
-            f"• ID: <code>{from_user_id}</code>\n"
-            f"• Remaining Snatches: <code>0</code>\n\n"
-            f"📥 <b>To:</b> {to_display}\n"
-            f"• ID: <code>{to_user_id}</code>\n"
-            f"• New Total Snatches: <code>{to_user_obj.total_catches:,}</code>\n\n"
-            f"👑 <b>Authorized By:</b> {admin_name}"
-        )
-    )
-    await message.reply(card, parse_mode="HTML")
-
-    try:
-        dm_notify = (
-            f"{get_emoji('gift')} <b>COLLECTION TRANSFER RECEIVED!</b>\n\n"
-            + format_blockquote(
-                f"You have received <b>{snatches_count:,}</b> characters/snatches into your harem!\n\n"
-                f"View your updated collection with <code>/harem</code>!"
+        try:
+            dm_notify = (
+                f"{get_emoji('gift')} <b>COLLECTION TRANSFER RECEIVED!</b>\n\n"
+                + format_blockquote(
+                    f"You have received <b>{snatches_count:,}</b> characters/snatches into your harem!\n\n"
+                    f"View your updated collection with <code>/harem</code>!"
+                )
             )
-        )
-        await message.bot.send_message(to_user_id, dm_notify, parse_mode="HTML")
-    except Exception:
-        pass
+            await message.bot.send_message(to_user_id, dm_notify, parse_mode="HTML")
+        except Exception:
+            pass
+    except Exception as e:
+        logger.exception("Error executing cmd_transfersnatches")
+        await db.rollback()
+        import html
+        err_msg = html.escape(str(e))
+        await message.reply(f"{get_emoji('error')} An error occurred while transferring snatches: <code>{err_msg}</code>", parse_mode="HTML")
 
 @router.message(Command("addrarity"))
 async def cmd_addrarity(message: Message, db: AsyncSession):
@@ -1315,26 +1358,7 @@ async def cmd_stats(message: Message, db: AsyncSession):
     )
     await message.answer(text, parse_mode="HTML")
 
-@router.callback_query(F.data == "admin_tools")
-async def cb_admin_tools(callback: CallbackQuery, db: AsyncSession):
-    if not await is_admin_id(callback.from_user.id, db):
-        await callback.answer("Unauthorized!", show_alert=True)
-        return
-    text = (
-        "🛠️ <b>AniVerse Telegram Admin Tools</b>\n\n"
-        + format_blockquote(
-            f"{get_emoji('gift')} <b>Give Characters & Coins:</b>\n<code>/giv char &lt;user_id&gt; &lt;char_id&gt;</code>\n<code>/giv coins &lt;user_id&gt; &lt;amount&gt;</code>\n\n"
-            f"{get_emoji('target')} <b>Spawn Chance Controls:</b>\n<code>/addtochance &lt;rarity&gt;</code>\n<code>/removefromchance &lt;rarity&gt;</code>\n\n"
-            "🖼️ <b>Update Character Image:</b>\n<code>/setimg &lt;char_id&gt;</code> (reply or photo URL)\n\n"
-            "🗑️ <b>Delete Character:</b>\n<code>/deletechar &lt;char_id_or_name&gt;</code>\n\n"
-            f"{get_emoji('energy')} <b>Add Custom Rarity Tier:</b>\n<code>/addrarity Name | Emoji</code>\n\n"
-            f"{get_emoji('energy')} <b>Add Anime Character:</b>\n<code>/addchar Name | Anime | Rarity</code>\n\n"
-            "🌀 <b>Force Spawn:</b>\n<code>/spawn [rarity]</code>\n\n"
-            f"🔄 <b>Transfer Snatches:</b>\n<code>/transfersnatches &lt;from&gt; &lt;to&gt;</code>"
-        )
-    )
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_back_to_hub_keyboard())
-    await callback.answer()
+
 
 @router.message(Command("addpremium"))
 async def cmd_addpremium(message: Message, db: AsyncSession):
@@ -1498,23 +1522,28 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
         await message.reply(card, parse_mode="HTML", reply_markup=builder.as_markup())
 
 @router.callback_query(F.data == "admin_tools")
-async def cb_admin_tools(callback: CallbackQuery):
-    if callback.from_user.id not in config.ADMIN_IDS:
+async def cb_admin_tools(callback: CallbackQuery, db: AsyncSession):
+    if not await is_admin_id(callback.from_user.id, db):
         await callback.answer(f"{get_emoji('no_entry')} Access denied!", show_alert=True)
         return
 
+    is_owner_user = callback.from_user.id in config.ADMIN_IDS
+    console_title = f"{get_emoji('crown')} AniVerse Owner Console" if is_owner_user else "⚙️ AniVerse Admin Console"
+
     card = (
-        f"╭───「 {get_emoji('crown')} AniVerse Owner Console 」───╮\n"
+        f"╭───「 {console_title} 」───╮\n"
         "│\n"
-        f"│  Welcome Creator, <b>{escape_html(callback.from_user.first_name)}</b>!\n"
+        f"│  Welcome, <b>{escape_html(callback.from_user.first_name)}</b>!\n"
         "│\n"
-        "│  🔧 <b>Management Commands:</b>\n"
+        f"│  {get_emoji('energy')} <b>Management Commands:</b>\n"
         "│  ├─➩ <code>/stats</code> — Server stats & DB info\n"
         "│  ├─➩ <code>/spawn</code> — Force spawn wild character\n"
+        "│  ├─➩ <code>/transfersnatches &lt;from&gt; &lt;to&gt;</code> — Transfer all catches\n"
         "│  ├─➩ <code>/setcover &lt;mode&gt;</code> — Set covers (start, xo, dex)\n"
         "│  │\n"
         "│  🎴 <b>Character Editing:</b>\n"
         "│  ├─➩ <code>/addchar &lt;details&gt;</code> — Create character\n"
+        "│  ├─➩ <code>/editchar &lt;id&gt;</code> — Edit character details\n"
         "│  ├─➩ <code>/deletechar &lt;id&gt;</code> — Delete character\n"
         "│  ├─➩ <code>/setimg &lt;id&gt; &lt;url&gt;</code> — Update photo\n"
         "│  ├─➩ <code>/setrarity &lt;id&gt; &lt;rarity&gt;</code> — Update rarity\n"
@@ -1526,14 +1555,47 @@ async def cb_admin_tools(callback: CallbackQuery):
         "│  ├─➩ <code>/removepremium &lt;user&gt;</code> — Revoke VIP status\n"
         "│  │\n"
         "│  📈 <b>Database Config:</b>\n"
-        "│  ├─➩ <code>/addrarity &lt;rarity&gt; &lt;chance&gt;</code>\n"
-        "│  ├─➩ <code>/addchance &lt;id&gt; &lt;chance&gt;</code>\n"
+        "│  ├─➩ <code>/addrarity &lt;rarity&gt; &lt;emoji&gt;</code>\n"
+        "│  ├─➩ <code>/addtochance &lt;rarity&gt;</code>\n"
+        "│  ├─➩ <code>/removefromchance &lt;rarity&gt;</code>\n"
         "│  \n"
         "╰──────────────────────────╯"
     )
     builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔄 Transfer Snatches", callback_data="admin_transfersnatches")
+    )
     builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
     
+    from handlers.start import send_or_edit_start
+    await send_or_edit_start(callback.message, get_cover_media("start"), card, builder.as_markup(), is_callback=True)
+    await callback.answer()
+
+@router.callback_query(F.data == "admin_transfersnatches")
+async def cb_admin_transfersnatches(callback: CallbackQuery, db: AsyncSession):
+    if not await is_admin_id(callback.from_user.id, db):
+        await callback.answer(f"{get_emoji('no_entry')} Access denied!", show_alert=True)
+        return
+
+    card = (
+        f"{get_emoji('energy')} <b>TRANSFER ALL SNATCHES CONSOLE</b>\n\n"
+        + format_blockquote(
+            "Transfer all characters/snatches from one trainer to another!\n"
+            "<i>(Bot Owners and Admins only)</i>\n\n"
+            f"{get_emoji('pointer')} <b>How to use:</b>\n"
+            "• Type in chat: <code>/transfersnatches &lt;from_user&gt; &lt;to_user&gt;</code>\n"
+            "• Or reply to a donor's message with: <code>/transfersnatches &lt;to_user&gt;</code>\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>/transfersnatches 123456789 8365981430</code>\n"
+            "• <code>/transfersnatches @OldTrainer @Sylveon_sy</code>\n"
+            "• <code>/transfersnatches @OldTrainer 8365981430</code>\n\n"
+            "💡 <i>Accepts either numeric Telegram User IDs, @usernames, or message replies!</i>"
+        )
+    )
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🛠️ Admin Tools", callback_data="admin_tools"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
+
     from handlers.start import send_or_edit_start
     await send_or_edit_start(callback.message, get_cover_media("start"), card, builder.as_markup(), is_callback=True)
     await callback.answer()
