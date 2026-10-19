@@ -312,6 +312,11 @@ async def main():
         logger.error(f"Failed to load custom bot emojis (falling back to unicode defaults): {e}")
 
     bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    
+    # Patch bot session for automatic premium emoji rendering & fallback recovery
+    from utils.emoji_patch import patch_bot_emojis
+    patch_bot_emojis(bot)
+
     dp = Dispatcher()
 
     from utils.emojis import DEFAULT_EMOJIS
@@ -374,6 +379,7 @@ async def main():
         BotCommand(command="promote", description="⭐ Promote user to admin (Owner only)"),
         BotCommand(command="demote", description="🔻 Demote user from admin (Owner only)"),
         BotCommand(command="adminlist", description="📋 List bot admin staff"),
+        BotCommand(command="toggleemojis", description="✨ Toggle Telegram Premium Emojis (Admin)"),
         BotCommand(command="ownerhelp", description="👑 View owner command guide (Owner only)")
     ]
     try:

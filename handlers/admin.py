@@ -2651,7 +2651,7 @@ async def cmd_autoemojis(message: Message, db: AsyncSession):
             if sticker.emoji in emoji_to_key and sticker.custom_emoji_id:
                 key = emoji_to_key[sticker.emoji]
                 
-                tag = f'<tg-emoji emoji_id="{sticker.custom_emoji_id}">{sticker.emoji}</tg-emoji>'
+                tag = f'<tg-emoji emoji-id="{sticker.custom_emoji_id}">{sticker.emoji}</tg-emoji>'
                 
                 stmt = select(BotEmoji).where(BotEmoji.key == key)
                 res = await db.execute(stmt)
@@ -2680,6 +2680,25 @@ async def cmd_autoemojis(message: Message, db: AsyncSession):
         import html
         safe_error = html.escape(str(e))
         await message.reply(f"{get_emoji('error')} An unexpected database error occurred during mapping:\n\n<code>{safe_error}</code>", parse_mode="HTML")
+
+@router.message(Command("toggleemojis", ignore_mention=True))
+@router.message(Command("togglepremiumemojis", ignore_mention=True))
+async def cmd_toggle_emojis(message: Message, db: AsyncSession):
+    if not await is_admin_or_owner(message, db):
+        await message.reply(f"{get_emoji('no_entry')} Only bot owners and administrators can toggle premium emojis!")
+        return
+
+    from utils.emoji_patch import is_premium_emojis_enabled, set_premium_emojis_status
+    current = is_premium_emojis_enabled()
+    new_status = not current
+    set_premium_emojis_status(new_status)
+
+    status_str = "Enabled 🟢 (Custom Telegram Premium Emojis)" if new_status else "Disabled 🔴 (Standard Clean Unicode Emojis)"
+    await message.reply(
+        f"✨ <b>Premium Emoji Mode</b> is now <b>{status_str}</b>.\n\n"
+        f"<i>Saved in settings! The setting will persist across all future bot restarts & updates.</i>",
+        parse_mode="HTML"
+    )
 
 @router.message(Command("broadcast"))
 async def cmd_broadcast(message: Message, db: AsyncSession):

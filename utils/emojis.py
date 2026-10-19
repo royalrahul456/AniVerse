@@ -637,8 +637,13 @@ def get_emoji(key: str) -> str:
     fallback = DEFAULT_EMOJIS.get(key, DEFAULT_EMOJIS.get(clean_key, key))
 
     # If premium custom emojis are disabled, ALWAYS return the safe unicode fallback
-    if not ENABLE_PREMIUM_EMOJIS:
-        return fallback
+    try:
+        from utils.emoji_patch import is_premium_emojis_enabled
+        if not is_premium_emojis_enabled():
+            return fallback
+    except Exception:
+        if not ENABLE_PREMIUM_EMOJIS:
+            return fallback
 
     # 1. Check in-memory database cache
     if key in EMOJI_CACHE:
@@ -651,10 +656,10 @@ def get_emoji(key: str) -> str:
         emoji_id = PREMIUM_EMOJI_IDS[fallback.replace("️", "")]
 
     if emoji_id:
-        return f'<tg-emoji emoji_id="{emoji_id}">{fallback}</tg-emoji>'
+        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
     return fallback
 
 def format_custom_emoji(emoji_id: str, fallback: str = "✨") -> str:
     """Explicitly format a custom emoji tag."""
-    return f'<tg-emoji emoji_id="{emoji_id}">{fallback}</tg-emoji>'
+    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
