@@ -176,8 +176,8 @@ async def handle_inline_query(inline_query: InlineQuery):
 
                 caption = (
                     f"🌟 <b>{escape_html(char.name)}</b> [{r_emoji}]\n"
-                    f"{get_emoji('fid')} <b>ID:</b> #{char.id:03d}\n"
-                    f"{get_emoji('ftv')} <b>Anime:</b> {escape_html(char.anime)}\n"
+                    f"{get_emoji('id')} <b>ID:</b> #{char.id:03d}\n"
+                    f"{get_emoji('tv')} <b>Anime:</b> {escape_html(char.anime)}\n"
                     f"{r_emoji} <b>Rarity:</b> {char.rarity}\n"
                     f"{get_emoji('crown')} <b>Owner:</b> {owner_mention}"
                 )
@@ -232,8 +232,8 @@ async def handle_inline_query(inline_query: InlineQuery):
 
                 caption = (
                     f"🌟 <b>{escape_html(char.name)}</b> [{r_emoji}]\n"
-                    f"{get_emoji('fid')} <b>ID:</b> #{char.id:03d}\n"
-                    f"{get_emoji('ftv')} <b>Anime:</b> {escape_html(char.anime)}\n"
+                    f"{get_emoji('id')} <b>ID:</b> #{char.id:03d}\n"
+                    f"{get_emoji('tv')} <b>Anime:</b> {escape_html(char.anime)}\n"
                     f"{get_emoji('gem')} <b>Rarity:</b> {r_emoji} {char.rarity}\n"
                     f"🤖 <b>Bot:</b> @AniVerse1bot"
                 )
