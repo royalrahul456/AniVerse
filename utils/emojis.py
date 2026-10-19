@@ -632,23 +632,26 @@ def get_emoji(key: str) -> str:
     returns <tg-emoji emoji_id="{id}">{emoji}</tg-emoji>.
     Otherwise, returns the unicode emoji fallback.
     """
-    # 1. Check in-memory database cache
-    if key in EMOJI_CACHE:
-        return EMOJI_CACHE[key]
-
     # Normalize key (strip variation selector if passed as char)
     clean_key = key.replace("️", "") if isinstance(key, str) else key
     fallback = DEFAULT_EMOJIS.get(key, DEFAULT_EMOJIS.get(clean_key, key))
 
-    if ENABLE_PREMIUM_EMOJIS:
-        emoji_id = PREMIUM_EMOJI_IDS.get(key) or PREMIUM_EMOJI_IDS.get(clean_key)
-        if not emoji_id and fallback in PREMIUM_EMOJI_IDS:
-            emoji_id = PREMIUM_EMOJI_IDS[fallback]
-        if not emoji_id and fallback.replace("️", "") in PREMIUM_EMOJI_IDS:
-            emoji_id = PREMIUM_EMOJI_IDS[fallback.replace("️", "")]
+    # If premium custom emojis are disabled, ALWAYS return the safe unicode fallback
+    if not ENABLE_PREMIUM_EMOJIS:
+        return fallback
 
-        if emoji_id:
-            return f'<tg-emoji emoji_id="{emoji_id}">{fallback}</tg-emoji>'
+    # 1. Check in-memory database cache
+    if key in EMOJI_CACHE:
+        return EMOJI_CACHE[key]
+
+    emoji_id = PREMIUM_EMOJI_IDS.get(key) or PREMIUM_EMOJI_IDS.get(clean_key)
+    if not emoji_id and fallback in PREMIUM_EMOJI_IDS:
+        emoji_id = PREMIUM_EMOJI_IDS[fallback]
+    if not emoji_id and fallback.replace("️", "") in PREMIUM_EMOJI_IDS:
+        emoji_id = PREMIUM_EMOJI_IDS[fallback.replace("️", "")]
+
+    if emoji_id:
+        return f'<tg-emoji emoji_id="{emoji_id}">{fallback}</tg-emoji>'
 
     return fallback
 
