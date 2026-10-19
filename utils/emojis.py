@@ -4,8 +4,8 @@ from typing import Optional
 # In-memory cache for fast lookups
 EMOJI_CACHE = {}
 
-# Set to False to revert all emojis back to standard unicode
-ENABLE_PREMIUM_EMOJIS = os.getenv("ENABLE_PREMIUM_EMOJIS", "true").lower() in ("true", "1", "yes")
+# Set to True only if your bot username is a Fragment collectible that has custom emoji permissions
+ENABLE_PREMIUM_EMOJIS = os.getenv("ENABLE_PREMIUM_EMOJIS", "false").lower() in ("true", "1", "yes")
 
 # Default unicode fallbacks for standard keys
 DEFAULT_EMOJIS = {
