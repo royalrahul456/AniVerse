@@ -5,7 +5,7 @@ from typing import Optional
 EMOJI_CACHE = {}
 
 # Set to True only if your bot username is a Fragment collectible that has custom emoji permissions
-ENABLE_PREMIUM_EMOJIS = os.getenv("ENABLE_PREMIUM_EMOJIS", "false").lower() in ("true", "1", "yes")
+ENABLE_PREMIUM_EMOJIS = os.getenv("ENABLE_PREMIUM_EMOJIS", "true").lower() in ("true", "1", "yes")
 
 # Default unicode fallbacks for standard keys
 DEFAULT_EMOJIS = {
@@ -607,6 +607,22 @@ PREMIUM_EMOJI_IDS = {
     "📋": "5308039077696643700",
     "clipboard": "5308039077696643700",
 
+    # Target / Dart
+    "🎯": "5350460637182993292",
+    "target": "5350460637182993292",
+
+    # Money Bag
+    "💰": "4918300654197277832",
+    "money_bag": "4918300654197277832",
+
+    # Lock with Key
+    "🔐": "5393302369024882368",
+    "lock_with_key": "5393302369024882368",
+
+    # Clapper
+    "🎬": "5350641446716193389",
+    "clapper": "5350641446716193389",
+
     # 100. ⚠️ Warning
     "⚠️": "5447644880824181073",
     "⚠": "5447644880824181073",
@@ -614,22 +630,31 @@ PREMIUM_EMOJI_IDS = {
 }
 
 async def load_emojis(db):
-    """Load custom emojis from database into cache."""
+    """Load custom emojis from database into cache. Auto-seeds if empty and cleans legacy tags."""
     try:
         from database.models import BotEmoji
         from sqlalchemy.future import select
         stmt = select(BotEmoji)
         result = await db.execute(stmt)
         emojis = result.scalars().all()
-        for em in emojis:
-            EMOJI_CACHE[em.key] = em.emoji
+        if not emojis:
+            for key, emoji_id in PREMIUM_EMOJI_IDS.items():
+                fallback = DEFAULT_EMOJIS.get(key, key)
+                tag = f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+                db.add(BotEmoji(key=key, emoji=tag))
+                EMOJI_CACHE[key] = tag
+            await db.commit()
+        else:
+            for em in emojis:
+                clean_tag = em.emoji.replace("emoji_id=", "emoji-id=")
+                EMOJI_CACHE[em.key] = clean_tag
     except Exception as e:
         pass
 
 def get_emoji(key: str) -> str:
     """Get the emoji for a given key or unicode character.
     If premium custom emojis are enabled and an ID is available,
-    returns <tg-emoji emoji_id="{id}">{emoji}</tg-emoji>.
+    returns <tg-emoji emoji-id="{id}">{emoji}</tg-emoji>.
     Otherwise, returns the unicode emoji fallback.
     """
     # Normalize key (strip variation selector if passed as char)
@@ -647,7 +672,9 @@ def get_emoji(key: str) -> str:
 
     # 1. Check in-memory database cache
     if key in EMOJI_CACHE:
-        return EMOJI_CACHE[key]
+        return EMOJI_CACHE[key].replace("emoji_id=", "emoji-id=")
+    if clean_key in EMOJI_CACHE:
+        return EMOJI_CACHE[clean_key].replace("emoji_id=", "emoji-id=")
 
     emoji_id = PREMIUM_EMOJI_IDS.get(key) or PREMIUM_EMOJI_IDS.get(clean_key)
     if not emoji_id and fallback in PREMIUM_EMOJI_IDS:

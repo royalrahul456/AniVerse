@@ -508,7 +508,7 @@ async def cmd_addrarity(message: Message, db: AsyncSession):
                 custom_id = entity.custom_emoji_id
                 emoji_char = message.text[entity.offset : entity.offset + entity.length]
                 if emoji_char in emoji:
-                    emoji = f'<tg-emoji emoji_id="{custom_id}">{emoji_char}</tg-emoji>'
+                    emoji = f'<tg-emoji emoji-id="{custom_id}">{emoji_char}</tg-emoji>'
                     break
 
     stmt = select(RarityType).where(RarityType.name.ilike(name))
@@ -2578,7 +2578,7 @@ async def cmd_editrarityemoji(message: Message, db: AsyncSession):
                 # We can just extract the exact text from the entity
                 emoji_char = message.text[entity.offset : entity.offset + entity.length]
                 if emoji_char in new_emoji:
-                    new_emoji = f'<tg-emoji emoji_id="{custom_id}">{emoji_char}</tg-emoji>f'
+                    new_emoji = f'<tg-emoji emoji-id="{custom_id}">{emoji_char}</tg-emoji>'
                     break
 
     stmt = select(RarityType).where(RarityType.name.ilike(rarity_name))
@@ -2586,7 +2586,7 @@ async def cmd_editrarityemoji(message: Message, db: AsyncSession):
     rarity_item = res.scalar_one_or_none()
 
     if not rarity_item:
-        await message.reply(f"{get_emoji('error')} Rarity tier '<b>{escape_html(rarity_name)}</b>f' not found in database. Add it first using /addrarity.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Rarity tier '<b>{escape_html(rarity_name)}</b>' not found in database. Add it first using /addrarity.", parse_mode="HTML")
         return
 
     old_emoji = rarity_item.emoji

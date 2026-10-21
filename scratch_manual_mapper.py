@@ -23,7 +23,7 @@ async def run_manual_mapper():
             for sticker in pack.stickers:
                 if sticker.emoji in emoji_to_key and sticker.custom_emoji_id:
                     key = emoji_to_key[sticker.emoji]
-                    tag = f'<tg-emoji emoji_id="{sticker.custom_emoji_id}">{sticker.emoji}</tg-emoji>'
+                    tag = f'<tg-emoji emoji-id="{sticker.custom_emoji_id}">{sticker.emoji}</tg-emoji>'
                     
                     stmt = select(BotEmoji).where(BotEmoji.key == key)
                     res = await db.execute(stmt)

@@ -32,31 +32,20 @@ async def init_db():
         except Exception as e:
             print(f"Error creating bot_emojis table: {e}")
 
+    # Fix any legacy underscore emoji_id tags to emoji-id in bot_emojis and rarity_types
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("UPDATE bot_emojis SET emoji = REPLACE(emoji, 'emoji_id=', 'emoji-id=') WHERE emoji LIKE '%emoji_id=%'"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("UPDATE rarity_types SET emoji = REPLACE(emoji, 'emoji_id=', 'emoji-id=') WHERE emoji LIKE '%emoji_id=%'"))
+        except Exception:
+            pass
+
     # Safe dynamic column migrations
-    async with engine.begin() as conn:
-        try:
-            await conn.execute(text("ALTER TABLE users ADD COLUMN last_weekly TIMESTAMP"))
-        except Exception:
-            pass
-
-    async with engine.begin() as conn:
-        try:
-            await conn.execute(text("ALTER TABLE users ADD COLUMN last_monthly TIMESTAMP"))
-        except Exception:
-            pass
-
-    async with engine.begin() as conn:
-        try:
-            await conn.execute(text("ALTER TABLE users ADD COLUMN last_yearly TIMESTAMP"))
-        except Exception:
-            pass
-
-    async with engine.begin() as conn:
-        try:
-            await conn.execute(text("ALTER TABLE active_spawns ADD COLUMN message_id INTEGER"))
-        except Exception:
-            pass
-
     async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TABLE users ADD COLUMN last_weekly TIMESTAMP"))

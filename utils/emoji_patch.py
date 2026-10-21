@@ -14,7 +14,8 @@ from aiogram.methods import (
     SendAnimation,
     SendAudio,
     SendDocument,
-    EditMessageCaption
+    EditMessageCaption,
+    EditMessageMedia
 )
 from aiogram.exceptions import TelegramBadRequest
 import config
@@ -168,7 +169,14 @@ EMOJI_MAPPING = {
 
 ALL_EMOJIS_SET = set(EMOJI_MAPPING.keys())
 SORTED_EMOJI_KEYS = sorted(EMOJI_MAPPING.keys(), key=lambda x: len(x), reverse=True)
-_EMOJI_REGEX = re.compile("|".join(re.escape(k) for k in SORTED_EMOJI_KEYS))
+_EMOJI_PATTERN = "|".join(re.escape(k) for k in SORTED_EMOJI_KEYS)
+_EMOJI_REGEX = re.compile(_EMOJI_PATTERN)
+
+# Tokenizer pattern: cleanly matches tags/code blocks to skip, while isolating target emojis
+_TOKEN_REGEX = re.compile(
+    r'(<code[^>]*>.*?</code>|<pre[^>]*>.*?</pre>|<tg-emoji[^>]*>.*?</tg-emoji>|<[^>]+>|&[a-zA-Z0-9#]+;)|(' + _EMOJI_PATTERN + r')',
+    re.IGNORECASE | re.DOTALL
+)
 
 HTML_TAG_PATTERN = re.compile(r'</?(?:b|strong|i|em|u|ins|s|strike|del|span|tg-spoiler|a|tg-emoji|code|pre|blockquote)\b', re.IGNORECASE)
 
@@ -190,7 +198,7 @@ def _load_settings_val() -> bool:
         except Exception:
             pass
 
-    return False
+    return True
 
 _PREMIUM_EMOJIS_ENABLED = _load_settings_val()
 
@@ -200,6 +208,11 @@ def is_premium_emojis_enabled() -> bool:
 def set_premium_emojis_status(enabled: bool):
     global _PREMIUM_EMOJIS_ENABLED
     _PREMIUM_EMOJIS_ENABLED = enabled
+    try:
+        import utils.emojis
+        utils.emojis.ENABLE_PREMIUM_EMOJIS = enabled
+    except Exception:
+        pass
     try:
         data = {}
         if os.path.exists(SETTINGS_FILE):
@@ -216,23 +229,22 @@ def set_premium_emojis_status(enabled: bool):
         logger.error(f"Failed to persist premium emoji status: {e}")
 
 def replace_emojis(text: str) -> str:
-    """Replaces standard Unicode emojis with <tg-emoji emoji-id="..."> tags in a single pass."""
+    """Replaces standard Unicode emojis with <tg-emoji emoji-id="..."> tags in a single pass,
+    safely preserving code blocks, pre blocks, HTML tags, and existing tg-emoji tags."""
     if not isinstance(text, str) or not text:
         return text
 
-    # Avoid duplicate replacements if tg-emoji tags already exist
-    if "<tg-emoji" in text:
-        return text
-
     def _replace_match(match):
-        em = match.group(0)
+        tag_or_code = match.group(1)
+        if tag_or_code is not None:
+            return tag_or_code
+        em = match.group(2)
         eid = EMOJI_MAPPING.get(em)
         if eid:
-            # NOTICE: emoji-id with HYPHEN (required by Telegram API)
             return f'<tg-emoji emoji-id="{eid}">{em}</tg-emoji>'
         return em
 
-    return _EMOJI_REGEX.sub(_replace_match, text)
+    return _TOKEN_REGEX.sub(_replace_match, text)
 
 def strip_tg_emojis(text: str) -> str:
     """Strips <tg-emoji ...> tags and retains internal emoji/content."""
@@ -284,7 +296,7 @@ def process_text_or_caption(text: str, parse_mode, bot_instance, max_len: int = 
 
     processed = replace_emojis(text)
     if len(processed) <= max_len:
-        return processed, current_mode
+        return processed, "HTML"
     return text, current_mode
 
 def patch_bot_emojis(bot: Bot):
@@ -303,6 +315,11 @@ def patch_bot_emojis(bot: Bot):
                 if method.caption and isinstance(method.caption, str):
                     method.caption, new_mode = process_text_or_caption(method.caption, parse_mode, bot_instance, max_len=1024)
                     method.parse_mode = new_mode
+            elif isinstance(method, EditMessageMedia):
+                if method.media and getattr(method.media, "caption", None) and isinstance(method.media.caption, str):
+                    m_mode = getattr(method.media, "parse_mode", None) or parse_mode
+                    method.media.caption, new_mode = process_text_or_caption(method.media.caption, m_mode, bot_instance, max_len=1024)
+                    method.media.parse_mode = new_mode
 
         try:
             return await original_make_request(bot_instance, method, timeout=timeout)
@@ -315,6 +332,7 @@ def patch_bot_emojis(bot: Bot):
                 or "can't use custom emoji" in err_str
                 or "can't parse entities" in err_str
                 or "failed to parse entities" in err_str
+                or "unsupported start tag" in err_str
                 or "tag" in err_str
                 or "too long" in err_str
                 or "caption" in err_str
@@ -327,12 +345,18 @@ def patch_bot_emojis(bot: Bot):
                 elif isinstance(method, (SendPhoto, SendVideo, SendAnimation, SendAudio, SendDocument, EditMessageCaption)):
                     if method.caption:
                         method.caption = strip_tg_emojis(method.caption)
+                elif isinstance(method, EditMessageMedia):
+                    if method.media and getattr(method.media, "caption", None):
+                        method.media.caption = strip_tg_emojis(method.media.caption)
 
                 try:
                     return await original_make_request(bot_instance, method, timeout=timeout)
                 except TelegramBadRequest as e2:
                     logger.warning(f"Retrying message with parse_mode=None fallback: {e2}")
-                    method.parse_mode = None
+                    if isinstance(method, EditMessageMedia) and method.media:
+                        method.media.parse_mode = None
+                    else:
+                        method.parse_mode = None
                     return await original_make_request(bot_instance, method, timeout=timeout)
             raise e
 

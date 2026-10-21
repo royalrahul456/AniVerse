@@ -16,6 +16,9 @@ DATABASE_URL = _db_url
 # Admin IDs (Telegram User IDs)
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "6593485710").split(",") if x.strip().isdigit()]
 
+# Enable Telegram Custom Premium Emojis
+ENABLE_PREMIUM_EMOJIS = os.getenv("ENABLE_PREMIUM_EMOJIS", "true").lower() in ("true", "1", "yes")
+
 # Pre-configured Bot Administrative Staff
 DEFAULT_BOT_ADMINS = {
     8365981430: {"username": "Sylveon_sy", "first_name": "Sylveon", "role": "snradmin"}

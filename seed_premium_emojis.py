@@ -15,7 +15,7 @@ async def seed_emojis():
         for key, emoji_id in PREMIUM_EMOJI_IDS.items():
             # If the key is a string key or an emoji
             fallback = DEFAULT_EMOJIS.get(key, key)
-            tag = f'<tg-emoji emoji_id="{emoji_id}">{fallback}</tg-emoji>'
+            tag = f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
             
             stmt = select(BotEmoji).where(BotEmoji.key == key)
             res = await session.execute(stmt)
