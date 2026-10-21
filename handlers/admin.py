@@ -2752,13 +2752,16 @@ async def cmd_broadcast(message: Message, db: AsyncSession):
         parse_mode="HTML"
     )
 
+
 # ─────────────────────────────────────────────────────────────
-#  /mapemoji  – Map a custom Telegram premium emoji to a key
-#  /emojiaudit – Show full premium emoji coverage report
+#  /getemoji  – Check key name and custom ID of any emoji
+#  /mapemoji  – Direct update or key map of custom emoji
+#  /setemojiid – Direct manual numeric ID mapper
+#  /emojiaudit – Complete emoji audit in Telegram
+#  /listmapped & /delmapped – Manage DB custom mappings
 # ─────────────────────────────────────────────────────────────
 
 LIVE_BOT_EMOJIS = {
-    # key -> emoji char used in the bot (for audit)
     "party": "🎉", "info": "ℹ️", "id": "🆔", "circle": "⭕",
     "bag": "🎒", "star2": "🌟", "common": "⚪", "galaxy": "🌌",
     "name_badge": "📛", "video_frame": "🎦", "bird": "🐦",
@@ -2770,13 +2773,77 @@ LIVE_BOT_EMOJIS = {
     "planet": "🪐", "stop_btn": "⏹️", "sort": "⇅",
 }
 
+@router.message(Command("getemoji", "emojiname", ignore_mention=True))
+async def cmd_get_emoji_info(message: Message, db: AsyncSession):
+    """Send an emoji (standard or custom) to check its registered key and active ID."""
+    if not await is_admin_or_owner(message, db):
+        await message.reply(f"{get_emoji('no_entry')} Only bot admins can check emoji keys!")
+        return
+
+    parts = (message.text or "").strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply(
+            f"{get_emoji('info')} <b>Usage:</b>\n"
+            f"Send <code>/getemoji &lt;emoji&gt;</code> to check its key name!\n\n"
+            f"<i>Example:</i> <code>/getemoji 🪙</code> or <code>/getemoji 📛</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    target_text = parts[1].strip()
+    from utils.emojis import DEFAULT_EMOJIS, PREMIUM_EMOJI_IDS, EMOJI_CACHE
+    from utils.emoji_patch import EMOJI_MAPPING
+
+    custom_id = None
+    custom_char = None
+    if message.entities:
+        for ent in message.entities:
+            if ent.type == "custom_emoji" and ent.custom_emoji_id:
+                custom_id = ent.custom_emoji_id
+                custom_char = message.text[ent.offset:ent.offset + ent.length]
+                break
+
+    clean_target = target_text.replace('️', '')
+    matched_keys = []
+    for k, v in DEFAULT_EMOJIS.items():
+        if v == target_text or v.replace('️', '') == clean_target:
+            matched_keys.append(k)
+
+    for k, v in LIVE_BOT_EMOJIS.items():
+        if (v == target_text or v.replace('️', '') == clean_target) and k not in matched_keys:
+            matched_keys.append(k)
+
+    active_id = custom_id or PREMIUM_EMOJI_IDS.get(target_text) or PREMIUM_EMOJI_IDS.get(clean_target) or EMOJI_MAPPING.get(target_text) or EMOJI_MAPPING.get(clean_target)
+
+    if matched_keys:
+        primary_key = matched_keys[0]
+        keys_str = ", ".join(f"<code>{k}</code>" for k in matched_keys)
+        await message.reply(
+            f"{get_emoji('search')} <b>Emoji Detected!</b>\n\n"
+            f"• <b>Symbol:</b> {target_text}\n"
+            f"• <b>Key Name:</b> {keys_str}\n"
+            f"• <b>Current Custom ID:</b> <code>{active_id or 'None (Standard Unicode)'}</code>\n\n"
+            f"💡 <b>To update this emoji directly:</b>\n"
+            f"Send: <code>/mapemoji [your_new_custom_emoji]</code> (auto-detects!)\n"
+            f"Or: <code>/mapemoji {primary_key} [your_new_custom_emoji]</code>",
+            parse_mode="HTML"
+        )
+    else:
+        await message.reply(
+            f"{get_emoji('warning')} <b>Unregistered Symbol</b>\n\n"
+            f"Symbol: {target_text}\n"
+            f"Custom ID: <code>{custom_id or 'None'}</code>\n\n"
+            f"To bind this symbol to a new key: <code>/mapemoji &lt;new_key&gt; {target_text}</code>",
+            parse_mode="HTML"
+        )
+
 @router.message(Command("mapemoji", ignore_mention=True))
 async def cmd_mapemoji(message: Message, db: AsyncSession):
-    """Map a Telegram custom emoji to a named key in the bot's premium emoji system.
+    """Directly map or update a custom emoji.
     
-    Usage: /mapemoji <key> <custom_emoji>
-    The custom emoji must be sent as an actual Telegram custom emoji (from emoji picker),
-    not a regular unicode emoji. The bot will extract its ID from message entities.
+    Usage:
+      1. /mapemoji <custom_emoji> (Auto-detects matching key!)
+      2. /mapemoji <key> <custom_emoji> (Explicit key)
     """
     if not await is_admin_or_owner(message, db):
         await message.reply(f"{get_emoji('no_entry')} Only bot admins can map custom emojis!")
@@ -2784,7 +2851,6 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
 
     parts = (message.text or "").strip().split(maxsplit=2)
 
-    # Show usage/help if no args
     if len(parts) < 2:
         from utils.emoji_patch import EMOJI_MAPPING
         from utils.emojis import PREMIUM_EMOJI_IDS, DEFAULT_EMOJIS
@@ -2792,14 +2858,12 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
         all_premium_chars = set(EMOJI_MAPPING.keys()) | set(PREMIUM_EMOJI_IDS.keys())
         all_premium_chars |= {k.replace('️', '') for k in all_premium_chars}
 
-        # Build missing list
         missing_lines = []
         for k, v in sorted(LIVE_BOT_EMOJIS.items()):
             clean = v.replace('️', '')
             if v not in all_premium_chars and clean not in all_premium_chars:
                 missing_lines.append(f"  {v}  <code>{k}</code>")
 
-        # Also check DEFAULT_EMOJIS keys
         for k, v in DEFAULT_EMOJIS.items():
             clean = v.replace('️', '')
             if v not in all_premium_chars and clean not in all_premium_chars:
@@ -2810,63 +2874,68 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
         missing_text = "\n".join(missing_lines[:30]) if missing_lines else "  <i>All mapped! 🎉</i>"
 
         await message.reply(
-            f"{get_emoji('sparkle')} <b>Map Custom Emoji</b>\n\n"
-            f"<b>How to use:</b>\n"
-            f"1️⃣ Open Telegram emoji picker\n"
-            f"2️⃣ Pick a <b>custom/premium emoji</b> (animated ones from sticker packs)\n"
-            f"3️⃣ Send: <code>/mapemoji &lt;key&gt; [your_custom_emoji_here]</code>\n\n"
-            f"<b>Example:</b>\n"
-            f"<code>/mapemoji party 🎉</code> (send with a custom emoji from picker)\n\n"
-            f"{get_emoji('warning')} <b>Currently Missing Premium IDs ({len(missing_lines)}):</b>\n"
-            f"{missing_text}\n\n"
-            f"<i>Send /mapemoji &lt;key&gt; with the custom emoji to map it!</i>",
+            f"{get_emoji('sparkle')} <b>Map Custom Emoji (Instant!)</b>\n\n"
+            f"<b>Two simple ways to update:</b>\n"
+            f"1️⃣ <b>Direct update (Auto-detects!):</b>\n"
+            f"   Send <code>/mapemoji [custom_emoji]</code>\n"
+            f"   <i>Example:</i> <code>/mapemoji 🪙</code> (with your custom coin!)\n\n"
+            f"2️⃣ <b>Specify key name:</b>\n"
+            f"   Send <code>/mapemoji &lt;key&gt; [custom_emoji]</code>\n"
+            f"   <i>Example:</i> <code>/mapemoji name_badge 📛</code>\n\n"
+            f"🔍 <i>Don't know an emoji's key? Check it with <code>/getemoji &lt;emoji&gt;</code>!</i>\n\n"
+            f"{get_emoji('warning')} <b>Currently Missing ({len(missing_lines)}):</b>\n"
+            f"{missing_text}",
             parse_mode="HTML"
         )
         return
 
-    key = parts[1].strip().lower()
+    from utils.emojis import DEFAULT_EMOJIS, EMOJI_CACHE, PREMIUM_EMOJI_IDS
+    from utils.emoji_patch import EMOJI_MAPPING, ALL_EMOJIS_SET
+    from database.models import BotEmoji
 
-    # Extract custom emoji ID from message entities
     custom_emoji_id = None
     emoji_char = None
 
     if message.entities:
         for entity in message.entities:
             if entity.type == "custom_emoji" and entity.custom_emoji_id:
-                # Make sure it's not part of the command itself (skip first word)
-                # Command is at offset 0, so any entity after first word is the emoji
-                cmd_len = len(parts[0]) + len(parts[1]) + 2  # "/mapemoji key "
-                if entity.offset >= cmd_len - 2:
-                    emoji_char = message.text[entity.offset:entity.offset + entity.length]
-                    custom_emoji_id = entity.custom_emoji_id
-                    break
+                emoji_char = message.text[entity.offset:entity.offset + entity.length]
+                custom_emoji_id = entity.custom_emoji_id
+                break
 
-    # If no custom emoji entity found but there's a 3rd part, use it as regular unicode
+    if len(parts) >= 3:
+        key = parts[1].strip().lower()
+    else:
+        raw_target = parts[1].strip()
+        candidate = emoji_char or raw_target
+        clean_c = candidate.replace('️', '')
+        
+        detected_key = None
+        for k, v in DEFAULT_EMOJIS.items():
+            if v == candidate or v.replace('️', '') == clean_c:
+                detected_key = k
+                break
+        if not detected_key:
+            for k, v in LIVE_BOT_EMOJIS.items():
+                if v == candidate or v.replace('️', '') == clean_c:
+                    detected_key = k
+                    break
+        key = detected_key or clean_c
+
     if not custom_emoji_id:
         if len(parts) >= 3:
             emoji_char = parts[2].strip()
-            await message.reply(
-                f"{get_emoji('warning')} <b>No custom emoji ID found!</b>\n\n"
-                f"You sent <code>{emoji_char}</code> as a regular Unicode emoji, not a Telegram custom emoji.\n\n"
-                f"To map a premium emoji:\n"
-                f"• Open the emoji picker → find the animated/custom version\n"
-                f"• Type <code>/mapemoji {key} </code> then insert the custom emoji from the picker (NOT from keyboard)\n\n"
-                f"<i>If you only have the emoji ID number, use:</i>\n"
-                f"<code>/setemojiid {key} &lt;emoji_id_number&gt; {emoji_char}</code>",
-                parse_mode="HTML"
-            )
         else:
-            await message.reply(
-                f"{get_emoji('warning')} <b>Usage:</b> <code>/mapemoji &lt;key&gt; &lt;custom_emoji&gt;</code>\n\n"
-                f"Send the command with a custom Telegram emoji from the emoji picker.",
-                parse_mode="HTML"
-            )
+            emoji_char = parts[1].strip()
+        await message.reply(
+            f"{get_emoji('warning')} <b>No custom emoji detected!</b>\n\n"
+            f"You sent <code>{emoji_char}</code> as a regular Unicode emoji.\n"
+            f"Pick the animated/custom version from your Telegram emoji picker!\n\n"
+            f"<i>Or if you have the ID number, use:</i>\n"
+            f"<code>/setemojiid {key} &lt;id_number&gt; {emoji_char}</code>",
+            parse_mode="HTML"
+        )
         return
-
-    # Save to database
-    from database.models import BotEmoji
-    from utils.emojis import DEFAULT_EMOJIS, EMOJI_CACHE, load_emojis, PREMIUM_EMOJI_IDS
-    from utils.emoji_patch import EMOJI_MAPPING, ALL_EMOJIS_SET
 
     tag = f'<tg-emoji emoji-id="{custom_emoji_id}">{emoji_char}</tg-emoji>'
 
@@ -2884,7 +2953,6 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
 
         await db.commit()
 
-        # Update live in-memory caches immediately (no restart needed)
         EMOJI_CACHE[key] = tag
         if emoji_char:
             EMOJI_CACHE[emoji_char] = tag
@@ -2894,7 +2962,6 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
             ALL_EMOJIS_SET.add(emoji_char)
             ALL_EMOJIS_SET.add(emoji_char.replace('️', ''))
 
-        # Also update PREMIUM_EMOJI_IDS
         PREMIUM_EMOJI_IDS[key] = custom_emoji_id
         if emoji_char:
             PREMIUM_EMOJI_IDS[emoji_char] = custom_emoji_id
@@ -2906,25 +2973,16 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
             f"✨ <b>Emoji:</b> {tag}\n"
             f"🆔 <b>ID:</b> <code>{custom_emoji_id}</code>\n"
             f"{'🔄 <b>Old:</b> ' + old_tag + chr(10) if old_tag else ''}"
-            f"\n<i>Live — active immediately, no restart needed!</i>",
+            f"\n<i>Live — active immediately across all bot commands!</i>",
             parse_mode="HTML"
         )
-
     except Exception as e:
         import html
-        await message.reply(
-            f"{get_emoji('error')} Failed to save: <code>{html.escape(str(e))}</code>",
-            parse_mode="HTML"
-        )
-
+        await message.reply(f"{get_emoji('error')} Error saving emoji: <code>{html.escape(str(e))}</code>", parse_mode="HTML")
 
 @router.message(Command("setemojiid", ignore_mention=True))
 async def cmd_setemojiid(message: Message, db: AsyncSession):
-    """Manually map a premium emoji by providing its numeric ID.
-    
-    Usage: /setemojiid <key> <emoji_id> <fallback_emoji>
-    Example: /setemojiid party 5368324170671202286 🎉
-    """
+    """Manually map a premium emoji by providing its numeric ID."""
     if not await is_admin_or_owner(message, db):
         await message.reply(f"{get_emoji('no_entry')} Only bot admins can map custom emojis!")
         return
@@ -2935,8 +2993,7 @@ async def cmd_setemojiid(message: Message, db: AsyncSession):
             f"{get_emoji('info')} <b>Usage:</b>\n"
             f"<code>/setemojiid &lt;key&gt; &lt;emoji_id&gt; &lt;fallback_emoji&gt;</code>\n\n"
             f"<b>Example:</b>\n"
-            f"<code>/setemojiid party 5368324170671202286 🎉</code>\n\n"
-            f"Find emoji IDs from Fragment, @Emoji_ID_Extractor_bot, or Telegram web inspector.",
+            f"<code>/setemojiid party 5368324170671202286 🎉</code>",
             parse_mode="HTML"
         )
         return
@@ -2970,7 +3027,6 @@ async def cmd_setemojiid(message: Message, db: AsyncSession):
 
         await db.commit()
 
-        # Live cache updates
         EMOJI_CACHE[key] = tag
         EMOJI_CACHE[fallback] = tag
         EMOJI_CACHE[fallback.replace('️', '')] = tag
@@ -2995,10 +3051,9 @@ async def cmd_setemojiid(message: Message, db: AsyncSession):
         import html
         await message.reply(f"{get_emoji('error')} Failed: <code>{html.escape(str(e))}</code>", parse_mode="HTML")
 
-
 @router.message(Command("emojiaudit", ignore_mention=True))
 async def cmd_emojiaudit(message: Message, db: AsyncSession):
-    """Show full premium emoji coverage — which have IDs and which don't."""
+    """Show full premium emoji coverage report in Telegram."""
     if not await is_admin_or_owner(message, db):
         await message.reply(f"{get_emoji('no_entry')} Only bot admins can view the emoji audit!")
         return
@@ -3019,15 +3074,14 @@ async def cmd_emojiaudit(message: Message, db: AsyncSession):
         else:
             missing.append((k, v))
 
-    # Also check hardcoded emojis in bot (not in DEFAULT_EMOJIS)
     extra_hardcoded = {
-        "🎒": "bag/harem", "🌟": "glowing star", "🌌": "galaxy theme",
-        "📛": "name badge", "🎦": "cinema", "🐦": "bird theme",
-        "🔢": "numbers", "🦇": "bat theme", "🎴": "card game",
-        "📤": "outbox", "📥": "inbox", "📬": "mailbox", "📹": "video cam",
-        "🔁": "repeat", "🔤": "text/abc", "🔮": "crystal ball",
-        "🔳": "black frame", "🕒": "clock", "🙇": "bow", "🪐": "planet",
-        "🍃": "leaf", "🫧": "bubbles", "⬜": "white square (XO)",
+        "🎒": "bag", "🌟": "star2", "🌌": "galaxy",
+        "📛": "name_badge", "🎦": "video_frame", "🐦": "bird",
+        "🔢": "number", "🦇": "bat", "🎴": "card_game",
+        "📤": "outbox", "📥": "inbox", "📬": "mailbox", "📹": "video_cam",
+        "🔁": "repeat", "🔤": "abc", "🔮": "crystal",
+        "🔳": "black_square", "🕒": "clock", "🙇": "bow", "🪐": "planet",
+        "🍃": "leaf", "🫧": "bubbles", "⬜": "xo_empty",
     }
 
     extra_missing = []
@@ -3042,7 +3096,6 @@ async def cmd_emojiaudit(message: Message, db: AsyncSession):
     total_missing = len(missing) + len(extra_missing)
     total_covered = len(covered) + len(extra_covered)
 
-    # Build message (keep under 4096 chars)
     lines = [
         f"{get_emoji('stats')} <b>Premium Emoji Audit</b>\n",
         f"✅ <b>Covered:</b> {total_covered}   ❌ <b>Missing:</b> {total_missing}\n",
@@ -3050,22 +3103,21 @@ async def cmd_emojiaudit(message: Message, db: AsyncSession):
     ]
 
     for k, v in missing:
-        lines.append(f"  {v} <code>{k}</code>  → /setemojiid {k} &lt;ID&gt; {v}")
+        lines.append(f"  {v} <code>{k}</code>  → /mapemoji {k} [custom_emoji]")
     for em, desc in extra_missing:
-        lines.append(f"  {em} <i>{desc}</i>  → /setemojiid {desc.split('/')[0].strip().replace(' ','_')} &lt;ID&gt; {em}")
+        lines.append(f"  {em} <code>{desc}</code>  → /mapemoji {desc} [custom_emoji]")
 
     lines.append(f"\n<b>✅ Already Mapped ({total_covered}):</b>")
-    for k, v in covered[:20]:
+    for k, v in covered[:15]:
         lines.append(f"  {v} ✓")
-    if len(covered) > 20:
-        lines.append(f"  <i>...and {len(covered)-20} more</i>")
+    if len(covered) > 15:
+        lines.append(f"  <i>...and {len(covered)-15} more</i>")
 
     text = "\n".join(lines)
     if len(text) > 4000:
         text = text[:3990] + "\n<i>...truncated</i>"
 
     await message.reply(text, parse_mode="HTML")
-
 
 @router.message(Command("listmapped", ignore_mention=True))
 async def cmd_listmapped(message: Message, db: AsyncSession):
@@ -3097,23 +3149,16 @@ async def cmd_listmapped(message: Message, db: AsyncSession):
 
     await message.reply(text, parse_mode="HTML")
 
-
 @router.message(Command("delmapped", ignore_mention=True))
 async def cmd_delmapped(message: Message, db: AsyncSession):
-    """Delete a custom emoji mapping from the database.
-    
-    Usage: /delmapped <key>
-    """
+    """Delete a custom emoji mapping from the database."""
     if not is_owner(message):
         await message.reply(f"{get_emoji('no_entry')} Only bot owners can delete emoji mappings!")
         return
 
     parts = (message.text or "").strip().split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply(
-            f"{get_emoji('warning')} <b>Usage:</b> <code>/delmapped &lt;key&gt;</code>",
-            parse_mode="HTML"
-        )
+        await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/delmapped &lt;key&gt;</code>", parse_mode="HTML")
         return
 
     key = parts[1].strip().lower()
@@ -3131,8 +3176,6 @@ async def cmd_delmapped(message: Message, db: AsyncSession):
     old_tag = existing.emoji
     await db.delete(existing)
     await db.commit()
-
-    # Remove from live cache
     EMOJI_CACHE.pop(key, None)
 
     await message.reply(
