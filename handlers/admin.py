@@ -49,6 +49,9 @@ async def is_admin(message: Message, db: AsyncSession) -> bool:
         return await is_admin_id(message.from_user.id, db)
     return False
 
+# Alias for compatibility across commands
+is_admin_or_owner = is_admin
+
 class SetCoverStates(StatesGroup):
     waiting_for_media = State()
 @router.message(Command("setcover"))
