@@ -2706,52 +2706,105 @@ async def cmd_toggle_emojis(message: Message, db: AsyncSession):
 @router.message(Command("broadcast"))
 async def cmd_broadcast(message: Message, db: AsyncSession):
     if not is_owner(message):
+        await message.reply(f"{get_emoji('no_entry')} Only bot owners can use the broadcast tool!")
         return
 
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2 and not message.reply_to_message:
+    raw_text = (message.text or "").strip()
+    words = raw_text.split()
+    # words[0] is "/broadcast"
+
+    # Default target mode is 'all'
+    target_mode = "all"
+    msg_text = None
+
+    if len(words) > 1 and words[1].lower() in ("groups", "group", "gc", "gcs"):
+        target_mode = "groups"
+        msg_text = raw_text.split(None, 2)[2] if len(words) > 2 else None
+    elif len(words) > 1 and words[1].lower() in ("users", "user", "dm", "dms", "private"):
+        target_mode = "users"
+        msg_text = raw_text.split(None, 2)[2] if len(words) > 2 else None
+    elif len(words) > 1 and words[1].lower() == "all":
+        target_mode = "all"
+        msg_text = raw_text.split(None, 2)[2] if len(words) > 2 else None
+    else:
+        # Default: everything after /broadcast is the message, broadcast to ALL
+        msg_text = raw_text.split(None, 1)[1] if len(words) > 1 else None
+
+    # If neither text nor replied message was provided, show usage guide
+    if not msg_text and not message.reply_to_message:
         await message.reply(
-            "📢 <b>Global Broadcast Tool</b>\n\n"
-            "Use this to send an announcement to every group the bot is in.\n\n"
-            "<b>Usage:</b>\n"
-            "1. <code>/broadcast &lt;message&gt;</code>\n"
-            "2. Or reply to an existing message (text, photo, etc.) with <code>/broadcast</code>",
+            f"📢 <b>Universal Global Broadcast Tool</b>\n\n"
+            f"Send announcements to groups, private users, or both!\n\n"
+            f"<b>Usage Modes:</b>\n"
+            f"• <code>/broadcast &lt;message&gt;</code> — Send to <b>ALL</b> (Groups + Users)\n"
+            f"• <code>/broadcast groups &lt;message&gt;</code> — Send <b>ONLY to Group Chats</b>\n"
+            f"• <code>/broadcast users &lt;message&gt;</code> — Send <b>ONLY to Private DMs</b>\n\n"
+            f"📸 <b>Media / Forwarded Messages:</b>\n"
+            f"Reply to any photo, video, audio, or message with:\n"
+            f"<code>/broadcast</code> (to all), <code>/broadcast groups</code>, or <code>/broadcast users</code>",
             parse_mode="HTML"
         )
         return
 
-    # Fetch all groups
-    stmt = select(GroupSettings.chat_id)
-    res = await db.execute(stmt)
-    chat_ids = res.scalars().all()
+    import asyncio
+    chat_ids = set()
 
-    if not chat_ids:
-        await message.reply("There are no registered groups to broadcast to.")
+    # 1. Fetch group IDs if needed
+    if target_mode in ("groups", "all"):
+        stmt_g = select(GroupSettings.chat_id)
+        res_g = await db.execute(stmt_g)
+        for gid in res_g.scalars().all():
+            if gid:
+                chat_ids.add(gid)
+
+    # 2. Fetch user IDs if needed (filter out group IDs if any)
+    if target_mode in ("users", "all"):
+        stmt_u = select(User.user_id).where(User.user_id > 0)
+        res_u = await db.execute(stmt_u)
+        for uid in res_u.scalars().all():
+            if uid:
+                chat_ids.add(uid)
+
+    total_targets = len(chat_ids)
+    if total_targets == 0:
+        await message.reply(f"{get_emoji('warning')} No destination chats found for target mode: <code>{target_mode}</code>.")
         return
 
-    status_msg = await message.reply(f"⏳ Starting broadcast to {len(chat_ids)} groups. This may take a while...")
+    mode_label = {
+        "all": "Groups & Users",
+        "groups": "Group Chats only",
+        "users": "Private Users only"
+    }.get(target_mode, target_mode)
+
+    status_msg = await message.reply(
+        f"⏳ <b>Starting Broadcast...</b>\n\n"
+        f"🎯 <b>Target:</b> {mode_label}\n"
+        f"📬 <b>Total Chats:</b> {total_targets:,}\n"
+        f"<i>Please wait, broadcasting safely with rate-limit protection...</i>",
+        parse_mode="HTML"
+    )
 
     success_count = 0
     fail_count = 0
-    import asyncio
 
-    for chat_id in chat_ids:
+    for cid in chat_ids:
         try:
             if message.reply_to_message:
-                await message.reply_to_message.copy_to(chat_id)
+                await message.reply_to_message.copy_to(cid)
             else:
-                await message.bot.send_message(chat_id, parts[1], parse_mode="HTML")
+                await message.bot.send_message(cid, msg_text, parse_mode="HTML")
             success_count += 1
         except Exception:
             fail_count += 1
-        
-        # Avoid rate limits (Telegram limit is ~30 msgs/sec, safe sleep is 0.05s)
+
+        # Safe rate limit: 20 msgs/second avoids Telegram bans
         await asyncio.sleep(0.05)
 
     await status_msg.edit_text(
-        f"✅ <b>Broadcast Complete!</b>\n\n"
-        f"📣 <b>Success:</b> {success_count} groups\n"
-        f"❌ <b>Failed:</b> {fail_count} groups (Bot kicked/permissions missing)",
+        f"✅ <b>Broadcast Completed!</b>\n\n"
+        f"🎯 <b>Target Mode:</b> {mode_label}\n"
+        f"📣 <b>Delivered:</b> {success_count:,} chats\n"
+        f"❌ <b>Failed / Blocked:</b> {fail_count:,} chats",
         parse_mode="HTML"
     )
 
