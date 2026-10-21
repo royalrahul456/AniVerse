@@ -1718,3 +1718,54 @@ async def cmd_vipclaim(message: Message, db: AsyncSession):
             await message.reply_photo(photo_to_send, caption=card, parse_mode="HTML")
         except Exception:
             await message.reply(card, parse_mode="HTML")
+
+
+@router.message(Command("vipplan", "vip", "premiumplan", ignore_mention=True))
+async def cmd_vipplan(message: Message, db: AsyncSession):
+    """View AniVerse VIP / Premium Plan perks, pricing, and personal status."""
+    user_id = message.from_user.id
+    now = datetime.datetime.utcnow()
+    
+    is_owner_user = user_id in config.ADMIN_IDS
+    user = await get_or_create_user(db, user_id, message.from_user.username, message.from_user.first_name)
+    
+    is_vip = (user.premium_until and user.premium_until > now) or is_owner_user
+    
+    if is_owner_user:
+        status_line = "👑 <b>Status:</b> <code>LIFETIME OWNER VIP</code>"
+    elif is_vip:
+        delta = user.premium_until - now
+        days = delta.days
+        hours = delta.seconds // 3600
+        mins = (delta.seconds % 3600) // 60
+        status_line = f"👑 <b>Status:</b> <code>ACTIVE VIP</code> ({days}d {hours}h {mins}m left)"
+    else:
+        status_line = "⚪ <b>Status:</b> <code>FREE TRAINER</code>"
+
+    text = (
+        f"👑 <b>ANIVERSE VIP PASS</b> 👑\n\n"
+        f"{status_line}\n\n"
+        + format_blockquote(
+            "🌟 <b>VIP EXCLUSIVE PERKS:</b>\n"
+            "• 🎬 <b>Daily /vipclaim:</b> Guaranteed <b>Amv</b> or <b>Expensive</b> character drop (50/50 chance)!\n"
+            "• 🪙 <b>Daily Bonus Gold:</b> +1,000 to +2,500 Gold every /vipclaim\n"
+            "• 👑 <b>VIP Trainer Badge:</b> Displayed on your profile card & rank\n"
+            "• 🎒 <b>Double Daily Claims:</b> Claim both /claim AND /vipclaim daily\n"
+            "• 🛡️ <b>Rob Defense Boost:</b> Increased defense against thief players\n\n"
+            "💎 <b>VIP MEMBERSHIP PLANS:</b>\n"
+            "• 🥉 <b>Weekly Pass (7 Days):</b> 50 ⭐ Stars (or ₹75)\n"
+            "• 🥈 <b>Monthly Pass (30 Days):</b> 150 ⭐ Stars (or ₹220)\n"
+            "• 🥇 <b>Lifetime Pass:</b> 750 ⭐ Stars (or ₹1,100)\n\n"
+            "📩 <b>How to Activate VIP:</b>\n"
+            "Contact our bot support/owner to activate your pass, or use an official VIP gift code!"
+        )
+    )
+
+    cover = get_cover_media("start")
+    try:
+        await message.reply_photo(cover, caption=text, parse_mode="HTML")
+    except Exception:
+        try:
+            await message.reply_video(cover, caption=text, parse_mode="HTML")
+        except Exception:
+            await message.reply(text, parse_mode="HTML")
