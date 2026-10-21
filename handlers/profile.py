@@ -1753,9 +1753,10 @@ async def cmd_vipplan(message: Message, db: AsyncSession):
             "• 🎒 <b>Double Daily Claims:</b> Claim both /claim AND /vipclaim daily\n"
             "• 🛡️ <b>Rob Defense Boost:</b> Increased defense against thief players\n\n"
             "💎 <b>VIP MEMBERSHIP PLANS:</b>\n"
-            "• 🥉 <b>Weekly Pass (7 Days):</b> 50 ⭐ Stars (or ₹75)\n"
-            "• 🥈 <b>Monthly Pass (30 Days):</b> 150 ⭐ Stars (or ₹220)\n"
-            "• 🥇 <b>Lifetime Pass:</b> 750 ⭐ Stars (or ₹1,100)\n\n"
+            "• 🥉 <b>Weekly (7 Days):</b> ₹39\n"
+            "• 🥈 <b>Monthly (30 Days):</b> ₹79\n"
+            "• 🥇 <b>2 Months (60 Days):</b> ₹129\n"
+            "• 👑 <b>3 Months (90 Days):</b> ₹199\n\n"
             "📩 <b>How to Activate VIP:</b>\n"
             "Contact our bot support/owner to activate your pass, or use an official VIP gift code!"
         )
