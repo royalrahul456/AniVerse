@@ -630,13 +630,18 @@ PREMIUM_EMOJI_IDS = {
 }
 
 async def load_emojis(db):
-    """Load custom emojis from database into cache. Auto-seeds if empty and cleans legacy tags."""
+    """Load custom emojis from database into cache, sync into EMOJI_MAPPING, and rebuild regex.
+    This guarantees any emojis mapped from Telegram persist across all bot restarts!"""
     try:
+        import re
         from database.models import BotEmoji
         from sqlalchemy.future import select
+        from utils.emoji_patch import EMOJI_MAPPING, ALL_EMOJIS_SET, rebuild_emoji_regex
+        
         stmt = select(BotEmoji)
         result = await db.execute(stmt)
         emojis = result.scalars().all()
+        
         if not emojis:
             for key, emoji_id in PREMIUM_EMOJI_IDS.items():
                 fallback = DEFAULT_EMOJIS.get(key, key)
@@ -645,9 +650,28 @@ async def load_emojis(db):
                 EMOJI_CACHE[key] = tag
             await db.commit()
         else:
+            tag_regex = re.compile(r"""emoji-id=["'](\d+)["']>(.*?)</tg-emoji>""")
             for em in emojis:
                 clean_tag = em.emoji.replace("emoji_id=", "emoji-id=")
                 EMOJI_CACHE[em.key] = clean_tag
+                
+                # Extract custom ID and character to sync into EMOJI_MAPPING & PREMIUM_EMOJI_IDS
+                m = tag_regex.search(clean_tag)
+                if m:
+                    cid = m.group(1)
+                    char_fallback = m.group(2).strip()
+                    PREMIUM_EMOJI_IDS[em.key] = cid
+                    if char_fallback:
+                        clean_ch = char_fallback.replace('️', '')
+                        PREMIUM_EMOJI_IDS[char_fallback] = cid
+                        PREMIUM_EMOJI_IDS[clean_ch] = cid
+                        EMOJI_MAPPING[char_fallback] = cid
+                        EMOJI_MAPPING[clean_ch] = cid
+                        ALL_EMOJIS_SET.add(char_fallback)
+                        ALL_EMOJIS_SET.add(clean_ch)
+                        
+            # Rebuild outgoing regex so newly mapped emojis are replaced everywhere
+            rebuild_emoji_regex()
     except Exception as e:
         pass
 

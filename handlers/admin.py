@@ -2956,6 +2956,7 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
 
         await db.commit()
 
+        from utils.emoji_patch import rebuild_emoji_regex
         EMOJI_CACHE[key] = tag
         if emoji_char:
             EMOJI_CACHE[emoji_char] = tag
@@ -2968,6 +2969,8 @@ async def cmd_mapemoji(message: Message, db: AsyncSession):
         PREMIUM_EMOJI_IDS[key] = custom_emoji_id
         if emoji_char:
             PREMIUM_EMOJI_IDS[emoji_char] = custom_emoji_id
+            
+        rebuild_emoji_regex()
 
         action = "Updated" if old_tag else "Added"
         await message.reply(

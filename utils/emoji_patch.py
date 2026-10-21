@@ -228,6 +228,18 @@ def set_premium_emojis_status(enabled: bool):
     except Exception as e:
         logger.error(f"Failed to persist premium emoji status: {e}")
 
+def rebuild_emoji_regex():
+    """Rebuilds regex whenever new custom emojis are mapped from Telegram or loaded from DB."""
+    global _TOKEN_REGEX, _EMOJI_REGEX, _EMOJI_PATTERN, SORTED_EMOJI_KEYS, ALL_EMOJIS_SET
+    ALL_EMOJIS_SET = set(EMOJI_MAPPING.keys())
+    SORTED_EMOJI_KEYS = sorted(EMOJI_MAPPING.keys(), key=lambda x: len(x), reverse=True)
+    _EMOJI_PATTERN = "|".join(re.escape(k) for k in SORTED_EMOJI_KEYS)
+    _EMOJI_REGEX = re.compile(_EMOJI_PATTERN)
+    _TOKEN_REGEX = re.compile(
+        r'(<code[^>]*>.*?</code>|<pre[^>]*>.*?</pre>|<tg-emoji[^>]*>.*?</tg-emoji>|<[^>]+>|&[a-zA-Z0-9#]+;)|(' + _EMOJI_PATTERN + r')',
+        re.IGNORECASE | re.DOTALL
+    )
+
 def replace_emojis(text: str) -> str:
     """Replaces standard Unicode emojis with <tg-emoji emoji-id="..."> tags in a single pass,
     safely preserving code blocks, pre blocks, HTML tags, and existing tg-emoji tags."""
@@ -239,7 +251,7 @@ def replace_emojis(text: str) -> str:
         if tag_or_code is not None:
             return tag_or_code
         em = match.group(2)
-        eid = EMOJI_MAPPING.get(em)
+        eid = EMOJI_MAPPING.get(em) or EMOJI_MAPPING.get(em.replace('️', ''))
         if eid:
             return f'<tg-emoji emoji-id="{eid}">{em}</tg-emoji>'
         return em
