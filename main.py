@@ -334,6 +334,7 @@ async def main():
         BotCommand(command="search", description="🔎 Search characters by name"),
         BotCommand(command="anime", description="📺 Filter characters by anime title"),
         BotCommand(command="claim", description="🎁 Claim a free daily character"),
+        BotCommand(command="vipclaim", description="👑 VIP daily Amv & Mythical summon"),
         BotCommand(command="daily", description="🔥 Claim your daily streak reward"),
         BotCommand(command="weekly", description="🎁 Claim your weekly bonus reward"),
         BotCommand(command="monthly", description="💎 Claim your monthly mega reward"),

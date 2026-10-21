@@ -108,6 +108,12 @@ async def init_db():
 
     async with engine.begin() as conn:
         try:
+            await conn.execute(text("ALTER TABLE user_daily_limits ADD COLUMN last_vip_claim_at BIGINT DEFAULT 0"))
+        except Exception:
+            pass
+
+    async with engine.begin() as conn:
+        try:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_characters_character_id ON user_characters (character_id)"))
         except Exception:
             pass

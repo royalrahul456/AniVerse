@@ -159,6 +159,7 @@ class UserDailyLimit(Base):
     last_dart_at = Column(BigInteger, default=0)
     rob_count = Column(Integer, default=0)
     last_rob_at = Column(BigInteger, default=0)
+    last_vip_claim_at = Column(BigInteger, default=0)
 
 class BotAdmin(Base):
     __tablename__ = "bot_admins"

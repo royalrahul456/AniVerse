@@ -12,7 +12,7 @@ from sqlalchemy.orm import joinedload
 import config
 from database.models import User, Character, UserCharacter, RarityType
 from utils.formatters import format_blockquote, get_rarity_emoji, escape_html, format_coins
-from utils.claim import check_claim_cooldown, record_claim
+from utils.claim import check_claim_cooldown, record_claim, check_vip_claim_cooldown, record_vip_claim
 from utils.settings import get_cover_media
 from keyboards.inline import (
     get_harem_keyboard, 
@@ -1596,3 +1596,124 @@ async def cmd_gift(message: Message, db: AsyncSession):
             await message.reply_video(photo, caption=text, parse_mode="HTML")
         except Exception:
             await message.reply(text, parse_mode="HTML")
+
+
+@router.message(Command("vipclaim", ignore_mention=True))
+async def cmd_vipclaim(message: Message, db: AsyncSession):
+    user_id = message.from_user.id
+    now = datetime.datetime.utcnow()
+    
+    # 1. Check VIP / Owner status
+    is_owner_user = user_id in config.ADMIN_IDS
+    
+    user = await get_or_create_user(db, user_id, message.from_user.username, message.from_user.first_name)
+    is_vip = (user.premium_until and user.premium_until > now) or is_owner_user
+    
+    if not is_vip:
+        await message.reply(
+            f"👑 <b>AniVerse VIP Exclusive!</b>\n\n"
+            + format_blockquote(
+                "<b>/vipclaim</b> is reserved exclusively for <b>VIP Pass</b> holders!\n\n"
+                "✨ <b>Exclusive VIP Claim Pool:</b>\n"
+                "• 📹 <b>Amv</b> (Anime Music Video characters)\n"
+                "• 🌌 <b>Celestial</b> & 🔴 <b>Mythical</b>\n"
+                "• 🪙 <b>Bonus:</b> Up to +2,500 Gold every claim!\n\n"
+                "<i>Upgrade to VIP or contact bot admins to get your VIP Pass!</i>"
+            ),
+            parse_mode="HTML"
+        )
+        return
+
+    # 2. Check VIP Claim cooldown (owners bypass cooldown)
+    if not is_owner_user:
+        can_claim, time_remaining = await check_vip_claim_cooldown(db, user_id)
+        if not can_claim:
+            hours = time_remaining // 3600
+            minutes = (time_remaining % 3600) // 60
+            text = (
+                f"⏳ <b>VIP Claim Cooldown!</b>\n\n"
+                + format_blockquote(
+                    f"You have already summoned your VIP character today!\n\n"
+                    f"⏳ Next VIP Claim available in: <b>{hours}h {minutes}m</b>\n"
+                    f"<i>Resets daily at 5:30 AM IST</i>"
+                )
+            )
+            cover = get_cover_media("start")
+            try:
+                await message.reply_photo(cover, caption=text, parse_mode="HTML")
+            except Exception:
+                try:
+                    await message.reply_video(cover, caption=text, parse_mode="HTML")
+                except Exception:
+                    await message.reply(text, parse_mode="HTML")
+            return
+
+    # 3. Fetch ONLY Amv, Celestial, and Mythical characters
+    from sqlalchemy import func
+    stmt = select(Character).where(
+        func.lower(Character.rarity).in_(["amv", "celestial", "mythical"])
+    )
+    res = await db.execute(stmt)
+    characters = res.scalars().all()
+
+    if not characters:
+        await message.reply(
+            f"{get_emoji('warning')} No high-tier characters (Amv, Celestial, Mythical) found in database.",
+            parse_mode="HTML"
+        )
+        return
+
+    # 4. Weighted rarity selection: Amv (50%), Celestial (25%), Mythical (25%)
+    rarity_weights = {"amv": 50, "celestial": 25, "mythical": 25}
+    
+    # Group characters by lowercase rarity
+    rarity_buckets = {}
+    for c in characters:
+        r_key = c.rarity.lower()
+        rarity_buckets.setdefault(r_key, []).append(c)
+
+    available_buckets = [r for r in rarity_weights.keys() if r in rarity_buckets]
+    chosen_bucket = random.choices(
+        available_buckets,
+        weights=[rarity_weights[r] for r in available_buckets],
+        k=1
+    )[0]
+    
+    character = random.choice(rarity_buckets[chosen_bucket])
+
+    # 5. Grant VIP bonus coins (1,000 to 2,500 Gold)
+    bonus_coins = random.randint(1000, 2500)
+    user.coins += bonus_coins
+    user.total_catches += 1
+
+    # Add to user harem
+    user_char = UserCharacter(user_id=user_id, character_id=character.id, nickname=character.name)
+    db.add(user_char)
+    await db.commit()
+
+    if not is_owner_user:
+        await record_vip_claim(db, user_id)
+
+    r_emoji = get_rarity_emoji(character.rarity)
+    
+    card = (
+        f"👑 <b>VIP SUMMON SUCCESSFUL!</b> 👑\n\n"
+        + format_blockquote(
+            f"📛 <b>Name:</b> {escape_html(character.name)}\n"
+            f"{get_emoji('gem')} <b>Rarity:</b> {r_emoji} {character.rarity}\n"
+            f"{get_emoji('tv')} <b>Anime:</b> {escape_html(character.anime)}\n"
+            f"{get_emoji('id')} <b>Character ID:</b> #{character.id:03d}\n"
+            f"{get_emoji('coin')} <b>VIP Bonus:</b> +{bonus_coins:,} Gold!\n"
+            f"🪙 <b>New Balance:</b> {user.coins:,} Gold\n\n"
+            f"<i>Next VIP claim resets daily at 5:30 AM IST</i>"
+        )
+    )
+
+    photo_to_send = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
+    try:
+        await message.reply_video(photo_to_send, caption=card, parse_mode="HTML")
+    except Exception:
+        try:
+            await message.reply_photo(photo_to_send, caption=card, parse_mode="HTML")
+        except Exception:
+            await message.reply(card, parse_mode="HTML")
