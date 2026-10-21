@@ -1614,9 +1614,9 @@ async def cmd_vipclaim(message: Message, db: AsyncSession):
             f"👑 <b>AniVerse VIP Exclusive!</b>\n\n"
             + format_blockquote(
                 "<b>/vipclaim</b> is reserved exclusively for <b>VIP Pass</b> holders!\n\n"
-                "✨ <b>Exclusive VIP Claim Pool:</b>\n"
-                "• 📹 <b>Amv</b> (Anime Music Video characters)\n"
-                "• 🌌 <b>Celestial</b> & 🔴 <b>Mythical</b>\n"
+                "✨ <b>Exclusive VIP Claim Pool (50/50 Chance):</b>\n"
+                "• 📹 <b>Amv</b> (50% Chance)\n"
+                "• 💎 <b>Expensive</b> (50% Chance)\n"
                 "• 🪙 <b>Bonus:</b> Up to +2,500 Gold every claim!\n\n"
                 "<i>Upgrade to VIP or contact bot admins to get your VIP Pass!</i>"
             ),
@@ -1648,23 +1648,24 @@ async def cmd_vipclaim(message: Message, db: AsyncSession):
                     await message.reply(text, parse_mode="HTML")
             return
 
-    # 3. Fetch ONLY Amv, Celestial, and Mythical characters
+    # 3. Fetch ONLY Amv and Expensive characters
     from sqlalchemy import func
     stmt = select(Character).where(
-        func.lower(Character.rarity).in_(["amv", "celestial", "mythical"])
+        func.lower(Character.rarity).in_(["amv", "expensive"])
     )
     res = await db.execute(stmt)
     characters = res.scalars().all()
 
     if not characters:
         await message.reply(
-            f"{get_emoji('warning')} No high-tier characters (Amv, Celestial, Mythical) found in database.",
+            f"{get_emoji('warning')} No <b>Amv</b> or <b>Expensive</b> characters found in database yet.\n"
+            f"Please add characters with rarity <code>Amv</code> or <code>Expensive</code> using <code>/addchar</code>.",
             parse_mode="HTML"
         )
         return
 
-    # 4. Weighted rarity selection: Amv (50%), Celestial (25%), Mythical (25%)
-    rarity_weights = {"amv": 50, "celestial": 25, "mythical": 25}
+    # 4. Strict 50 / 50 Chance Split
+    rarity_weights = {"amv": 50, "expensive": 50}
     
     # Group characters by lowercase rarity
     rarity_buckets = {}
