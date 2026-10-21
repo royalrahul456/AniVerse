@@ -380,6 +380,11 @@ async def main():
         BotCommand(command="demote", description="🔻 Demote user from admin (Owner only)"),
         BotCommand(command="adminlist", description="📋 List bot admin staff"),
         BotCommand(command="toggleemojis", description="✨ Toggle Telegram Premium Emojis (Admin)"),
+        BotCommand(command="mapemoji", description="🎨 Map a custom Telegram emoji to a key (Admin)"),
+        BotCommand(command="setemojiid", description="🆔 Set premium emoji by numeric ID (Admin)"),
+        BotCommand(command="emojiaudit", description="📋 Show full emoji coverage report (Admin)"),
+        BotCommand(command="listmapped", description="📝 List all saved emoji mappings (Admin)"),
+        BotCommand(command="delmapped", description="🗑️ Delete a saved emoji mapping (Owner)"),
         BotCommand(command="ownerhelp", description="👑 View owner command guide (Owner only)")
     ]
     try:
