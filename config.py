@@ -22,9 +22,20 @@ DEFAULT_BOT_ADMINS = {
 }
 
 # Official Channels & Groups
+def _parse_channel_id(val, default):
+    val = str(val).strip()
+    if not val:
+        return default
+    if val.startswith("@"):
+        return val
+    try:
+        return int(val)
+    except ValueError:
+        return val
+
 OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1003616974453"))
-OFFICIAL_CHANNEL_ID = int(os.getenv("OFFICIAL_CHANNEL_ID", "-1003616974453"))
-OFFICIAL_CHANNEL_LINK = os.getenv("OFFICIAL_CHANNEL_LINK", "https://t.me/AniVerseUnion")
+OFFICIAL_CHANNEL_ID = _parse_channel_id(os.getenv("OFFICIAL_CHANNEL_ID", "@aniverseupdate"), "@aniverseupdate")
+OFFICIAL_CHANNEL_LINK = os.getenv("OFFICIAL_CHANNEL_LINK", "https://t.me/aniverseupdate")
 
 # Currency Configuration
 CURRENCY_NAME = "Gold"
