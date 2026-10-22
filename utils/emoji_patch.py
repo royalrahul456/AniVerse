@@ -262,9 +262,46 @@ def strip_tg_emojis(text: str) -> str:
     """Strips <tg-emoji ...> tags and retains internal emoji/content."""
     if not isinstance(text, str) or not text:
         return text
-    cleaned = re.sub(r'<tg-emoji[^>]*>(.*?)</tg-emoji>', r'\1', text)
+    cleaned = re.sub(r'<tg-emoji[^>]*>(.*?)</tg-emoji>', r'\1', text, flags=re.DOTALL)
     cleaned = re.sub(r'</?tg-emoji[^>]*>', '', cleaned)
     return cleaned
+
+def sanitize_reply_markup(markup):
+    """Sanitizes button text in InlineKeyboardMarkup and ReplyKeyboardMarkup to strip
+    <tg-emoji ...> tags so buttons render clean unicode emojis instead of raw HTML."""
+    if not markup:
+        return markup
+    try:
+        # Check for inline_keyboard (InlineKeyboardMarkup)
+        inline_kb = getattr(markup, "inline_keyboard", None)
+        if inline_kb is None and isinstance(markup, dict):
+            inline_kb = markup.get("inline_keyboard")
+
+        if inline_kb is not None:
+            for row in inline_kb:
+                for btn in row:
+                    if isinstance(btn, dict):
+                        if "text" in btn and isinstance(btn["text"], str) and "<tg-emoji" in btn["text"]:
+                            btn["text"] = strip_tg_emojis(btn["text"])
+                    elif hasattr(btn, "text") and isinstance(btn.text, str) and "<tg-emoji" in btn.text:
+                        btn.text = strip_tg_emojis(btn.text)
+
+        # Check for keyboard (ReplyKeyboardMarkup)
+        kb = getattr(markup, "keyboard", None)
+        if kb is None and isinstance(markup, dict):
+            kb = markup.get("keyboard")
+
+        if kb is not None:
+            for row in kb:
+                for btn in row:
+                    if isinstance(btn, dict):
+                        if "text" in btn and isinstance(btn["text"], str) and "<tg-emoji" in btn["text"]:
+                            btn["text"] = strip_tg_emojis(btn["text"])
+                    elif hasattr(btn, "text") and isinstance(btn.text, str) and "<tg-emoji" in btn.text:
+                        btn.text = strip_tg_emojis(btn.text)
+    except Exception as e:
+        logger.error(f"Error sanitizing reply_markup buttons: {e}", exc_info=True)
+    return markup
 
 def markdown_to_html(text: str) -> str:
     if not isinstance(text, str) or not text:
@@ -316,6 +353,10 @@ def patch_bot_emojis(bot: Bot):
     original_make_request = bot.session.make_request
 
     async def new_make_request(bot_instance, method, timeout=None):
+        # 1. Sanitize button text in keyboards (Telegram buttons do NOT support HTML or <tg-emoji> tags)
+        if hasattr(method, "reply_markup") and method.reply_markup:
+            sanitize_reply_markup(method.reply_markup)
+
         parse_mode = getattr(method, "parse_mode", None)
 
         if is_premium_emojis_enabled():
