@@ -105,13 +105,26 @@ class JoinCheckMiddleware:
         
         user_id = None
         if isinstance(event, Message):
-            if event.text and event.text.strip().startswith("/start"):
+            # Ignore messages sent by bots or service messages without a user
+            if not event.from_user or event.from_user.is_bot:
                 return await handler(event, data)
-            user_id = event.from_user.id if event.from_user else None
+
+            text = (event.text or event.caption or "").strip()
+            # Only enforce channel join restriction on commands (starting with '/')
+            # Regular text messages (chatting in groups, counting towards spawn, answering games, etc.) are NOT restricted
+            if not text.startswith("/"):
+                return await handler(event, data)
+
+            if text.startswith("/start"):
+                return await handler(event, data)
+
+            user_id = event.from_user.id
         elif isinstance(event, CallbackQuery):
+            if not event.from_user or event.from_user.is_bot:
+                return await handler(event, data)
             if event.data and event.data == "dm_home":
                 return await handler(event, data)
-            user_id = event.from_user.id if event.from_user else None
+            user_id = event.from_user.id
 
         if user_id:
             if config.ADMIN_IDS and user_id in config.ADMIN_IDS:

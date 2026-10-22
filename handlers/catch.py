@@ -530,10 +530,6 @@ async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
         await message.reply(f"{get_emoji('warning')} This command can only be used in group chats.")
         return
 
-    if not await is_user_allowed(message, bot):
-        await message.reply(f"{get_emoji('warning')} Only group administrators or the bot owner can view spawn settings.")
-        return
-
     chat_id = message.chat.id
     stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
     res = await db.execute(stmt)
