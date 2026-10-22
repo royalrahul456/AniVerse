@@ -266,13 +266,13 @@ def strip_tg_emojis(text: str) -> str:
     cleaned = re.sub(r'</?tg-emoji[^>]*>', '', cleaned)
     return cleaned
 
-def sanitize_reply_markup(markup):
-    """Sanitizes button text in InlineKeyboardMarkup and ReplyKeyboardMarkup to strip
-    <tg-emoji ...> tags so buttons render clean unicode emojis instead of raw HTML."""
+def enhance_reply_markup(markup):
+    """Enhances buttons in InlineKeyboardMarkup with style colors (primary/success/danger)
+    and attaches native icon_custom_emoji_id while ensuring fallback text with clean Unicode
+    emojis is always preserved."""
     if not markup:
         return markup
     try:
-        # Check for inline_keyboard (InlineKeyboardMarkup)
         inline_kb = getattr(markup, "inline_keyboard", None)
         if inline_kb is None and isinstance(markup, dict):
             inline_kb = markup.get("inline_keyboard")
@@ -280,17 +280,77 @@ def sanitize_reply_markup(markup):
         if inline_kb is not None:
             for row in inline_kb:
                 for btn in row:
-                    if isinstance(btn, dict):
-                        if "text" in btn and isinstance(btn["text"], str) and "<tg-emoji" in btn["text"]:
-                            btn["text"] = strip_tg_emojis(btn["text"])
-                    elif hasattr(btn, "text") and isinstance(btn.text, str) and "<tg-emoji" in btn.text:
-                        btn.text = strip_tg_emojis(btn.text)
+                    orig_text = btn.get("text", "") if isinstance(btn, dict) else getattr(btn, "text", "")
+                    if not orig_text or not isinstance(orig_text, str):
+                        continue
 
-        # Check for keyboard (ReplyKeyboardMarkup)
+                    # 1. Detect any <tg-emoji> tag or unicode emoji in button text
+                    tg_match = re.search(r'<tg-emoji[^>]*emoji-id=["\']?(\d+)["\']?[^>]*>(.*?)</tg-emoji>', orig_text)
+                    custom_id = None
+                    emoji_char = None
+
+                    if tg_match:
+                        custom_id = tg_match.group(1)
+                        emoji_char = tg_match.group(2)
+                        clean_text = re.sub(r'<tg-emoji[^>]*>.*?</tg-emoji>', '', orig_text).strip()
+                        fallback_text = f"{emoji_char} {clean_text}".strip()
+                    else:
+                        clean_text = orig_text.strip()
+                        fallback_text = orig_text
+                        for em in SORTED_EMOJI_KEYS:
+                            if em in orig_text:
+                                custom_id = EMOJI_MAPPING.get(em)
+                                emoji_char = em
+                                if clean_text.startswith(em):
+                                    candidate = clean_text[len(em):].strip()
+                                    if candidate:
+                                        clean_text = candidate
+                                break
+
+                    # 2. Determine button color style if not already explicitly set
+                    cur_style = btn.get("style", None) if isinstance(btn, dict) else getattr(btn, "style", None)
+                    if not cur_style:
+                        combined = f"{orig_text} {btn.get('callback_data', '') if isinstance(btn, dict) else getattr(btn, 'callback_data', '')}".lower()
+                        if any(k in combined for k in ["claim", "accept", "pokedex", "animedex", "buy", "join", "confirm", "start", "collect", "redeem", "win", "agree", "done", "yes"]):
+                            cur_style = "success"
+                        elif any(k in combined for k in ["cancel", "decline", "delete", "close", "reject", "reset", "remove", "vip", "battle", "no", "stop"]):
+                            cur_style = "danger"
+                        elif any(k in combined for k in ["profile", "refresh", "help", "guide", "update", "updates", "leaderboard", "home", "back", "settings", "shop", "play", "games", "bag", "harem", "streak", "dex"]):
+                            cur_style = "primary"
+
+                    # 3. Apply properties
+                    if isinstance(btn, dict):
+                        btn["_fallback_text"] = fallback_text
+                        if cur_style:
+                            btn["style"] = cur_style
+                        if custom_id and is_premium_emojis_enabled():
+                            btn["icon_custom_emoji_id"] = str(custom_id)
+                            btn["text"] = clean_text
+                        else:
+                            btn["text"] = fallback_text
+                    else:
+                        try:
+                            setattr(btn, "_fallback_text", fallback_text)
+                        except Exception:
+                            pass
+                        if cur_style:
+                            try:
+                                btn.style = cur_style
+                            except Exception:
+                                pass
+                        if custom_id and is_premium_emojis_enabled():
+                            try:
+                                btn.icon_custom_emoji_id = str(custom_id)
+                                btn.text = clean_text
+                            except Exception:
+                                btn.text = fallback_text
+                        else:
+                            btn.text = fallback_text
+
+        # Also sanitize ReplyKeyboardMarkup
         kb = getattr(markup, "keyboard", None)
         if kb is None and isinstance(markup, dict):
             kb = markup.get("keyboard")
-
         if kb is not None:
             for row in kb:
                 for btn in row:
@@ -300,8 +360,70 @@ def sanitize_reply_markup(markup):
                     elif hasattr(btn, "text") and isinstance(btn.text, str) and "<tg-emoji" in btn.text:
                         btn.text = strip_tg_emojis(btn.text)
     except Exception as e:
-        logger.error(f"Error sanitizing reply_markup buttons: {e}", exc_info=True)
+        logger.error(f"Error enhancing reply_markup buttons: {e}", exc_info=True)
     return markup
+
+
+def fallback_strip_button_icons(markup):
+    """Strips icon_custom_emoji_id and restores Unicode emojis on all buttons."""
+    if not markup:
+        return markup
+    try:
+        inline_kb = getattr(markup, "inline_keyboard", None)
+        if inline_kb is None and isinstance(markup, dict):
+            inline_kb = markup.get("inline_keyboard")
+
+        if inline_kb is not None:
+            for row in inline_kb:
+                for btn in row:
+                    if isinstance(btn, dict):
+                        if "_fallback_text" in btn and btn["_fallback_text"]:
+                            btn["text"] = btn["_fallback_text"]
+                        btn.pop("icon_custom_emoji_id", None)
+                    else:
+                        if hasattr(btn, "_fallback_text") and getattr(btn, "_fallback_text"):
+                            btn.text = getattr(btn, "_fallback_text")
+                        try:
+                            btn.icon_custom_emoji_id = None
+                        except Exception:
+                            pass
+    except Exception as e:
+        logger.error(f"Error stripping button icons in fallback: {e}")
+    return markup
+
+
+def fallback_strip_button_styles(markup):
+    """Strips button styles in case an old API server rejects the style field."""
+    if not markup:
+        return markup
+    try:
+        inline_kb = getattr(markup, "inline_keyboard", None)
+        if inline_kb is None and isinstance(markup, dict):
+            inline_kb = markup.get("inline_keyboard")
+
+        if inline_kb is not None:
+            for row in inline_kb:
+                for btn in row:
+                    if isinstance(btn, dict):
+                        btn.pop("style", None)
+                        btn.pop("icon_custom_emoji_id", None)
+                    else:
+                        try:
+                            btn.style = None
+                        except Exception:
+                            pass
+                        try:
+                            btn.icon_custom_emoji_id = None
+                        except Exception:
+                            pass
+    except Exception as e:
+        logger.error(f"Error stripping button styles in fallback: {e}")
+    return markup
+
+
+def sanitize_reply_markup(markup):
+    """Alias for backwards compatibility."""
+    return enhance_reply_markup(markup)
 
 def markdown_to_html(text: str) -> str:
     if not isinstance(text, str) or not text:
@@ -353,9 +475,9 @@ def patch_bot_emojis(bot: Bot):
     original_make_request = bot.session.make_request
 
     async def new_make_request(bot_instance, method, timeout=None):
-        # 1. Sanitize button text in keyboards (Telegram buttons do NOT support HTML or <tg-emoji> tags)
+        # 1. Enhance button colors (styles) & try native custom emoji icon (with fallback preservation)
         if hasattr(method, "reply_markup") and method.reply_markup:
-            sanitize_reply_markup(method.reply_markup)
+            enhance_reply_markup(method.reply_markup)
 
         parse_mode = getattr(method, "parse_mode", None)
 
@@ -379,7 +501,10 @@ def patch_bot_emojis(bot: Bot):
         except TelegramBadRequest as e:
             err_str = str(e).lower()
             if (
-                "custom_emoji" in err_str
+                "button_icon_custom_emoji" in err_str
+                or "button_type_invalid" in err_str
+                or "button_style" in err_str
+                or "custom_emoji" in err_str
                 or "entity_bounds_invalid" in err_str
                 or "cannot_use_custom_emoji" in err_str
                 or "can't use custom emoji" in err_str
@@ -390,8 +515,8 @@ def patch_bot_emojis(bot: Bot):
                 or "too long" in err_str
                 or "caption" in err_str
             ):
-                logger.warning(f"Telegram API parsing/emoji error: {e}. Retrying with clean Unicode fallback...")
-                # Automatic recovery: strip custom emoji tags and retry
+                logger.warning(f"Telegram API request issue: {e}. Retrying with safe Unicode fallback...")
+                # Automatic recovery: strip custom emoji tags from text/caption
                 if isinstance(method, (SendMessage, EditMessageText)):
                     if method.text:
                         method.text = strip_tg_emojis(method.text)
@@ -402,10 +527,16 @@ def patch_bot_emojis(bot: Bot):
                     if method.media and getattr(method.media, "caption", None):
                         method.media.caption = strip_tg_emojis(method.media.caption)
 
+                # Automatic recovery for buttons: strip icon_custom_emoji_id and restore Unicode emoji in button title
+                if hasattr(method, "reply_markup") and method.reply_markup:
+                    fallback_strip_button_icons(method.reply_markup)
+
                 try:
                     return await original_make_request(bot_instance, method, timeout=timeout)
                 except TelegramBadRequest as e2:
-                    logger.warning(f"Retrying message with parse_mode=None fallback: {e2}")
+                    logger.warning(f"Retrying message with parse_mode=None & plain button fallback: {e2}")
+                    if hasattr(method, "reply_markup") and method.reply_markup:
+                        fallback_strip_button_styles(method.reply_markup)
                     if isinstance(method, EditMessageMedia) and method.media:
                         method.media.parse_mode = None
                     else:
