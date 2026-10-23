@@ -4,6 +4,7 @@ import json
 import logging
 import sys
 import os
+import re
 import collections
 from aiohttp import web
 from aiogram import Bot, Dispatcher
@@ -83,6 +84,77 @@ async def seed_characters():
                 session.add(char)
             await session.commit()
             logger.info(f"Successfully seeded {len(data)} characters!")
+
+# ----------------------------------------------------
+# COMMAND PREFIX NORMALIZATION & MIDDLEWARES
+# ----------------------------------------------------
+PREFIX_REGEX = re.compile(r'^(?:([.!])|ani([\s:./!]+)|ani)([a-zA-Z0-9_]+)(.*)$', re.IGNORECASE | re.DOTALL)
+
+ALL_BOT_COMMANDS = {
+    # Start / Help / Info
+    "start", "help", "ping", "guide",
+    # Profile & Collections
+    "profile", "harem", "bag", "check", "cid", "search", "anime", "claim",
+    "claimchance", "claimchances", "leaderboard", "settheme", "pay", "chk",
+    "balance", "gift", "vipclaim", "vipplan", "vip", "premiumplan", "fav", "favorite",
+    # Games & Arcade
+    "games", "spin", "daily", "weekly", "monthly", "yearly", "coinflip",
+    "dice", "dart", "trivia", "endmines", "mines", "scramble", "rob", "xo", "tictactoe",
+    # Catch & Guess
+    "guess", "catch", "snatch", "nameguess", "togglenameguess",
+    # Spawns & Settings
+    "spawnsettings", "setspawn", "spawnchance", "changetime", "spawnrate", "spawnthreshold", "togglespawn",
+    # Auction & Trade & Shop & Redeem
+    "auction", "bid", "cancelauction", "auctions", "auc", "shop", "trade", "gen", "redeem",
+    # Admin & Owner
+    "give", "giv", "givechar", "givecoins", "transfersnatches", "transfersnatch", "transferall", "transfercatches",
+    "addrarity", "delrarity", "deleterarity", "editrarityemoji", "editrarity",
+    "addtochance", "addchance", "removefromchance", "remchance", "delchance",
+    "addtoclaim", "addclaim", "removefromclaim", "remclaim", "delclaim",
+    "cancel", "addchar", "setimg", "updateimg", "setphoto", "deletechar", "delchar", "removechar",
+    "setrarity", "spawn", "stats", "addpremium", "settag", "removepremium", "delpremium",
+    "ownerhelp", "owner", "adminhelp", "admin", "spawnchances", "editspawnchance", "setspawnchance",
+    "editclaimchance", "setclaimchance", "editchar", "editcharacter", "promote", "demote",
+    "adminlist", "admins", "autoemojis", "toggleemojis", "togglepremiumemojis", "broadcast",
+    "getemoji", "emojiname", "mapemoji", "setemojiid", "emojiaudit", "listmapped", "delmapped", "setcover"
+}
+
+def normalize_command_text(text: str) -> str:
+    if not text:
+        return text
+    stripped = text.strip()
+    if stripped.startswith("/"):
+        first_word, *remainder = stripped.split(maxsplit=1)
+        rest_part = (" " + remainder[0]) if remainder else ""
+        cmd_part = first_word[1:]
+        if "@" in cmd_part:
+            cname, mention = cmd_part.split("@", 1)
+            return f"/{cname.lower()}@{mention}{rest_part}"
+        return f"/{cmd_part.lower()}{rest_part}"
+
+    m = PREFIX_REGEX.match(stripped)
+    if not m:
+        return text
+    dot_or_bang, ani_sep, cmd, rest = m.groups()
+    cmd_lower = cmd.lower()
+    if dot_or_bang or ani_sep or (cmd_lower in ALL_BOT_COMMANDS):
+        return f"/{cmd_lower}{rest}"
+    return text
+
+class CommandPrefixMiddleware:
+    """Normalizes commands starting with '.', '!', or 'ani ' into standard Telegram '/' commands."""
+    async def __call__(self, handler, event, data):
+        from aiogram.types import Message
+        if isinstance(event, Message):
+            if event.text:
+                new_text = normalize_command_text(event.text)
+                if new_text != event.text:
+                    object.__setattr__(event, "text", new_text)
+            if event.caption:
+                new_caption = normalize_command_text(event.caption)
+                if new_caption != event.caption:
+                    object.__setattr__(event, "caption", new_caption)
+        return await handler(event, data)
 
 class DbSessionMiddleware:
     async def __call__(self, handler, event, data):
@@ -408,6 +480,9 @@ async def main():
         logger.info("Bot commands registered successfully in Telegram menu.")
     except Exception as e:
         logger.error(f"Failed to register bot commands: {e}")
+
+    command_prefix_middleware = CommandPrefixMiddleware()
+    dp.message.outer_middleware(command_prefix_middleware)
 
     db_middleware = DbSessionMiddleware()
     join_middleware = JoinCheckMiddleware()

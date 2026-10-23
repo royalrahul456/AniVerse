@@ -184,6 +184,7 @@ async def cb_dm_home(callback: CallbackQuery, db: AsyncSession):
 def build_help_text(is_admin: bool) -> str:
     text = (
         "❓ <b>AniVerse Guide & Help Center</b>\n\n"
+        "💡 <b>Command Prefixes:</b> You can use <code>/</code>, <code>.</code>, <code>!</code>, or <code>ani </code> before any command (e.g. <code>/profile</code>, <code>.profile</code>, <code>!profile</code>, or <code>ani profile</code>)!\n\n"
         "╭───「 🎒 Trainer Utilities 」───╮\n"
         "├─➩ /profile — Stats & themes\n"
         "├─➩ /harem — View harem collection\n"
