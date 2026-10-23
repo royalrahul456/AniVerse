@@ -355,25 +355,28 @@ async def cmd_profile(message: Message, db: AsyncSession):
     target_user_id = message.from_user.id
     target_username = message.from_user.username
     target_first_name = message.from_user.first_name
+    is_owner = message.from_user and message.from_user.id in config.ADMIN_IDS
 
-    if message.reply_to_message and message.reply_to_message.from_user and not message.reply_to_message.from_user.is_bot:
-        target_user_id = message.reply_to_message.from_user.id
-        target_username = message.reply_to_message.from_user.username
-        target_first_name = message.reply_to_message.from_user.first_name
-    else:
-        parts = message.text.strip().split()
-        if len(parts) > 1:
-            arg = parts[1].strip()
-            if arg.isdigit():
-                target_user_id = int(arg)
-            elif arg.startswith("@"):
-                stmt = select(User).where(User.username.ilike(arg[1:]))
-                res = await db.execute(stmt)
-                u = res.scalar_one_or_none()
-                if u:
-                    target_user_id = u.user_id
-                    target_username = u.username
-                    target_first_name = u.first_name
+    # Target user lookup is ONLY allowed for bot owner/admin
+    if is_owner:
+        if message.reply_to_message and message.reply_to_message.from_user and not message.reply_to_message.from_user.is_bot:
+            target_user_id = message.reply_to_message.from_user.id
+            target_username = message.reply_to_message.from_user.username
+            target_first_name = message.reply_to_message.from_user.first_name
+        else:
+            parts = message.text.strip().split()
+            if len(parts) > 1:
+                arg = parts[1].strip()
+                if arg.isdigit():
+                    target_user_id = int(arg)
+                elif arg.startswith("@"):
+                    stmt = select(User).where(User.username.ilike(arg[1:]))
+                    res = await db.execute(stmt)
+                    u = res.scalar_one_or_none()
+                    if u:
+                        target_user_id = u.user_id
+                        target_username = u.username
+                        target_first_name = u.first_name
 
     user = await get_or_create_user(db, target_user_id, target_username, target_first_name)
     text = await build_profile_card(user, db)
@@ -385,8 +388,11 @@ async def cmd_profile(message: Message, db: AsyncSession):
 
 @router.callback_query(F.data.startswith("profile_view_") | (F.data == "dm_profile"))
 async def cb_profile(callback: CallbackQuery, db: AsyncSession):
+    is_owner = callback.from_user and callback.from_user.id in config.ADMIN_IDS
     if callback.data.startswith("profile_view_"):
         target_id = int(callback.data.split("_")[2])
+        if target_id != callback.from_user.id and not is_owner:
+            target_id = callback.from_user.id
     else:
         target_id = callback.from_user.id
     user = await get_or_create_user(db, target_id, callback.from_user.username, callback.from_user.first_name)
@@ -407,8 +413,10 @@ async def cmd_harem(message: Message, db: AsyncSession):
     page = 1
     rarity = "All"
     sort_by = "anime"
+    is_owner = message.from_user and message.from_user.id in config.ADMIN_IDS
 
-    if message.reply_to_message and message.reply_to_message.from_user and not message.reply_to_message.from_user.is_bot:
+    # Target user lookup is ONLY allowed for bot owner/admin
+    if is_owner and message.reply_to_message and message.reply_to_message.from_user and not message.reply_to_message.from_user.is_bot:
         target_user_id = message.reply_to_message.from_user.id
 
     parts = message.text.strip().split()
@@ -417,11 +425,11 @@ async def cmd_harem(message: Message, db: AsyncSession):
             p_clean = p.strip()
             if p_clean.isdigit():
                 val = int(p_clean)
-                if val > 100000:
+                if val > 100000 and is_owner:
                     target_user_id = val
                 else:
                     page = max(1, val)
-            elif p_clean.startswith("@"):
+            elif p_clean.startswith("@") and is_owner:
                 uname = p_clean[1:]
                 stmt = select(User).where(User.username.ilike(uname))
                 res = await db.execute(stmt)
@@ -493,20 +501,24 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
     rarity = "All"
     page = 1
     sort_by = "anime"
+    is_owner = callback.from_user and callback.from_user.id in config.ADMIN_IDS
 
     if len(parts) >= 6 and parts[2].isdigit():
-        owner_id = int(parts[2])
+        req_id = int(parts[2])
+        owner_id = req_id if (req_id == callback.from_user.id or is_owner) else callback.from_user.id
         rarity = parts[3]
         page = int(parts[4])
         sort_by = parts[5]
     elif len(parts) >= 5 and parts[2].isdigit():
-        owner_id = int(parts[2])
+        req_id = int(parts[2])
+        owner_id = req_id if (req_id == callback.from_user.id or is_owner) else callback.from_user.id
         rarity = parts[3]
         page = int(parts[4])
         sort_by = "anime"
     elif len(parts) >= 4:
         if parts[2].isdigit():
-            owner_id = int(parts[2])
+            req_id = int(parts[2])
+            owner_id = req_id if (req_id == callback.from_user.id or is_owner) else callback.from_user.id
             page = int(parts[3])
         else:
             rarity = parts[2]
