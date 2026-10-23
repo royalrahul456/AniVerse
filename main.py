@@ -107,7 +107,7 @@ ALL_BOT_COMMANDS = {
     # Auction & Trade & Shop & Redeem
     "auction", "bid", "cancelauction", "auctions", "auc", "shop", "trade", "gen", "redeem",
     # Anime Social & Roleplay
-    "hug", "kiss", "pat", "slap", "cuddle", "poke", "tickle", "kill",
+    "hug", "kiss", "pat", "slap", "cuddle", "poke", "tickle", "kill", "wave", "smile", "yeet",
     # Admin & Owner
     "give", "giv", "givechar", "givecoins", "transfersnatches", "transfersnatch", "transferall", "transfercatches",
     "addrarity", "delrarity", "deleterarity", "editrarityemoji", "editrarity",

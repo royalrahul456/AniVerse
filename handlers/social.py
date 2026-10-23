@@ -2,15 +2,13 @@ import logging
 import html
 import random
 import aiohttp
-from aiogram import Router, F
+from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from database.models import User
 from utils.formatters import format_blockquote, escape_html
-from utils.emojis import get_emoji
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -28,7 +26,6 @@ ACTION_CONFIG = {
         "flavor": "Wholesome levels: 100% Maximum ✨",
         "self_msg": "wraps their arms around themselves with a warm, comforting self-hug! 💖",
         "self_flavor": "Self-Love & Care: 100% Wholesome ✨",
-        "btn_text": "🫂 Hug Back",
         "help_desc": "Share warm affection and cozy hugs with fellow trainers!"
     },
     "kiss": {
@@ -38,12 +35,11 @@ ACTION_CONFIG = {
             "pulls close and gives a sweet, passionate kiss to",
             "plants a gentle, loving anime kiss on",
             "blushes brightly and softly kisses",
-            "leans in and shares a tender romantic kiss with",
+            "shares a tender romantic anime kiss with",
         ],
         "flavor": "Doki-Doki Heartbeat: Over 9,000! 💕",
         "self_msg": "blows a magical, sparkling kiss into the air! ✨",
         "self_flavor": "Sending pure love across the entire anime universe! 💖",
-        "btn_text": "💋 Kiss Back",
         "help_desc": "Send sweet, romantic anime kisses to fellow trainers!"
     },
     "pat": {
@@ -58,7 +54,6 @@ ACTION_CONFIG = {
         "flavor": "Comfort rating: 10/10 Pure Serotonin 🌸",
         "self_msg": "pats their own head and says 'I did great today!' 🌸",
         "self_flavor": "Trainer Pride: Maximum ✨",
-        "btn_text": "🐱 Pat Back",
         "help_desc": "Give soft, soothing anime headpats!"
     },
     "slap": {
@@ -72,7 +67,6 @@ ACTION_CONFIG = {
         "flavor": "Anime Impact Damage: 9,999 💢",
         "self_msg": "facepalms and slaps their own forehead in complete disbelief! 🤦",
         "self_flavor": "Facepalm level: Maximum 🤦",
-        "btn_text": "👋 Slap Back",
         "help_desc": "Deliver dramatic, classic tsundere anime slaps!"
     },
     "cuddle": {
@@ -86,7 +80,6 @@ ACTION_CONFIG = {
         "flavor": "Cozy comfort rating: Infinite Warmth 🥰",
         "self_msg": "curls up tightly inside a warm blanket with a plushie! 🧸",
         "self_flavor": "Cozy mode: Fully Activated ☕",
-        "btn_text": "🤍 Cuddle Back",
         "help_desc": "Snuggle up close with fellow trainers!"
     },
     "poke": {
@@ -100,7 +93,6 @@ ACTION_CONFIG = {
         "flavor": "*Poke poke!* Attention successfully demanded! 🤭",
         "self_msg": "pokes their own cheek curiously wondering why they did that! 🤔",
         "self_flavor": "Curiosity: 100% ❓",
-        "btn_text": "👉 Poke Back",
         "help_desc": "Playfully poke someone to get their attention!"
     },
     "tickle": {
@@ -114,7 +106,6 @@ ACTION_CONFIG = {
         "flavor": "Laughter gauge: Overloaded! 😂",
         "self_msg": "tries to tickle themselves and realizes it doesn't work! 🤣",
         "self_flavor": "Science test: Complete 🧠",
-        "btn_text": "🤭 Tickle Back",
         "help_desc": "Start an unstoppable anime tickle war!"
     },
     "kill": {
@@ -128,40 +119,137 @@ ACTION_CONFIG = {
         "flavor": "FATALITY! Critical Hit: 999,999 DMG ⚡",
         "self_msg": "tripped over their own cape and took 9,999 self-damage! 💀",
         "self_flavor": "Respawning in 3... 2... 1... 🪦",
-        "btn_text": "⚔️ Counter Strike",
         "help_desc": "Defeat someone in an epic anime battle duel!"
+    },
+    "wave": {
+        "emoji": "👋",
+        "title": "ANIME WAVE",
+        "actions": [
+            "smiles brightly and waves excitedly at",
+            "gives a cheerful anime wave to",
+            "waves hello warmly to",
+        ],
+        "flavor": "Friendliness: 100% Sparkles ✨",
+        "self_msg": "waves to their own reflection in the mirror! 🪞",
+        "self_flavor": "Confidence: Boosted ✨",
+        "help_desc": "Give a cheerful anime wave to fellow trainers!"
+    },
+    "smile": {
+        "emoji": "✨",
+        "title": "ANIME SMILE",
+        "actions": [
+            "beams with joy and flashes a radiant anime smile at",
+            "smiles warmly and tenderly towards",
+            "gives a cute, glowing smile to",
+        ],
+        "flavor": "Brightness: Blinding Sunshine ☀️",
+        "self_msg": "smiles brightly at how wonderful life is! 🌸",
+        "self_flavor": "Inner Peace: Achieved 💖",
+        "help_desc": "Share a warm, heart-melting anime smile!"
+    },
+    "yeet": {
+        "emoji": "🚀",
+        "title": "ANIME YEET",
+        "actions": [
+            "grabs and yeets",
+            "hurls into the stratosphere",
+            "launches into orbit",
+        ],
+        "flavor": "Escape Velocity Achieved: Mach 10 🌌",
+        "self_msg": "yeeted themselves into another anime dimension! 🌠",
+        "self_flavor": "Trajectory: Interstellar 🚀",
+        "help_desc": "Yeet someone straight into outer orbit!"
     }
 }
 
+# ----------------------------------------------------
+# MULTI-PROVIDER ANIME GIF FETCHER
+# ----------------------------------------------------
+async def _fetch_from_nekos_best(session: aiohttp.ClientSession, action: str):
+    async with session.get(f"https://nekos.best/api/v2/{action}") as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            res = data.get("results", [{}])[0]
+            url = res.get("url")
+            anime = res.get("anime_name")
+            if url and url.startswith("https://"):
+                return url, anime
+    return None, None
+
+async def _fetch_from_gifukai(session: aiohttp.ClientSession, action: str):
+    async with session.get(f"https://api.gifukai.com/v1/{action}") as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            url = data.get("url")
+            anime = data.get("anime")
+            if url and url.startswith("https://"):
+                return url, anime
+    return None, None
+
+async def _fetch_from_otakugifs(session: aiohttp.ClientSession, action: str):
+    async with session.get(f"https://api.otakugifs.xyz/gif?reaction={action}") as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            url = data.get("url")
+            if url and url.startswith("https://"):
+                return url, None
+    return None, None
+
+async def _fetch_from_purrbot(session: aiohttp.ClientSession, action: str):
+    async with session.get(f"https://purrbot.site/api/img/sfw/{action}/gif") as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            url = data.get("link")
+            if url and url.startswith("https://"):
+                return url, None
+    return None, None
+
+async def _fetch_from_nekos_life(session: aiohttp.ClientSession, action: str):
+    async with session.get(f"https://nekos.life/api/v2/img/{action}") as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            url = data.get("url")
+            if url and url.startswith("https://"):
+                return url, None
+    return None, None
+
+async def _fetch_from_waifu_pics(session: aiohttp.ClientSession, action: str):
+    async with session.get(f"https://api.waifu.pics/sfw/{action}") as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            url = data.get("url")
+            if url and url.startswith("https://"):
+                return url, None
+    return None, None
+
+ALL_GIF_PROVIDERS = [
+    _fetch_from_nekos_best,
+    _fetch_from_gifukai,
+    _fetch_from_otakugifs,
+    _fetch_from_purrbot,
+    _fetch_from_nekos_life,
+    _fetch_from_waifu_pics,
+]
+
 async def fetch_action_gif(action: str) -> tuple[str | None, str | None]:
-    """Fetch an anime GIF URL and optional anime title from Gifukai API with waifu.pics fallback."""
+    """Fetches an anime GIF URL across 6 public anime GIF providers with randomized rotation and fallback."""
+    providers = list(ALL_GIF_PROVIDERS)
+    random.shuffle(providers)
     headers = {"User-Agent": "AniVerseBot/1.0", "Accept": "application/json"}
     timeout = aiohttp.ClientTimeout(total=4)
 
-    # 1. Primary API: Gifukai
     try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(f"https://api.gifukai.com/v1/{action}", headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    url = data.get("url")
-                    anime = data.get("anime")
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            for provider_fn in providers:
+                try:
+                    url, anime = await provider_fn(session, action)
                     if url and isinstance(url, str) and url.startswith("https://"):
                         return url, anime if isinstance(anime, str) and anime.strip() else None
-    except Exception as exc:
-        logger.debug(f"Gifukai API error for {action}: {exc}")
-
-    # 2. Fallback API: Waifu.pics
-    try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(f"https://api.waifu.pics/sfw/{action}", headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    url = data.get("url")
-                    if url and isinstance(url, str) and url.startswith("https://"):
-                        return url, None
-    except Exception as exc:
-        logger.debug(f"Waifu.pics fallback error for {action}: {exc}")
+                except Exception as exc:
+                    logger.debug(f"{provider_fn.__name__} error for {action}: {exc}")
+                    continue
+    except Exception as e:
+        logger.warning(f"Error in multi-provider GIF pool: {e}")
 
     return None, None
 
@@ -173,7 +261,7 @@ async def resolve_target(message: Message, db: AsyncSession) -> tuple[int, str] 
         name = u.first_name or u.username or "Trainer"
         return u.id, name
 
-    # 2. Text mention entities (users without usernames mentioned inline)
+    # 2. Text mention entities
     entities = list(message.entities or []) + list(message.caption_entities or [])
     for ent in entities:
         if ent.type == "text_mention" and ent.user:
@@ -227,17 +315,6 @@ def build_social_card(actor_id: int, actor_name_raw: str, target_id: int, target
 
     return header + format_blockquote(body)
 
-def build_action_keyboard(action: str, actor_id: int, target_id: int) -> InlineKeyboardBuilder | None:
-    if actor_id == target_id:
-        return None
-    cfg = ACTION_CONFIG[action]
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text=cfg["btn_text"], callback_data=f"soc_ret:{action}:{actor_id}:{target_id}"),
-        InlineKeyboardButton(text="🎲 Random", callback_data=f"soc_rnd:{actor_id}:{target_id}")
-    )
-    return builder
-
 async def handle_social_action(message: Message, action: str, db: AsyncSession):
     if not message.from_user:
         return
@@ -247,7 +324,7 @@ async def handle_social_action(message: Message, action: str, db: AsyncSession):
 
     target = await resolve_target(message, db)
     if not target:
-        # Show styled console help card
+        # Show styled console help card (clean, no inline buttons)
         card = (
             f"╭───「 {cfg['emoji']} <b>{cfg['title']} CONSOLE</b> 」───╮\n"
             f"│ <i>{cfg['help_desc']}</i>\n"
@@ -266,65 +343,16 @@ async def handle_social_action(message: Message, action: str, db: AsyncSession):
     target_id, target_name = target
     gif_url, anime_name = await fetch_action_gif(action)
     caption = build_social_card(actor.id, actor_name, target_id, target_name, action, anime_name)
-    builder = build_action_keyboard(action, actor.id, target_id)
-    markup = builder.as_markup() if builder else None
 
     if gif_url:
         try:
-            await message.reply_animation(animation=gif_url, caption=caption, parse_mode="HTML", reply_markup=markup)
+            await message.reply_animation(animation=gif_url, caption=caption, parse_mode="HTML")
             return
         except Exception as exc:
             logger.warning(f"Could not send animation for {action}: {exc}")
 
     # Fallback to formatted text reply
-    await message.reply(caption, parse_mode="HTML", reply_markup=markup)
-
-@router.callback_query(F.data.startswith("soc_ret:") | F.data.startswith("soc_rnd:"))
-async def cb_social_interact(callback: CallbackQuery, db: AsyncSession):
-    parts = callback.data.split(":")
-    mode = parts[0]
-    action = parts[1] if mode == "soc_ret" else random.choice(["hug", "kiss", "pat", "cuddle", "poke"])
-    orig_actor_id = int(parts[2])
-    orig_target_id = int(parts[3])
-
-    caller = callback.from_user
-    caller_id = caller.id
-    caller_name = caller.first_name or caller.username or "Trainer"
-
-    # Determine who is being targeted in return
-    if caller_id == orig_target_id:
-        # The original target returns the action to the original actor!
-        dest_id = orig_actor_id
-        stmt = select(User).where(User.user_id == dest_id)
-        res = await db.execute(stmt)
-        u = res.scalar_one_or_none()
-        dest_name = u.first_name if u else "Trainer"
-    elif caller_id == orig_actor_id:
-        await callback.answer(f"You already started the {action}! Wait for someone to respond 😉", show_alert=True)
-        return
-    else:
-        # A third party jumped into the reaction!
-        dest_id = orig_actor_id
-        stmt = select(User).where(User.user_id == dest_id)
-        res = await db.execute(stmt)
-        u = res.scalar_one_or_none()
-        dest_name = u.first_name if u else "Trainer"
-
-    gif_url, anime_name = await fetch_action_gif(action)
-    caption = build_social_card(caller_id, caller_name, dest_id, dest_name, action, anime_name)
-    builder = build_action_keyboard(action, caller_id, dest_id)
-    markup = builder.as_markup() if builder else None
-
-    await callback.answer(f"Sent {action.capitalize()}!")
-    if gif_url and callback.message:
-        try:
-            await callback.message.reply_animation(animation=gif_url, caption=caption, parse_mode="HTML", reply_markup=markup)
-            return
-        except Exception:
-            pass
-
-    if callback.message:
-        await callback.message.reply(caption, parse_mode="HTML", reply_markup=markup)
+    await message.reply(caption, parse_mode="HTML")
 
 @router.message(Command("hug"))
 async def cmd_hug(message: Message, db: AsyncSession):
@@ -357,3 +385,15 @@ async def cmd_tickle(message: Message, db: AsyncSession):
 @router.message(Command("kill"))
 async def cmd_kill(message: Message, db: AsyncSession):
     await handle_social_action(message, "kill", db)
+
+@router.message(Command("wave"))
+async def cmd_wave(message: Message, db: AsyncSession):
+    await handle_social_action(message, "wave", db)
+
+@router.message(Command("smile"))
+async def cmd_smile(message: Message, db: AsyncSession):
+    await handle_social_action(message, "smile", db)
+
+@router.message(Command("yeet"))
+async def cmd_yeet(message: Message, db: AsyncSession):
+    await handle_social_action(message, "yeet", db)
