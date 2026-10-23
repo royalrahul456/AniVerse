@@ -70,7 +70,12 @@ def get_harem_keyboard(user_id: int, page: int, max_page: int, rarity: str = "Al
     builder.row(*nav_row)
  
     builder.row(
-        InlineKeyboardButton(text="🔍 Filter Rarity", callback_data=f"dm_bag_rarity_menu_{user_id}_{sort_by}")
+        InlineKeyboardButton(text="🔍 Filter Rarity", callback_data=f"dm_bag_rarity_menu_{user_id}_{sort_by}"),
+        InlineKeyboardButton(text="⇅ Sort Harem", callback_data=f"dm_bag_sort_menu_{user_id}_{rarity}_{page}_{sort_by}")
+    )
+    builder.row(
+        InlineKeyboardButton(text="👤 Profile", callback_data=f"profile_view_{user_id}"),
+        InlineKeyboardButton(text="🏠 Hub Menu", callback_data="dm_home")
     )
     return builder.as_markup()
 
@@ -138,11 +143,12 @@ def get_back_to_hub_keyboard() -> InlineKeyboardMarkup:
     builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
     return builder.as_markup()
 
-def get_profile_keyboard(is_group: bool = False, bot_username: str = None) -> InlineKeyboardMarkup:
+def get_profile_keyboard(user_id: int = None, is_group: bool = False, bot_username: str = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    harem_cb = f"dm_bag_{user_id}_All_1_anime" if user_id else "dm_bag_All_1"
     builder.row(
-        InlineKeyboardButton(text="🎨 Themes", callback_data="cb_themes_menu"),
-        InlineKeyboardButton(text="🎒 Harem", callback_data="dm_bag_All_1")
+        InlineKeyboardButton(text="🎨 Themes", callback_data=f"cb_themes_menu_{user_id}" if user_id else "cb_themes_menu"),
+        InlineKeyboardButton(text="🎒 Harem", callback_data=harem_cb)
     )
     if not is_group:
         builder.row(
@@ -152,6 +158,9 @@ def get_profile_keyboard(is_group: bool = False, bot_username: str = None) -> In
         builder.row(
             InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", url=f"https://t.me/{bot_username}")
         )
+    builder.row(
+        InlineKeyboardButton(text="🏠 Hub Menu", callback_data="dm_home")
+    )
     return builder.as_markup()
 def get_leaderboard_keyboard(current_category: str) -> InlineKeyboardMarkup:
     import config

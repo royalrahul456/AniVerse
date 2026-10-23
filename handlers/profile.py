@@ -77,34 +77,47 @@ async def get_user_harem_cover(user: User, db: AsyncSession) -> str:
     return get_cover_media("dex")
 
 async def send_or_edit_harem(message_obj, cover_media: str, text: str, reply_markup, is_callback: bool):
+    # Telegram media caption character limit is 1024
+    safe_caption = text
+    if len(safe_caption) > 1020:
+        safe_caption = safe_caption[:1015] + "..."
+
     if is_callback:
-        try:
-            await message_obj.edit_media(InputMediaPhoto(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
-            return
-        except Exception:
+        if cover_media:
             try:
-                await message_obj.edit_media(InputMediaVideo(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
+                await message_obj.edit_media(InputMediaPhoto(media=cover_media, caption=safe_caption, parse_mode="HTML"), reply_markup=reply_markup)
+                return
+            except Exception:
+                try:
+                    await message_obj.edit_media(InputMediaVideo(media=cover_media, caption=safe_caption, parse_mode="HTML"), reply_markup=reply_markup)
+                    return
+                except Exception:
+                    pass
+
+        if getattr(message_obj, "photo", None) or getattr(message_obj, "video", None) or getattr(message_obj, "animation", None):
+            try:
+                await message_obj.edit_caption(caption=safe_caption, reply_markup=reply_markup, parse_mode="HTML")
                 return
             except Exception:
                 pass
-        if message_obj.photo or message_obj.video or message_obj.animation:
-            try:
-                await message_obj.edit_caption(caption=text, reply_markup=reply_markup, parse_mode="HTML")
-                return
-            except Exception:
-                pass
+
         try:
             await message_obj.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
             return
         except Exception:
             pass
-    try:
-        await message_obj.reply_photo(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
-    except Exception:
+
+    if cover_media:
         try:
-            await message_obj.reply_video(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+            await message_obj.reply_photo(cover_media, caption=safe_caption, parse_mode="HTML", reply_markup=reply_markup)
+            return
         except Exception:
-            await message_obj.reply(text, parse_mode="HTML", reply_markup=reply_markup)
+            try:
+                await message_obj.reply_video(cover_media, caption=safe_caption, parse_mode="HTML", reply_markup=reply_markup)
+                return
+            except Exception:
+                pass
+    await message_obj.reply(text, parse_mode="HTML", reply_markup=reply_markup)
 
 @router.callback_query(F.data == "noop")
 async def cb_noop(callback: CallbackQuery):
@@ -295,11 +308,13 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
     )
     rank_res = await db.execute(rank_stmt)
     all_ranks = rank_res.scalars().all()
-    position = 1
-    for idx, uid in enumerate(all_ranks):
-        if uid == user.user_id:
-            position = idx + 1
-            break
+    position = "Unranked"
+    if unique_owned > 0:
+        position = f"#{len(all_ranks)}"
+        for idx, uid in enumerate(all_ranks):
+            if uid == user.user_id:
+                position = f"#{idx + 1}"
+                break
 
     now = datetime.datetime.utcnow()
     is_premium = user.premium_until and user.premium_until > now
@@ -326,7 +341,7 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
         f"{breakdown_text}\n"
         f"{cfg['rarity_footer']}\n\n"
         f"{cfg['rank_header']}\n"
-        f"{bullet} {get_emoji('trophy')} Position: #{position}\n"
+        f"{bullet} {get_emoji('trophy')} Position: {position}\n"
         f"{cfg['rank_footer']}\n"
         f"{cfg['prem_header']}\n"
         f"{premium_line}\n"
@@ -337,62 +352,101 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
 
 @router.message(Command("profile"))
 async def cmd_profile(message: Message, db: AsyncSession):
-    user = await get_or_create_user(db, message.from_user.id, message.from_user.username, message.from_user.first_name)
+    target_user_id = message.from_user.id
+    target_username = message.from_user.username
+    target_first_name = message.from_user.first_name
+
+    if message.reply_to_message and message.reply_to_message.from_user and not message.reply_to_message.from_user.is_bot:
+        target_user_id = message.reply_to_message.from_user.id
+        target_username = message.reply_to_message.from_user.username
+        target_first_name = message.reply_to_message.from_user.first_name
+    else:
+        parts = message.text.strip().split()
+        if len(parts) > 1:
+            arg = parts[1].strip()
+            if arg.isdigit():
+                target_user_id = int(arg)
+            elif arg.startswith("@"):
+                stmt = select(User).where(User.username.ilike(arg[1:]))
+                res = await db.execute(stmt)
+                u = res.scalar_one_or_none()
+                if u:
+                    target_user_id = u.user_id
+                    target_username = u.username
+                    target_first_name = u.first_name
+
+    user = await get_or_create_user(db, target_user_id, target_username, target_first_name)
     text = await build_profile_card(user, db)
     cover_photo = await get_user_harem_cover(user, db)
     is_group = message.chat.type != "private"
     bot_user = await message.bot.get_me()
-    kb = get_profile_keyboard(is_group=is_group, bot_username=bot_user.username)
+    kb = get_profile_keyboard(user_id=target_user_id, is_group=is_group, bot_username=bot_user.username)
     await send_or_edit_harem(message, cover_photo, text, kb, is_callback=False)
-@router.callback_query(F.data == "dm_profile")
+
+@router.callback_query(F.data.startswith("profile_view_") | (F.data == "dm_profile"))
 async def cb_profile(callback: CallbackQuery, db: AsyncSession):
-    user = await get_or_create_user(db, callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
+    if callback.data.startswith("profile_view_"):
+        target_id = int(callback.data.split("_")[2])
+    else:
+        target_id = callback.from_user.id
+    user = await get_or_create_user(db, target_id, callback.from_user.username, callback.from_user.first_name)
     text = await build_profile_card(user, db)
     cover_photo = await get_user_harem_cover(user, db)
     is_group = callback.message.chat.type != "private"
     bot_user = await callback.bot.get_me()
-    kb = get_profile_keyboard(is_group=is_group, bot_username=bot_user.username)
+    kb = get_profile_keyboard(user_id=target_id, is_group=is_group, bot_username=bot_user.username)
     await send_or_edit_harem(callback.message, cover_photo, text, kb, is_callback=True)
-    try:        await callback.answer()
+    try:
+        await callback.answer()
     except Exception:
         pass
 
-@router.message(Command("harem"))
+@router.message(Command("harem", "bag"))
 async def cmd_harem(message: Message, db: AsyncSession):
-    await render_bag_page(message.from_user.id, "All", 1, "anime", message, db, is_callback=False)
+    target_user_id = message.from_user.id
+    page = 1
+    rarity = "All"
+    sort_by = "anime"
+
+    if message.reply_to_message and message.reply_to_message.from_user and not message.reply_to_message.from_user.is_bot:
+        target_user_id = message.reply_to_message.from_user.id
+
+    parts = message.text.strip().split()
+    if len(parts) > 1:
+        for p in parts[1:]:
+            p_clean = p.strip()
+            if p_clean.isdigit():
+                val = int(p_clean)
+                if val > 100000:
+                    target_user_id = val
+                else:
+                    page = max(1, val)
+            elif p_clean.startswith("@"):
+                uname = p_clean[1:]
+                stmt = select(User).where(User.username.ilike(uname))
+                res = await db.execute(stmt)
+                u = res.scalar_one_or_none()
+                if u:
+                    target_user_id = u.user_id
+            elif p_clean.lower() in ["anime", "id", "name", "rarity"]:
+                sort_by = p_clean.lower()
+            else:
+                rarity = p_clean.title()
+
+    await render_bag_page(target_user_id, rarity, page, sort_by, message, db, is_callback=False)
 
 @router.callback_query(F.data.startswith("dm_bag_"))
 async def cb_bag(callback: CallbackQuery, db: AsyncSession):
     parts = callback.data.split("_")
     
-    owner_id = None
-    
     # 1. Sort Menu request: dm_bag_sort_menu_{user_id}_{rarity}_{page}_{sort_by}
     if "sort" in parts and "menu" in parts:
         idx = parts.index("menu")
         rem = parts[idx+1:]
-        if len(rem) >= 4 and rem[0].isdigit():
-            owner_id = int(rem[0])
-            rarity = rem[1]
-            page = int(rem[2])
-            sort_by = rem[3]
-        elif len(rem) >= 3:
-            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
-            rarity = rem[0]
-            page = int(rem[1])
-            sort_by = rem[2]
-        else:
-            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
-            rarity = "All"
-            page = 1
-            sort_by = "anime"
-
-        if callback.from_user.id != owner_id:
-            try:
-                await callback.answer(f"{get_emoji('warning')} This is not your harem! Use /harem to view yours.", show_alert=True)
-            except Exception:
-                pass
-            return
+        owner_id = int(rem[0]) if len(rem) >= 1 and rem[0].isdigit() else callback.from_user.id
+        rarity = rem[1] if len(rem) >= 2 else "All"
+        page = int(rem[2]) if len(rem) >= 3 and rem[2].isdigit() else 1
+        sort_by = rem[3] if len(rem) >= 4 else "anime"
 
         text = (
             "⇅ <b>SORT HAREM COLLECTION</b>\n\n"
@@ -414,22 +468,8 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
     if "rarity" in parts and "menu" in parts:
         idx = parts.index("menu")
         rem = parts[idx+1:]
-        if len(rem) >= 2 and rem[0].isdigit():
-            owner_id = int(rem[0])
-            sort_by = rem[1]
-        elif len(rem) >= 1:
-            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
-            sort_by = rem[0]
-        else:
-            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
-            sort_by = "anime"
-
-        if callback.from_user.id != owner_id:
-            try:
-                await callback.answer(f"{get_emoji('warning')} This is not your harem! Use /harem to view yours.", show_alert=True)
-            except Exception:
-                pass
-            return
+        owner_id = int(rem[0]) if len(rem) >= 1 and rem[0].isdigit() else callback.from_user.id
+        sort_by = rem[1] if len(rem) >= 2 else "anime"
 
         rarity_items = await get_all_rarity_items(db)
         text = (
@@ -449,39 +489,28 @@ async def cb_bag(callback: CallbackQuery, db: AsyncSession):
         return
 
     # 3. Standard bag pagination / view request: dm_bag_{user_id}_{rarity}_{page}_{sort_by}
+    owner_id = callback.from_user.id
+    rarity = "All"
+    page = 1
+    sort_by = "anime"
+
     if len(parts) >= 6 and parts[2].isdigit():
         owner_id = int(parts[2])
         rarity = parts[3]
         page = int(parts[4])
         sort_by = parts[5]
-    elif len(parts) >= 5:
+    elif len(parts) >= 5 and parts[2].isdigit():
+        owner_id = int(parts[2])
+        rarity = parts[3]
+        page = int(parts[4])
+        sort_by = "anime"
+    elif len(parts) >= 4:
         if parts[2].isdigit():
             owner_id = int(parts[2])
-            rarity = parts[3]
-            page = int(parts[4])
-            sort_by = "anime"
+            page = int(parts[3])
         else:
-            owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
             rarity = parts[2]
             page = int(parts[3])
-            sort_by = parts[4]
-    elif len(parts) == 4:
-        owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
-        rarity = parts[2]
-        page = int(parts[3])
-        sort_by = "anime"
-    else:
-        owner_id = get_harem_owner_id(callback.message) or callback.from_user.id
-        rarity = "All"
-        page = 1
-        sort_by = "anime"
-
-    if callback.from_user.id != owner_id:
-        try:
-            await callback.answer(f"{get_emoji('warning')} This is not your harem! Use /harem to view yours.", show_alert=True)
-        except Exception:
-            pass
-        return
 
     await render_bag_page(owner_id, rarity, page, sort_by, callback.message, db, is_callback=True)
     try:
@@ -495,7 +524,7 @@ async def render_bag_page(user_id: int, rarity: str, page: int, sort_by: str, me
     user = u_res.scalar_one_or_none()
     
     owner_name = escape_html(user.first_name) if (user and user.first_name) else "Trainer"
-    owner_header = f'⭐ <b><a href="tg://user?id={user_id}">{owner_name}</a>\'s Harem</b> ⭐f'
+    owner_header = f'⭐ <b><a href="tg://user?id={user_id}">{owner_name}</a>\'s Harem</b> ⭐'
     cover_photo = await get_user_harem_cover(user, db)
 
     stmt = (
@@ -545,8 +574,8 @@ async def render_bag_page(user_id: int, rarity: str, page: int, sort_by: str, me
             anime_groups[anime].append((c_id, c_name, c_rarity, u_cnt))
 
         total_anime_shows = len(anime_groups)
-        per_page_anime = 4
-        max_page = math.ceil(total_anime_shows / per_page_anime)
+        per_page_anime = 3
+        max_page = max(1, math.ceil(total_anime_shows / per_page_anime))
         page = max(1, min(page, max_page))
 
         anime_keys = list(anime_groups.keys())
@@ -567,8 +596,8 @@ async def render_bag_page(user_id: int, rarity: str, page: int, sort_by: str, me
                 lines.append(f"◈ [ {r_emoji} ] {c_id} {escape_html(c_name)} ×{u_cnt}")
     else:
         total_items = len(user_owned_rows)
-        per_page_flat = 15
-        max_page = math.ceil(total_items / per_page_flat)
+        per_page_flat = 10
+        max_page = max(1, math.ceil(total_items / per_page_flat))
         page = max(1, min(page, max_page))
 
         start_idx = (page - 1) * per_page_flat
@@ -1277,7 +1306,7 @@ async def cmd_settheme(message: Message, db: AsyncSession):
 
     await message.reply(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
-@router.callback_query(F.data == "cb_themes_menu")
+@router.callback_query(F.data.startswith("cb_themes_menu"))
 async def cb_themes_menu(callback: CallbackQuery, db: AsyncSession):
     user = await get_or_create_user(db, callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
     unlocked = [t.strip().lower() for t in (user.unlocked_themes or "default").split(",") if t.strip()]
