@@ -226,6 +226,14 @@ def build_help_text(is_admin: bool) -> str:
         "├─➩ /bid &lt;auc_id&gt; &lt;amount&gt; — Bid on active\n"
         "├─➩ /cancelauction &lt;auc_id&gt; — Cancel auction\n"
         "├─➩ /auctions — View active auctions\n"
+        "╰───────────────────────────╯\n\n"
+        "╭───「 🫂 Anime Social & Reactions 」───╮\n"
+        "├─➩ /hug &lt;reply/@user&gt; — Anime hug GIF\n"
+        "├─➩ /kiss &lt;reply/@user&gt; — Anime kiss GIF\n"
+        "├─➩ /pat &lt;reply/@user&gt; — Anime headpat GIF\n"
+        "├─➩ /slap &lt;reply/@user&gt; — Anime slap reaction\n"
+        "├─➩ /cuddle &lt;reply/@user&gt; — Anime cuddle GIF\n"
+        "├─➩ /poke &lt;reply/@user&gt; — Playful anime poke\n"
         "╰───────────────────────────╯"
     )
     if is_admin:

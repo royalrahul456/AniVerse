@@ -16,7 +16,7 @@ from sqlalchemy import select, delete, func
 import config
 from database.database import init_db, AsyncSessionLocal
 from database.models import Character, RarityType, UserDailyLimit, BotAdmin, GroupSettings, User
-from handlers import start, profile, catch, shop, games, trade, admin, xo, inline_query, redeem, auction
+from handlers import start, profile, catch, shop, games, trade, admin, xo, inline_query, redeem, auction, social
 
 if sys.platform == "win32":
     try:
@@ -106,6 +106,8 @@ ALL_BOT_COMMANDS = {
     "spawnsettings", "setspawn", "spawnchance", "changetime", "spawnrate", "spawnthreshold", "togglespawn",
     # Auction & Trade & Shop & Redeem
     "auction", "bid", "cancelauction", "auctions", "auc", "shop", "trade", "gen", "redeem",
+    # Anime Social & Roleplay
+    "hug", "kiss", "pat", "slap", "cuddle", "poke", "tickle", "kill",
     # Admin & Owner
     "give", "giv", "givechar", "givecoins", "transfersnatches", "transfersnatch", "transferall", "transfercatches",
     "addrarity", "delrarity", "deleterarity", "editrarityemoji", "editrarity",
@@ -446,6 +448,11 @@ async def main():
         BotCommand(command="balance", description="🪙 Check your coin balance"),
         BotCommand(command="chk", description="💳 Quick balance check"),
         BotCommand(command="gift", description="🎁 Gift a character to another trainer"),
+        BotCommand(command="hug", description="🫂 Give someone a warm anime hug"),
+        BotCommand(command="kiss", description="💋 Send a cute anime kiss"),
+        BotCommand(command="pat", description="🐱 Pat someone gently on the head"),
+        BotCommand(command="slap", description="👋 Anime slap reaction"),
+        BotCommand(command="cuddle", description="🤍 Cuddle warmly with someone"),
         BotCommand(command="give", description="👑 Grant character or coins (Owner only)"),
         BotCommand(command="shop", description="🛒 Shop profile themes & items"),
         BotCommand(command="addchar", description="➕ Add new character (Admin only)"),
@@ -502,6 +509,7 @@ async def main():
     dp.include_router(inline_query.router)
     dp.include_router(redeem.router)
     dp.include_router(auction.router)
+    dp.include_router(social.router)
 
     # background tasks
     async def auction_background_loop():
