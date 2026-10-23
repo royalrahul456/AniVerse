@@ -747,16 +747,16 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
     for idx in range(25):
         if status == "playing":
             if idx in revealed:
-                buttons.append(InlineKeyboardButton(text=f"{get_emoji('gem')}", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text="💎", callback_data="noop"))
             else:
                 buttons.append(InlineKeyboardButton(text="❓", callback_data=f"mines_click:{user_id}:{idx}"))
         else:
             if idx == hit_tile:
-                buttons.append(InlineKeyboardButton(text=f"{get_emoji('bomb')}", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text="💥", callback_data="noop"))
             elif idx in mines:
-                buttons.append(InlineKeyboardButton(text=f"{get_emoji('bomb')}", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text="💣", callback_data="noop"))
             elif idx in revealed:
-                buttons.append(InlineKeyboardButton(text=f"{get_emoji('gem')}", callback_data="noop"))
+                buttons.append(InlineKeyboardButton(text="💎", callback_data="noop"))
             else:
                 buttons.append(InlineKeyboardButton(text="🟢", callback_data="noop"))
 
@@ -768,8 +768,9 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
         current_reward = int(state["bet"] * current_multiplier)
         if len(revealed) >= 1:
             builder.row(InlineKeyboardButton(
-                text=f"{get_emoji('coin')} Cashout (+{current_reward:,} Coins)",
-                callback_data=f"mines_cashout:{user_id}"
+                text=f"🪙 Cashout (+{current_reward:,} Coins)",
+                callback_data=f"mines_cashout:{user_id}",
+                style="success"
             ))
     return builder.as_markup()
 
@@ -825,7 +826,7 @@ async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
                 f"{get_emoji('user')} Trainer: <b>{escape_html(first_name)}</b>\n"
                 f"{get_emoji('bomb')} Hit Tile: <b>#{idx}</b>\n"
                 f"💸 Lost Bet: <b>-{bet:,} coins</b>\n"
-                f"{get_emoji('coin')} New Balance: <b>{get_emoji('coin')} {user.coins:,} coins</b>"
+                f"{get_emoji('coin')} New Balance: <b>{user.coins:,} coins</b>"
             )
         )
         await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
@@ -852,7 +853,7 @@ async def handle_mines_click(callback: CallbackQuery, db: AsyncSession):
                     f"🌟 Result: <b>Cleared all safe tiles!</b>\n"
                     f"📈 Multiplier: <b>{multiplier}x</b>\n"
                     f"{get_emoji('coin')} Earnings: <b>+{potential_win:,} coins</b>\n"
-                    f"{get_emoji('coin')} New Balance: <b>{get_emoji('coin')} {user.coins:,} coins</b>"
+                    f"{get_emoji('coin')} New Balance: <b>{user.coins:,} coins</b>"
                 )
             )
             await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
@@ -920,7 +921,7 @@ async def handle_mines_cashout(callback: CallbackQuery, db: AsyncSession):
             f"{get_emoji('user')} Trainer: <b>{escape_html(first_name)}</b>\n"
             f"📈 Multiplier: <b>{multiplier}x</b>\n"
             f"{get_emoji('coin')} Earnings: <b>+{earnings:,} coins</b> (Profit: <b>+{profit:+,} coins</b>)\n"
-            f"{get_emoji('coin')} New Balance: <b>{get_emoji('coin')} {user.coins:,} coins</b>"
+            f"{get_emoji('coin')} New Balance: <b>{user.coins:,} coins</b>"
         )
     )
     await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)

@@ -269,7 +269,8 @@ def strip_tg_emojis(text: str) -> str:
 def enhance_reply_markup(markup):
     """Enhances buttons in InlineKeyboardMarkup with style colors (primary/success/danger)
     and attaches native icon_custom_emoji_id while ensuring fallback text with clean Unicode
-    emojis is always preserved."""
+    emojis is always preserved. Protects single-tile game buttons (e.g. Mines, XO) from
+    malformed empty text or duplicate icon rendering."""
     if not markup:
         return markup
     try:
@@ -284,34 +285,62 @@ def enhance_reply_markup(markup):
                     if not orig_text or not isinstance(orig_text, str):
                         continue
 
+                    cb_data = (btn.get("callback_data", "") if isinstance(btn, dict) else getattr(btn, "callback_data", "")) or ""
+
+                    # Check if this is a grid game tile (Mines 5x5, Tic-Tac-Toe, noop tiles, or single-character buttons)
+                    is_grid_tile = any(cb_data.startswith(prefix) for prefix in ["mines_click:", "xo_move:", "xo_cell:"]) or cb_data == "noop"
+
+                    if is_grid_tile:
+                        # Clean any tg-emoji tag and strictly preserve Unicode emoji without adding styles or icon IDs
+                        clean = strip_tg_emojis(orig_text).strip()
+                        if not clean:
+                            clean = "❓"
+                        if isinstance(btn, dict):
+                            btn["text"] = clean
+                            btn.pop("icon_custom_emoji_id", None)
+                            btn.pop("style", None)
+                        else:
+                            btn.text = clean
+                            try:
+                                btn.icon_custom_emoji_id = None
+                                btn.style = None
+                            except Exception:
+                                pass
+                        continue
+
                     # 1. Detect any <tg-emoji> tag or unicode emoji in button text
                     tg_match = re.search(r'<tg-emoji[^>]*emoji-id=["\']?(\d+)["\']?[^>]*>(.*?)</tg-emoji>', orig_text)
                     custom_id = None
                     emoji_char = None
+                    has_text_label = False
 
                     if tg_match:
                         custom_id = tg_match.group(1)
                         emoji_char = tg_match.group(2)
-                        clean_text = re.sub(r'<tg-emoji[^>]*>.*?</tg-emoji>', '', orig_text).strip()
-                        fallback_text = f"{emoji_char} {clean_text}".strip()
+                        label_text = re.sub(r'<tg-emoji[^>]*>.*?</tg-emoji>', '', orig_text).strip()
+                        fallback_text = f"{emoji_char} {label_text}".strip() if label_text else emoji_char
                     else:
-                        clean_text = orig_text.strip()
-                        fallback_text = orig_text
+                        label_text = orig_text.strip()
+                        fallback_text = orig_text.strip()
                         for em in SORTED_EMOJI_KEYS:
                             if em in orig_text:
                                 custom_id = EMOJI_MAPPING.get(em)
                                 emoji_char = em
-                                if clean_text.startswith(em):
-                                    candidate = clean_text[len(em):].strip()
-                                    if candidate:
-                                        clean_text = candidate
+                                if label_text.startswith(em):
+                                    cand = label_text[len(em):].strip()
+                                    if cand:
+                                        label_text = cand
                                 break
+
+                    # Determine if there is actual descriptive text accompanying the emoji
+                    if label_text and label_text != emoji_char and re.search(r'[a-zA-Z0-9]', label_text):
+                        has_text_label = True
 
                     # 2. Determine button color style if not already explicitly set
                     cur_style = btn.get("style", None) if isinstance(btn, dict) else getattr(btn, "style", None)
                     if not cur_style:
-                        combined = f"{orig_text} {btn.get('callback_data', '') if isinstance(btn, dict) else getattr(btn, 'callback_data', '')}".lower()
-                        if any(k in combined for k in ["claim", "accept", "pokedex", "animedex", "buy", "join", "confirm", "start", "collect", "redeem", "win", "agree", "done", "yes"]):
+                        combined = f"{orig_text} {cb_data}".lower()
+                        if any(k in combined for k in ["claim", "accept", "pokedex", "animedex", "buy", "join", "confirm", "start", "collect", "redeem", "win", "agree", "done", "yes", "cashout"]):
                             cur_style = "success"
                         elif any(k in combined for k in ["cancel", "decline", "delete", "close", "reject", "reset", "remove", "vip", "battle", "no", "stop"]):
                             cur_style = "danger"
@@ -323,11 +352,13 @@ def enhance_reply_markup(markup):
                         btn["_fallback_text"] = fallback_text
                         if cur_style:
                             btn["style"] = cur_style
-                        if custom_id and is_premium_emojis_enabled():
+                        # Only attach icon_custom_emoji_id if there is a real text label and custom_id
+                        if custom_id and has_text_label and is_premium_emojis_enabled():
                             btn["icon_custom_emoji_id"] = str(custom_id)
-                            btn["text"] = clean_text
+                            btn["text"] = label_text
                         else:
                             btn["text"] = fallback_text
+                            btn.pop("icon_custom_emoji_id", None)
                     else:
                         try:
                             setattr(btn, "_fallback_text", fallback_text)
@@ -338,14 +369,18 @@ def enhance_reply_markup(markup):
                                 btn.style = cur_style
                             except Exception:
                                 pass
-                        if custom_id and is_premium_emojis_enabled():
+                        if custom_id and has_text_label and is_premium_emojis_enabled():
                             try:
                                 btn.icon_custom_emoji_id = str(custom_id)
-                                btn.text = clean_text
+                                btn.text = label_text
                             except Exception:
                                 btn.text = fallback_text
                         else:
                             btn.text = fallback_text
+                            try:
+                                btn.icon_custom_emoji_id = None
+                            except Exception:
+                                pass
 
         # Also sanitize ReplyKeyboardMarkup
         kb = getattr(markup, "keyboard", None)
