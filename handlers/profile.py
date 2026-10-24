@@ -317,12 +317,7 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
 
     bullet = cfg["bullet"]
     breakdown_lines = []
-    max_rarity_display = 8
-    for idx, (r_name, r_cnt) in enumerate(rarity_counts):
-        if idx >= max_rarity_display:
-            remaining = len(rarity_counts) - max_rarity_display
-            breakdown_lines.append(f"{bullet} ➕ <i>+{remaining} more in /harem</i>")
-            break
+    for r_name, r_cnt in rarity_counts:
         emoji = get_rarity_emoji(r_name)
         breakdown_lines.append(f"{bullet} {emoji} {r_name}: <b>{r_cnt}</b>")
     breakdown_text = "\n".join(breakdown_lines) if breakdown_lines else f"{bullet} ⚪️ No characters yet!"
