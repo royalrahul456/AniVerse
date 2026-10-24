@@ -1473,7 +1473,14 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
         return
     is_owner_user = is_owner(message)
-    console_title = f"{get_emoji('crown')} AniVerse Owner Console" if is_owner_user else "⚙️ AniVerse Admin Console"
+    is_primary_owner = message.from_user and message.from_user.id in getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1])
+    is_coowner = message.from_user and message.from_user.id in getattr(config, "COOWNER_IDS", [])
+    if is_primary_owner:
+        console_title = f"{get_emoji('crown')} AniVerse Owner Console"
+    elif is_coowner:
+        console_title = "💎 AniVerse Co-Owner Console"
+    else:
+        console_title = "⚙️ AniVerse Admin Console"
     
     card = (
         f"╭───「 {console_title} 」───╮\n"
@@ -1531,7 +1538,14 @@ async def cb_admin_tools(callback: CallbackQuery, db: AsyncSession):
         return
 
     is_owner_user = callback.from_user.id in config.ADMIN_IDS
-    console_title = f"{get_emoji('crown')} AniVerse Owner Console" if is_owner_user else "⚙️ AniVerse Admin Console"
+    is_primary_owner = callback.from_user.id in getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1])
+    is_coowner = callback.from_user.id in getattr(config, "COOWNER_IDS", [])
+    if is_primary_owner:
+        console_title = f"{get_emoji('crown')} AniVerse Owner Console"
+    elif is_coowner:
+        console_title = "💎 AniVerse Co-Owner Console"
+    else:
+        console_title = "⚙️ AniVerse Admin Console"
 
     card = (
         f"╭───「 {console_title} 」───╮\n"
@@ -2305,7 +2319,7 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
 
     if message.reply_to_message:
         if len(parts) < 2:
-            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/promote &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/promote &lt;coowner, snradmin, or jradmin&gt;</code>", parse_mode="HTML")
             return
         role = parts[1].strip().lower()
         target_user_id = message.reply_to_message.from_user.id
@@ -2313,7 +2327,7 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
         target_first_name = message.reply_to_message.from_user.first_name
     else:
         if len(parts) < 3:
-            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/promote &lt;@username or user_id&gt; &lt;snradmin or jradmin&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/promote &lt;@username or user_id&gt; &lt;coowner, snradmin, or jradmin&gt;</code>", parse_mode="HTML")
             return
         target_str = parts[1].strip()
         role = parts[2].strip().lower()
@@ -2336,12 +2350,20 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
             await message.reply(f"{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
-    if role not in ["snradmin", "jradmin"]:
-        await message.reply(f"{get_emoji('error')} Invalid role! Choose either <code>snradmin</code> or <code>jradmin</code>.", parse_mode="HTML")
+    if role not in ["coowner", "snradmin", "jradmin"]:
+        await message.reply(f"{get_emoji('error')} Invalid role! Choose <code>coowner</code>, <code>snradmin</code>, or <code>jradmin</code>.", parse_mode="HTML")
         return
 
-    if target_user_id in config.ADMIN_IDS:
-        await message.reply(f"{get_emoji('error')} This user is a bot owner! They already have full privileges.")
+    if role == "coowner" and message.from_user.id not in getattr(config, "OWNER_IDS", [config.ADMIN_IDS[0]]):
+        await message.reply(f"{get_emoji('no_entry')} Only the Bot Owner & Creator can promote someone to <code>coowner</code>!", parse_mode="HTML")
+        return
+
+    if target_user_id in getattr(config, "OWNER_IDS", []):
+        await message.reply(f"{get_emoji('error')} This user is the Bot Owner! They already have full privileges.")
+        return
+
+    if target_user_id in getattr(config, "COOWNER_IDS", []) and role == "coowner":
+        await message.reply(f"{get_emoji('error')} This user is already a Co-Owner!")
         return
 
     if not target_first_name:
@@ -2365,6 +2387,12 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
         db.add(admin_item)
 
     await db.commit()
+
+    if role == "coowner":
+        if target_user_id not in config.COOWNER_IDS:
+            config.COOWNER_IDS.append(target_user_id)
+        if target_user_id not in config.ADMIN_IDS:
+            config.ADMIN_IDS.append(target_user_id)
 
     text = (
         f"{get_emoji('success')} <b>PROMOTION SUCCESSFUL!</b>\n\n"
@@ -2439,11 +2467,23 @@ async def cmd_demote(message: Message, db: AsyncSession):
             await message.reply(f"{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
+    if target_user_id in getattr(config, "OWNER_IDS", []):
+        await message.reply(f"{get_emoji('error')} You cannot demote the Bot Owner!")
+        return
+
+    if target_user_id in getattr(config, "COOWNER_IDS", []) and message.from_user.id not in getattr(config, "OWNER_IDS", []):
+        await message.reply(f"{get_emoji('error')} Only the Bot Owner can demote a Co-Owner!")
+        return
+
     stmt = delete(BotAdmin).where(BotAdmin.user_id == target_user_id)
     res = await db.execute(stmt)
     
     if res.rowcount > 0:
         await db.commit()
+        if target_user_id in getattr(config, "COOWNER_IDS", []):
+            config.COOWNER_IDS.remove(target_user_id)
+        if target_user_id in config.ADMIN_IDS and target_user_id not in getattr(config, "OWNER_IDS", []):
+            config.ADMIN_IDS.remove(target_user_id)
         if not target_first_name:
             target_first_name = f"User {target_user_id}"
         await message.reply(f"{get_emoji('success')} Successfuly demoted <a href=\"tg://user?id={target_user_id}\">{escape_html(target_first_name)}</a>! They no longer have bot admin privileges.", parse_mode="HTML")
@@ -2474,16 +2514,37 @@ async def cmd_adminlist(message: Message, db: AsyncSession):
             user_map[u.user_id] = u
 
     owners_list = []
-    for o_id in config.ADMIN_IDS:
+    owner_ids = getattr(config, "OWNER_IDS", [config.ADMIN_IDS[0]] if config.ADMIN_IDS else [])
+    for o_id in owner_ids:
         stmt_u = select(User).where(User.user_id == o_id)
         res_u = await db.execute(stmt_u)
         user_u = res_u.scalar_one_or_none()
         name = escape_html(user_u.first_name) if user_u else f"Owner ID {o_id}"
-        owners_list.append(f"• {name} (<code>{o_id}</code>)")
+        uname = f" (@{user_u.username})" if (user_u and user_u.username) else ""
+        owners_list.append(f"• {name}{uname} (<code>{o_id}</code>)")
 
+    coowners_list = []
+    coowner_ids = list(getattr(config, "COOWNER_IDS", []))
+    for a in admins:
+        if a.role == "coowner" and a.user_id not in coowner_ids:
+            coowner_ids.append(a.user_id)
+    for c_id in coowner_ids:
+        stmt_u = select(User).where(User.user_id == c_id)
+        res_u = await db.execute(stmt_u)
+        user_u = res_u.scalar_one_or_none()
+        def_info = config.DEFAULT_BOT_ADMINS.get(c_id, {})
+        first_name = user_u.first_name if (user_u and user_u.first_name) else def_info.get("first_name", f"Co-Owner {c_id}")
+        uname = user_u.username if (user_u and user_u.username) else def_info.get("username", "")
+        name = escape_html(first_name)
+        username_text = f" (@{uname})" if uname else ""
+        coowners_list.append(f"• {name}{username_text} (<code>{c_id}</code>)")
+
+    executive_ids = set(owner_ids) | set(coowner_ids) | set(config.ADMIN_IDS)
     snr_list = []
     jr_list = []
     for a in admins:
+        if a.user_id in executive_ids or a.role == "coowner":
+            continue
         u = user_map.get(a.user_id)
         def_info = config.DEFAULT_BOT_ADMINS.get(a.user_id, {})
         first_name = u.first_name if (u and u.first_name) else def_info.get("first_name", f"Admin {a.user_id}")
@@ -2499,11 +2560,15 @@ async def cmd_adminlist(message: Message, db: AsyncSession):
 
     text = f"{get_emoji('crown')} <b>ANIVERSE BOT ADMINISTRATIVE STAFF</b>\n\n"
     
-    text += "🛡️ <b>Owners & Creators:</b>\n"
+    text += "👑 <b>Owner & Creator:</b>\n"
     if owners_list:
         text += format_blockquote("\n".join(owners_list)) + "\n\n"
     else:
         text += "• None\n\n"
+
+    if coowners_list:
+        text += "💎 <b>Co-Owners:</b>\n"
+        text += format_blockquote("\n".join(coowners_list)) + "\n\n"
 
     text += "🛡️ <b>Senior Admins (snradmin):</b>\n"
     if snr_list:

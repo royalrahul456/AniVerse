@@ -476,7 +476,7 @@ async def cb_xo_move(callback: CallbackQuery, db: AsyncSession):
             return
 
         # AI Move
-        is_owner = (config.ADMIN_IDS and user_id == config.ADMIN_IDS[0])
+        is_owner = (config.ADMIN_IDS and user_id in config.ADMIN_IDS)
         ai_move = get_ai_move(board, difficulty, is_owner)
         board[ai_move] = "O"
         winner = check_winner(board)
