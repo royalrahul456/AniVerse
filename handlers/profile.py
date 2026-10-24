@@ -27,6 +27,7 @@ from keyboards.inline import (
     get_harem_sorting_keyboard
 )
 from handlers.start import get_or_create_user
+from utils.emoji_patch import strip_tg_emojis
 
 router = Router()
 
@@ -76,11 +77,32 @@ async def get_user_harem_cover(user: User, db: AsyncSession) -> str:
                 return char.image_url
     return get_cover_media("dex")
 
+def make_safe_caption(text: str, max_limit: int = 1020) -> str:
+    """Ensures caption strictly fits within Telegram's 1024 character limit
+    without truncating or corrupting HTML tags."""
+    if not text or len(text) <= max_limit:
+        return text
+    # 1. Strip <tg-emoji> tags to convert custom emojis to Unicode emojis, shrinking text by 50-70%
+    stripped = strip_tg_emojis(text)
+    if len(stripped) <= max_limit:
+        return stripped
+    # 2. If still over limit, truncate cleanly at newline boundary
+    cut_idx = stripped.rfind("\n", 0, max_limit - 4)
+    if cut_idx > 0:
+        truncated = stripped[:cut_idx] + "\n..."
+    else:
+        truncated = stripped[:max_limit - 4] + "..."
+    # 3. Close any open HTML tags cleanly
+    for tag in ["b", "i", "code", "blockquote", "s", "u"]:
+        open_count = truncated.count(f"<{tag}>") + truncated.count(f"<{tag} ")
+        close_count = truncated.count(f"</{tag}>")
+        if open_count > close_count:
+            truncated += f"</{tag}>" * (open_count - close_count)
+    return truncated
+
 async def send_or_edit_harem(message_obj, cover_media: str, text: str, reply_markup, is_callback: bool):
     # Telegram media caption character limit is 1024
-    safe_caption = text
-    if len(safe_caption) > 1020:
-        safe_caption = safe_caption[:1015] + "..."
+    safe_caption = make_safe_caption(text)
 
     if is_callback:
         if cover_media:
@@ -201,7 +223,7 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
         },
         "gold": {
             "top_border": f"╭───「 {get_emoji('crown')} Gold VIP Profile 」───╮",
-            "bullet": f"├─{get_emoji('crown')}",
+            "bullet": "├─👑",
             "progress_filled": "🪙",
             "progress_empty": "🔸",
             "rarity_header": "╭─ Rarity Breakdown ─",
@@ -295,7 +317,12 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
 
     bullet = cfg["bullet"]
     breakdown_lines = []
-    for r_name, r_cnt in rarity_counts:
+    max_rarity_display = 8
+    for idx, (r_name, r_cnt) in enumerate(rarity_counts):
+        if idx >= max_rarity_display:
+            remaining = len(rarity_counts) - max_rarity_display
+            breakdown_lines.append(f"{bullet} ➕ <i>+{remaining} more in /harem</i>")
+            break
         emoji = get_rarity_emoji(r_name)
         breakdown_lines.append(f"{bullet} {emoji} {r_name}: <b>{r_cnt}</b>")
     breakdown_text = "\n".join(breakdown_lines) if breakdown_lines else f"{bullet} ⚪️ No characters yet!"
