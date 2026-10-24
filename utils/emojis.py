@@ -680,9 +680,14 @@ def get_clean_emoji(key: str) -> str:
     clean_key = key.replace("️", "") if isinstance(key, str) else key
     return DEFAULT_EMOJIS.get(key, DEFAULT_EMOJIS.get(clean_key, key))
 
-def get_emoji(key: str, for_button: bool = False) -> str:
+def get_plain_emoji(key: str) -> str:
+    """Get clean Unicode emoji without any HTML or custom emoji markup (for buttons, alerts, popups, plain text)."""
+    clean_key = key.replace("️", "") if isinstance(key, str) else key
+    return DEFAULT_EMOJIS.get(key, DEFAULT_EMOJIS.get(clean_key, key))
+
+def get_emoji(key: str, for_button: bool = False, for_alert: bool = False) -> str:
     """Get the emoji for a given key or unicode character.
-    If for_button is True, always returns clean unicode emoji (Telegram buttons do not support custom emojis).
+    If for_button or for_alert is True, always returns clean unicode emoji (Telegram buttons and alert popups do not support custom emojis).
     If premium custom emojis are enabled and an ID is available,
     returns <tg-emoji emoji-id="{id}">{emoji}</tg-emoji>.
     Otherwise, returns the unicode emoji fallback.
@@ -691,7 +696,7 @@ def get_emoji(key: str, for_button: bool = False) -> str:
     clean_key = key.replace("️", "") if isinstance(key, str) else key
     fallback = DEFAULT_EMOJIS.get(key, DEFAULT_EMOJIS.get(clean_key, key))
 
-    if for_button:
+    if for_button or for_alert:
         return fallback
 
     # If premium custom emojis are disabled, ALWAYS return the safe unicode fallback

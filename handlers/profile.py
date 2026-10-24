@@ -1,4 +1,4 @@
-from utils.emojis import get_emoji
+from utils.emojis import get_emoji, get_plain_emoji
 import random
 import math
 import datetime
@@ -664,7 +664,7 @@ async def cb_harem_showcase(callback: CallbackQuery, db: AsyncSession):
     # Ownership check — user_id is embedded directly in the callback data
     if callback.from_user.id != user_id:
         try:
-            await callback.answer(f"{get_emoji('warning')} This is not your showcase! Use /harem to view yours.", show_alert=True)
+            await callback.answer(f"{get_plain_emoji('warning')} This is not your showcase! Use /harem to view yours.", show_alert=True)
         except Exception:
             pass
         return
@@ -864,7 +864,7 @@ async def cb_cid_page(callback: CallbackQuery, db: AsyncSession):
             variants.append(c)
     variants.sort(key=lambda x: x.id)
     if not variants:
-        await callback.answer(f"{get_emoji('error')} No variants found.", show_alert=True)
+        await callback.answer(f"{get_plain_emoji('error')} No variants found.", show_alert=True)
         return
 
     anime = variants[0].anime
@@ -920,7 +920,7 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
     char_res = await db.execute(char_stmt)
     character = char_res.scalar_one_or_none()
     if not character:
-        await callback.answer(f"{get_emoji('error')} Character not found.", show_alert=True)
+        await callback.answer(f"{get_plain_emoji('error')} Character not found.", show_alert=True)
         return
 
     stmt = (
@@ -936,7 +936,7 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
 
     if not rows:
         try:
-            await callback.answer(f"{get_emoji('error')} Nobody owns this character yet!", show_alert=True)
+            await callback.answer(f"{get_plain_emoji('error')} Nobody owns this character yet!", show_alert=True)
         except Exception:
             pass
         return
@@ -971,7 +971,7 @@ async def cb_check_back(callback: CallbackQuery, db: AsyncSession):
     char_res = await db.execute(char_stmt)
     character = char_res.scalar_one_or_none()
     if not character:
-        await callback.answer(f"{get_emoji('error')} Character not found.", show_alert=True)
+        await callback.answer(f"{get_plain_emoji('error')} Character not found.", show_alert=True)
         return
 
     r_emoji = get_rarity_emoji(character.rarity)
@@ -1396,13 +1396,13 @@ async def cb_set_theme(callback: CallbackQuery, db: AsyncSession):
     unlocked = [t.strip().lower() for t in (user.unlocked_themes or "default").split(",") if t.strip()]
 
     if theme_key not in unlocked:
-        await callback.answer(f"{get_emoji('error')} You haven't unlocked this theme yet!", show_alert=True)
+        await callback.answer(f"{get_plain_emoji('error')} You haven't unlocked this theme yet!", show_alert=True)
         return
 
     user.selected_theme = theme_key
     await db.commit()
 
-    await callback.answer(f"{get_emoji('success')} Applied theme successfully!", show_alert=True)
+    await callback.answer(f"{get_plain_emoji('success')} Applied theme successfully!", show_alert=True)
     
     theme_details = {
         "default": {"name": "Default Theme", "emoji": f"{get_emoji('trophy')}"},

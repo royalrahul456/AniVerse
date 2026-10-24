@@ -15,7 +15,8 @@ from aiogram.methods import (
     SendAudio,
     SendDocument,
     EditMessageCaption,
-    EditMessageMedia
+    EditMessageMedia,
+    AnswerCallbackQuery
 )
 from aiogram.exceptions import TelegramBadRequest
 import config
@@ -266,6 +267,16 @@ def strip_tg_emojis(text: str) -> str:
     cleaned = re.sub(r'</?tg-emoji[^>]*>', '', cleaned)
     return cleaned
 
+def strip_html_tags(text: str) -> str:
+    """Strips all HTML tags and <tg-emoji> wrappers, returning clean plain text suitable for alerts, popups, and buttons."""
+    if not isinstance(text, str) or not text:
+        return text
+    cleaned = re.sub(r'<tg-emoji[^>]*>(.*?)</tg-emoji>', r'\1', text, flags=re.DOTALL)
+    cleaned = re.sub(r'</?tg-emoji[^>]*>', '', cleaned)
+    cleaned = re.sub(r'<[^>]+>', '', cleaned)
+    cleaned = cleaned.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"').replace('&#39;', "'")
+    return cleaned
+
 def enhance_reply_markup(markup):
     """Sanitizes button text to ensure clean standard Unicode emojis are ALWAYS visible,
     strips any raw <tg-emoji> tags, and applies Telegram's vibrant button color styles
@@ -444,6 +455,11 @@ def patch_bot_emojis(bot: Bot):
     original_make_request = bot.session.make_request
 
     async def new_make_request(bot_instance, method, timeout=None):
+        # 0. Always sanitize callback answers (Telegram alerts/popups strictly accept plain text, no HTML tags)
+        if isinstance(method, AnswerCallbackQuery):
+            if method.text and isinstance(method.text, str):
+                method.text = strip_html_tags(method.text)
+
         # 1. Enhance button colors (styles) & try native custom emoji icon (with fallback preservation)
         if hasattr(method, "reply_markup") and method.reply_markup:
             enhance_reply_markup(method.reply_markup)
