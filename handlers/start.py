@@ -80,12 +80,10 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
     ping_ms = round((time.time() - start_ping_time) * 1000, 2)
     uptime_str = get_uptime_str()
     
-    from handlers.admin import is_admin_id
-    is_user_admin = await is_admin_id(message.from_user.id, db) if message.from_user else False
+    from keyboards.inline import get_dm_menu_keyboard
+    markup = get_dm_menu_keyboard(bot_username=bot_info.username)
 
     if message.chat.type == "private":
-        from keyboards.inline import get_dm_menu_keyboard
-        markup = get_dm_menu_keyboard(is_admin=is_user_admin)
         caption = (
             f"🍃 Greetings, <b>{escape_html(message.from_user.first_name if message.from_user else 'Trainer')}</b>! 🫧\n"
             + format_blockquote(
@@ -93,16 +91,10 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
                 "Snatch anime characters, build your harem,\n"
                 "earn coins, and dominate the leaderboards!\n\n"
                 f"⚡ <b>PING:</b> {ping_ms} ms | ⏳ <b>UPTIME:</b> {uptime_str}\n\n"
-                "💡 <i>Use the interactive menu buttons below to navigate!</i>"
+                "💡 <i>Use /help to view all available commands!</i>"
             )
         )
     else:
-        builder = InlineKeyboardBuilder()
-        builder.row(
-            InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"),
-            InlineKeyboardButton(text="⚡ Ping", callback_data="ping_bot")
-        )
-        markup = builder.as_markup()
         caption = (
             f"🍃 Greetings, I'm <b>AniVerse Bot</b> 🫧\n"
             + format_blockquote(
@@ -151,32 +143,17 @@ async def send_or_edit_start(message_obj, cover_media: str, text: str, reply_mar
 async def cb_dm_home(callback: CallbackQuery, db: AsyncSession):
     bot_info = await callback.bot.get_me()
     
-    from handlers.admin import is_admin_id
-    is_user_admin = await is_admin_id(callback.from_user.id, db) if callback.from_user else False
+    from keyboards.inline import get_dm_menu_keyboard
+    markup = get_dm_menu_keyboard(bot_username=bot_info.username)
 
-    if callback.message.chat.type == "private":
-        from keyboards.inline import get_dm_menu_keyboard
-        markup = get_dm_menu_keyboard(is_admin=is_user_admin)
-        caption = (
-            f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
-            + format_blockquote(
-                "Snatch anime characters, build your harem,\n"
-                "earn coins, and dominate the leaderboards!\n\n"
-                "Use /help to see all commands!"
-            )
+    caption = (
+        f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
+        + format_blockquote(
+            "Snatch anime characters, build your harem,\n"
+            "earn coins, and dominate the leaderboards!\n\n"
+            "Use /help to see all commands!"
         )
-    else:
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"))
-        markup = builder.as_markup()
-        caption = (
-            f"{get_emoji('party')} <b>Welcome to AniVerse Universe!</b>\n\n"
-            + format_blockquote(
-                "Snatch anime characters, build your harem,\n"
-                "earn coins, and dominate the leaderboards!\n\n"
-                "Use /help to see all commands!"
-            )
-        )
+    )
     
     await send_or_edit_start(callback.message, get_cover_media("start"), caption, markup, is_callback=True)
     await callback.answer()
@@ -327,17 +304,14 @@ async def cb_ping(callback: CallbackQuery):
     )
     
     bot_info = await callback.bot.get_me()
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{bot_info.username}?startgroup=true"),
-        InlineKeyboardButton(text="⚡ Ping", callback_data="ping_bot")
-    )
+    from keyboards.inline import get_dm_menu_keyboard
+    markup = get_dm_menu_keyboard(bot_username=bot_info.username)
     
     try:
         if callback.message.photo or callback.message.video or callback.message.animation:
-            await callback.message.edit_caption(caption=caption, reply_markup=builder.as_markup(), parse_mode="HTML")
+            await callback.message.edit_caption(caption=caption, reply_markup=markup, parse_mode="HTML")
         else:
-            await callback.message.edit_text(text=caption, reply_markup=builder.as_markup(), parse_mode="HTML")
+            await callback.message.edit_text(text=caption, reply_markup=markup, parse_mode="HTML")
         await callback.answer("Ping updated!", show_alert=False)
     except Exception:
         # Message content is the same, so Telegram throws MessageNotModified

@@ -3,35 +3,22 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from typing import List, Tuple
 import config
-def get_dm_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
-    """Generates the primary Hub menu keyboard for DMs in AniVerse."""
+def get_dm_menu_keyboard(bot_username: str = None, is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Generates the clean start menu keyboard for AniVerse without clutter or mini-apps."""
+    username = bot_username or "AniVerse1bot"
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))    )
-    builder.row(
-        InlineKeyboardButton(text=f"{get_emoji('user')} Profile", callback_data="dm_profile"),
-        InlineKeyboardButton(text=f"{get_emoji('trophy')} AnimeDex", callback_data="dm_dex_All_1")
+        InlineKeyboardButton(text="➕ Add to your GC", url=f"https://t.me/{username}?startgroup=true"),
+        InlineKeyboardButton(text="⚡ Ping", callback_data="ping_bot")
     )
-    builder.row(        InlineKeyboardButton(text="🎒 Harem / Bag", callback_data="dm_bag_All_1"),
-        InlineKeyboardButton(text="📊 Leaderboard", callback_data="dm_leaderboard")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🔄 Trade", callback_data="dm_trade_info"),
-        InlineKeyboardButton(text=f"{get_emoji('gift')} Redeem", callback_data="dm_redeem_info")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🛂 Shop", callback_data="dm_shop"),
-        InlineKeyboardButton(text="🎮 Games Center", callback_data="dm_games")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🔥 Streak", callback_data="dm_streak"),
+    guide_row = [
         InlineKeyboardButton(text="❓ Guide", callback_data="dm_help")
-    )
-    if is_admin:
-        builder.row(
-            InlineKeyboardButton(text="🛠️ Admin Tools", callback_data="admin_tools"),
-            InlineKeyboardButton(text="🔄 Transfer Snatches", callback_data="admin_transfersnatches")
+    ]
+    if getattr(config, "OFFICIAL_CHANNEL_LINK", None):
+        guide_row.append(
+            InlineKeyboardButton(text="📢 Updates", url=config.OFFICIAL_CHANNEL_LINK)
         )
+    builder.row(*guide_row)
     return builder.as_markup()
 
 def get_games_keyboard() -> InlineKeyboardMarkup:
@@ -150,14 +137,6 @@ def get_profile_keyboard(user_id: int = None, is_group: bool = False, bot_userna
         InlineKeyboardButton(text="🎨 Themes", callback_data=f"cb_themes_menu_{user_id}" if user_id else "cb_themes_menu"),
         InlineKeyboardButton(text="🎒 Harem", callback_data=harem_cb)
     )
-    if not is_group:
-        builder.row(
-            InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", web_app=WebAppInfo(url=f"{config.MINI_APP_URL}?v=2"))
-        )
-    elif bot_username:
-        builder.row(
-            InlineKeyboardButton(text="🎮 Play Games & Earn 🪙", url=f"https://t.me/{bot_username}")
-        )
     builder.row(
         InlineKeyboardButton(text="🏠 Hub Menu", callback_data="dm_home")
     )
