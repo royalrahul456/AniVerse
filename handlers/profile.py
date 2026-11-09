@@ -951,13 +951,22 @@ async def cb_who_has(callback: CallbackQuery, db: AsyncSession):
     )
 
     kb = get_check_back_keyboard(char_id)
-    try:
-        await callback.message.edit_caption(caption=text, parse_mode="HTML", reply_markup=kb)
-    except Exception:
+    if callback.inline_message_id:
         try:
-            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            await callback.bot.edit_message_caption(inline_message_id=callback.inline_message_id, caption=text, parse_mode="HTML", reply_markup=kb)
         except Exception:
-            pass
+            try:
+                await callback.bot.edit_message_text(inline_message_id=callback.inline_message_id, text=text, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
+    elif callback.message:
+        try:
+            await callback.message.edit_caption(caption=text, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            try:
+                await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
     try:
         await callback.answer()
     except Exception:
@@ -986,13 +995,22 @@ async def cb_check_back(callback: CallbackQuery, db: AsyncSession):
     )
     
     kb = get_check_character_keyboard(character.id)
-    try:
-        await callback.message.edit_caption(caption=card, parse_mode="HTML", reply_markup=kb)
-    except Exception:
+    if callback.inline_message_id:
         try:
-            await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
+            await callback.bot.edit_message_caption(inline_message_id=callback.inline_message_id, caption=card, parse_mode="HTML", reply_markup=kb)
         except Exception:
-            pass
+            try:
+                await callback.bot.edit_message_text(inline_message_id=callback.inline_message_id, text=card, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
+    elif callback.message:
+        try:
+            await callback.message.edit_caption(caption=card, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            try:
+                await callback.message.edit_text(card, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
     try:
         await callback.answer()
     except Exception:
