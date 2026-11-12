@@ -35,6 +35,21 @@ def is_owner(message: Message) -> bool:
         return True
     return False
 
+def is_primary_owner(message: Message) -> bool:
+    """Strictly checks if the user is the primary Bot Owner (excluding Co-Owners and other admins)."""
+    owner_ids = getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1] if config.ADMIN_IDS else [])
+    coowner_ids = set(getattr(config, "COOWNER_IDS", []))
+    # Filter out co-owners just in case
+    strictly_owners = [oid for oid in owner_ids if oid not in coowner_ids]
+    if not strictly_owners and owner_ids:
+        strictly_owners = owner_ids[:1]
+    
+    if message.from_user and message.from_user.id in strictly_owners:
+        return True
+    if message.sender_chat and message.sender_chat.id in strictly_owners:
+        return True
+    return False
+
 async def is_admin_id(user_id: int, db: AsyncSession) -> bool:
     if user_id in config.ADMIN_IDS or user_id in getattr(config, "DEFAULT_BOT_ADMINS", {}):
         return True
@@ -280,6 +295,154 @@ async def cmd_give(message: Message, db: AsyncSession):
                         await message.reply_photo(DEFAULT_FALLBACK_PHOTO, caption=card_text, parse_mode="HTML")
         except Exception:
             await message.reply(card_text, parse_mode="HTML")
+
+@router.message(Command("addallchars", "giveallchars", "addallcollection", "giveallcollection", "giveall"))
+async def cmd_addallcollection(message: Message, db: AsyncSession):
+    """Owner-only command (co-owners and admins excluded) to grant the entire character collection to a user."""
+    if not is_primary_owner(message):
+        sender_id = message.from_user.id if message.from_user else "Unknown"
+        await message.reply(
+            f"{get_emoji('no_entry')} <b>Access Denied!</b>\n\n"
+            + format_blockquote(
+                "This command is strictly reserved for the <b>Bot Owner & Creator</b>!\n"
+                f"<i>(Co-owners and Administrators are excluded)</i>\n"
+                f"Your User ID: <code>{sender_id}</code>"
+            ),
+            parse_mode="HTML"
+        )
+        return
+
+    text = message.text or ""
+    tokens = text.strip().split()
+    args = tokens[1:]
+    reply = message.reply_to_message
+
+    target_user_id = None
+    target_username = None
+    target_first_name = None
+
+    # Check mention entity in args if present
+    entity_user = None
+    if message.entities and len(args) >= 1:
+        for entity in message.entities:
+            if entity.type == "text_mention" and entity.user:
+                entity_str = text[entity.offset:entity.offset + entity.length]
+                if entity_str == args[0]:
+                    entity_user = entity.user
+                    break
+
+    if len(args) >= 1:
+        target_user_id, target_username, target_first_name = await resolve_target_user(args[0], db, message.bot, entity_user=entity_user)
+    elif reply and reply.from_user and not reply.from_user.is_bot:
+        target_user_id = reply.from_user.id
+        target_username = reply.from_user.username
+        target_first_name = reply.from_user.first_name
+    else:
+        card = (
+            f"{get_emoji('crown')} <b>OWNER ALL-COLLECTION GRANT CONSOLE</b>\n\n"
+            + format_blockquote(
+                "Grant every registered character in AniVerse to any user's collection!\n"
+                "👑 <i>Strictly Bot Owner only (Co-owners excluded).</i>\n\n"
+                f"{get_emoji('pointer')} <b>Usage Formats:</b>\n"
+                "• <code>/addallchars &lt;user_id or @username&gt;</code>\n"
+                "• Reply to a user's message with: <code>/addallchars</code>\n\n"
+                "<b>Aliases:</b>\n"
+                "• <code>/giveallchars</code>, <code>/addallcollection</code>, <code>/giveallcollection</code>, <code>/giveall</code>\n\n"
+                "<b>Examples:</b>\n"
+                "• <code>/addallchars 6593485710</code>\n"
+                "• <code>/addallchars @username</code>"
+            )
+        )
+        await message.reply(card, parse_mode="HTML")
+        return
+
+    if not target_user_id:
+        target_arg = args[0] if args else "N/A"
+        await message.reply(
+            f"{get_emoji('error')} Could not resolve target user from <code>{escape_html(target_arg)}</code>!\n"
+            "💡 <i>Make sure the user ID is correct or the user has started the bot so their username can be found.</i>",
+            parse_mode="HTML"
+        )
+        return
+
+    # Fetch all character IDs from database
+    char_res = await db.execute(select(Character.id))
+    all_char_ids = char_res.scalars().all()
+
+    total_characters_in_bot = len(all_char_ids)
+    if total_characters_in_bot == 0:
+        await message.reply(f"{get_emoji('warning')} There are no characters registered in the bot database!", parse_mode="HTML")
+        return
+
+    # Fetch IDs of characters already owned by the target user
+    owned_res = await db.execute(select(UserCharacter.character_id).where(UserCharacter.user_id == target_user_id))
+    already_owned_ids = set(owned_res.scalars().all())
+
+    missing_char_ids = [cid for cid in all_char_ids if cid not in already_owned_ids]
+
+    # Ensure user exists in users table
+    target_user_obj = await get_or_create_user(
+        db, target_user_id, target_username or "", target_first_name or f"User {target_user_id}"
+    )
+
+    if not missing_char_ids:
+        user_display = f"<a href=\"tg://user?id={target_user_id}\">{escape_html(target_user_obj.first_name)}</a>"
+        await message.reply(
+            f"{get_emoji('warning')} <b>Collection Already Complete!</b>\n\n"
+            + format_blockquote(
+                f"{user_display} already owns <b>ALL {total_characters_in_bot:,}</b> characters in the database!\n"
+                "No additional characters were added."
+            ),
+            parse_mode="HTML"
+        )
+        return
+
+    # Bulk insert missing characters
+    new_records = [
+        UserCharacter(
+            user_id=target_user_id,
+            character_id=cid,
+            nickname=None
+        )
+        for cid in missing_char_ids
+    ]
+    db.add_all(new_records)
+
+    # Update target user's total catches count
+    target_user_obj.total_catches = (target_user_obj.total_catches or 0) + len(missing_char_ids)
+    await db.commit()
+
+    user_display = f"<a href=\"tg://user?id={target_user_id}\">{escape_html(target_user_obj.first_name)}</a>" + (f" (@{target_user_obj.username})" if target_user_obj.username else "")
+    owner_name = escape_html(message.from_user.first_name if message.from_user else "Primary Owner")
+
+    card = (
+        f"{get_emoji('crown')} <b>ENTIRE COLLECTION GRANTED!</b> {get_emoji('sparkle')}\n\n"
+        + format_blockquote(
+            f"👤 <b>Recipient:</b> {user_display}\n"
+            f"🆔 <b>User ID:</b> <code>{target_user_id}</code>\n\n"
+            f"🎒 <b>Characters Added:</b> <code>+{len(missing_char_ids):,}</code>\n"
+            f"📦 <b>Previously Owned:</b> <code>{len(already_owned_ids):,}</code>\n"
+            f"🌟 <b>Total Database Characters:</b> <code>{total_characters_in_bot:,}</code>\n"
+            f"🎒 <b>New Total Snatches:</b> <code>{target_user_obj.total_catches:,}</code>\n\n"
+            f"👑 <b>Authorized By:</b> {owner_name} <i>(Owner Only)</i>"
+        )
+    )
+    await message.reply(card, parse_mode="HTML")
+
+    # Send DM notification to recipient if possible
+    try:
+        dm_notify = (
+            f"{get_emoji('crown')} <b>FULL COLLECTION UNLOCKED!</b>\n\n"
+            + format_blockquote(
+                f"The Bot Owner has granted you the <b>entire character collection</b>!\n\n"
+                f"• <b>Added:</b> <code>{len(missing_char_ids):,}</code> new characters\n"
+                f"• <b>Collection Status:</b> <code>100% COMPLETE ({total_characters_in_bot:,}/{total_characters_in_bot:,})</code>\n\n"
+                f"Explore your full harem using <code>/harem</code>!"
+            )
+        )
+        await message.bot.send_message(target_user_id, dm_notify, parse_mode="HTML")
+    except Exception:
+        pass
 
 async def resolve_target_user(target_str: str, db: AsyncSession, bot, entity_user=None) -> tuple[int | None, str | None, str | None]:
     """Resolves a user ID or @username into (user_id, username, first_name)."""
@@ -1515,6 +1678,7 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
             "│  ├─➩ <code>/editrarityemoji &lt;rarity&gt; &lt;emoji&gt;</code> — Edit emoji\n"
             "│  ├─➩ <code>/setcover &lt;mode&gt;</code> — Set covers (start, xo, dex)\n"
             "│  ├─➩ <code>/give &lt;user&gt; &lt;amount/char&gt;</code> — Give coins/chars\n"
+            "│  ├─➩ <code>/addallchars &lt;user&gt;</code> — Give all characters (Creator only)\n"
             "│  ├─➩ <code>/addpremium &lt;user&gt;</code> — Grant VIP status\n"
             "│  ├─➩ <code>/removepremium &lt;user&gt;</code> — Revoke VIP status\n"
         )        
@@ -1568,6 +1732,7 @@ async def cb_admin_tools(callback: CallbackQuery, db: AsyncSession):
         "│  │\n"
         f"│  {get_emoji('coin')} <b>Player & Wager controls:</b>\n"
         "│  ├─➩ <code>/give &lt;user&gt; &lt;amount/char&gt;</code> — Give coins/chars\n"
+        "│  ├─➩ <code>/addallchars &lt;user&gt;</code> — Give all characters (Creator only)\n"
         "│  ├─➩ <code>/addpremium &lt;user&gt;</code> — Grant VIP status\n"
         "│  ├─➩ <code>/removepremium &lt;user&gt;</code> — Revoke VIP status\n"
         "│  │\n"

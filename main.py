@@ -109,7 +109,8 @@ ALL_BOT_COMMANDS = {
     # Anime Social & Roleplay
     "hug", "kiss", "pat", "slap", "cuddle", "poke", "tickle", "kill", "wave", "smile", "yeet",
     # Admin & Owner
-    "give", "giv", "givechar", "givecoins", "transfersnatches", "transfersnatch", "transferall", "transfercatches",
+    "give", "giv", "givechar", "givecoins", "addallchars", "giveallchars", "addallcollection", "giveallcollection", "giveall",
+    "transfersnatches", "transfersnatch", "transferall", "transfercatches",
     "addrarity", "delrarity", "deleterarity", "editrarityemoji", "editrarity",
     "addtochance", "addchance", "removefromchance", "remchance", "delchance",
     "addtoclaim", "addclaim", "removefromclaim", "remclaim", "delclaim",
@@ -454,6 +455,7 @@ async def main():
         BotCommand(command="slap", description="👋 Anime slap reaction"),
         BotCommand(command="cuddle", description="🤍 Cuddle warmly with someone"),
         BotCommand(command="give", description="👑 Grant character or coins (Owner only)"),
+        BotCommand(command="addallchars", description="👑 Give all characters to user (Creator only)"),
         BotCommand(command="shop", description="🛒 Shop profile themes & items"),
         BotCommand(command="addchar", description="➕ Add new character (Admin only)"),
         BotCommand(command="editchar", description="✏️ Edit character details (Admin only)"),
