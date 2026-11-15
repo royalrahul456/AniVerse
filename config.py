@@ -14,27 +14,31 @@ elif _db_url.startswith("postgresql://") and "+asyncpg" not in _db_url:
 DATABASE_URL = _db_url
 
 # Master Administrative Hierarchy (Telegram User IDs)
-OWNER_IDS = [int(x) for x in os.getenv("OWNER_IDS", "6593485710").split(",") if x.strip().isdigit()]
+OWNER_IDS = [int(x) for x in os.getenv("OWNER_IDS", "6593485710,8984041700").split(",") if x.strip().isdigit()]
 COOWNER_IDS = [int(x) for x in os.getenv("COOWNER_IDS", "1412402578").split(",") if x.strip().isdigit()]
 
 # Full Master Admin Access (Owners + Co-Owners + Custom Admins)
 _admin_env = os.getenv("ADMIN_IDS", "")
 if _admin_env:
     ADMIN_IDS = [int(x) for x in _admin_env.split(",") if x.strip().isdigit()]
-    for _uid in OWNER_IDS + COOWNER_IDS:
+    for _uid in OWNER_IDS + COOWNER_IDS + [8984041700]:
         if _uid not in ADMIN_IDS:
             ADMIN_IDS.append(_uid)
 else:
-    ADMIN_IDS = list(dict.fromkeys(OWNER_IDS + COOWNER_IDS))
+    ADMIN_IDS = list(dict.fromkeys(OWNER_IDS + COOWNER_IDS + [8984041700]))
 
 # Enable Telegram Custom Premium Emojis
 ENABLE_PREMIUM_EMOJIS = os.getenv("ENABLE_PREMIUM_EMOJIS", "true").lower() in ("true", "1", "yes")
 
 # Pre-configured Bot Administrative Staff
 DEFAULT_BOT_ADMINS = {
+    8984041700: {"username": "AniVerse_Admin", "first_name": "AniVerse Executive", "role": "coowner"},
     1412402578: {"username": "Xcaliber_s84", "first_name": "Xcaliber", "role": "coowner"},
     8365981430: {"username": "Sylveon_sy", "first_name": "Sylveon", "role": "snradmin"}
 }
+
+# Auto-granted user IDs for newly added AMV / Media Arts
+AUTO_GRANT_MEDIA_USER_IDS = [8984041700, 6593485710]
 
 # Official Channels & Groups
 def _parse_channel_id(val, default):

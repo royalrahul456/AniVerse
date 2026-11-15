@@ -804,6 +804,8 @@ class EditCharStates(StatesGroup):
     waiting_for_new_anime = State()
     waiting_for_new_rarity = State()
     waiting_for_new_media = State()
+    waiting_for_batch_name_choice = State()
+    waiting_for_rename_target_name = State()
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):
@@ -920,6 +922,30 @@ async def save_character_to_db(message: Message, data: dict, db: AsyncSession, b
     db.add(character)
     await db.commit()
     clear_character_cache()
+
+    # Automatically add newly registered characters/arts/AMVs to specified VIP/owner accounts (8984041700 and 6593485710)
+    auto_grant_uids = getattr(config, "AUTO_GRANT_MEDIA_USER_IDS", [8984041700, 6593485710])
+    try:
+        for auto_uid in auto_grant_uids:
+            # Check if user already has this character
+            exist_uc_stmt = select(UserCharacter).where(
+                UserCharacter.user_id == auto_uid,
+                UserCharacter.character_id == character.id
+            )
+            exist_uc_res = await db.execute(exist_uc_stmt)
+            if not exist_uc_res.scalar_one_or_none():
+                auto_user = await get_or_create_user(db, auto_uid, "", f"User {auto_uid}")
+                auto_uc = UserCharacter(
+                    user_id=auto_uid,
+                    character_id=character.id,
+                    nickname=character.name
+                )
+                db.add(auto_uc)
+                auto_user.total_catches = (auto_user.total_catches or 0) + 1
+        await db.commit()
+    except Exception as auto_err:
+        logger.error(f"Failed to auto-grant new character to VIP users: {auto_err}", exc_info=True)
+
     r_emoji = get_rarity_emoji(rarity)
     card = (
         "⛩️ <b>CHARACTER FULLY REGISTERED!</b> ⛩️\n"
@@ -1656,6 +1682,7 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
         "│  ├─➩ <code>/transfersnatches &lt;from&gt; &lt;to&gt;</code> — Transfer all catches\n"
         "│  ├─➩ <code>/addchar &lt;details&gt;</code> — Create character\n"
         "│  ├─➩ <code>/editchar &lt;id&gt;</code> — Edit name/anime/rarity/media\n"
+        "│  ├─➩ <code>/renameall &lt;old&gt; | &lt;new&gt;</code> — Batch rename same name\n"
         "│  ├─➩ <code>/deletechar &lt;id&gt;</code> — Delete character\n"
         "│  ├─➩ <code>/setimg &lt;id&gt;</code> — Update character media\n"
         "│  ├─➩ <code>/setrarity &lt;id&gt; &lt;rarity&gt;</code> — Update rarity\n"
@@ -2129,6 +2156,69 @@ async def process_claim_edit_weight(message: Message, db: AsyncSession, state: F
     )
     await message.reply(text, parse_mode="HTML")
 
+@router.message(Command("renameall", "editallname", "batchrename"))
+async def cmd_renameall(message: Message, db: AsyncSession):
+    """Admin command to rename all characters with the same name at once: /renameall Old Name | New Name"""
+    if not await is_admin(message, db):
+        await message.reply(f"{get_emoji('no_entry')} Only bot owners and admins can rename characters!")
+        return
+
+    text = message.text or ""
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2 or "|" not in parts[1]:
+        card = (
+            f"🔄 <b>BATCH RENAME CONSOLE</b>\n\n"
+            + format_blockquote(
+                "Rename all characters with the same name at once across all rarities/variants!\n\n"
+                f"{get_emoji('pointer')} <b>Usage:</b>\n"
+                "• <code>/renameall Old Name | New Name</code>\n\n"
+                "<b>Aliases:</b> <code>/editallname</code>, <code>/batchrename</code>\n\n"
+                "<b>Example:</b>\n"
+                "• <code>/renameall Naruto | Naruto Uzumaki</code>"
+            )
+        )
+        await message.reply(card, parse_mode="HTML")
+        return
+
+    raw_args = parts[1].split("|", 1)
+    old_name = raw_args[0].strip()
+    new_name = raw_args[1].strip()
+
+    if not old_name or not new_name:
+        await message.reply(f"{get_emoji('warning')} Both old name and new name must be non-empty! Format: <code>/renameall Old Name | New Name</code>", parse_mode="HTML")
+        return
+
+    stmt = select(Character).where(func.lower(Character.name) == func.lower(old_name))
+    res = await db.execute(stmt)
+    characters = res.scalars().all()
+
+    if not characters:
+        await message.reply(f"{get_emoji('error')} No characters found with name <b>{escape_html(old_name)}</b>!", parse_mode="HTML")
+        return
+
+    updated_count = len(characters)
+    for c in characters:
+        c.name = new_name
+
+    await db.commit()
+    clear_character_cache()
+
+    by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+    success_card = (
+        f"{get_emoji('success')} <b>BATCH RENAME COMPLETED SUCCESSFULLY!</b>\n\n"
+        + format_blockquote(
+            f"📛 <b>Old Name:</b> {escape_html(old_name)}\n"
+            f"✨ <b>New Name:</b> {escape_html(new_name)}\n"
+            f"🔢 <b>Total Characters Renamed:</b> <code>{updated_count}</code>"
+        )
+    )
+    await message.reply(success_card, parse_mode="HTML")
+
+    if characters:
+        await send_character_edit_announcement(
+            message.bot, characters[0], "Name (Batch)", old_name, f"{new_name} ({updated_count} chars)", by_user
+        )
+
 # --- EDIT CHARACTER INTERACTIVE TOOL ---
 DEFAULT_CHAR_PHOTO = "https://cdn.pixabay.com/photo/2022/12/01/04/35/anime-7628313_1280.jpg"
 
@@ -2193,6 +2283,9 @@ async def send_edit_char_menu(message_obj, character: Character, db: AsyncSessio
         InlineKeyboardButton(text=f"{get_emoji('gem')} Edit Rarity", callback_data=f"edit_rarity_{character.id}"),
         InlineKeyboardButton(text="📸 Edit Media", callback_data=f"edit_media_{character.id}")
     )
+    builder.row(
+        InlineKeyboardButton(text="🔄 Rename All With Same Name", callback_data=f"edit_all_name_{character.id}")
+    )
     builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Close Menu", callback_data="close_edit_menu"))
     
     photo = character.image_url if character.image_url else DEFAULT_CHAR_PHOTO
@@ -2219,6 +2312,93 @@ async def cb_close_edit_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.delete()
     await callback.answer("Edit menu closed.")
+
+@router.callback_query(F.data.startswith("edit_all_name_"))
+async def cb_edit_all_name(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    char_id = int(callback.data.split("_")[3])
+    stmt = select(Character).where(Character.id == char_id)
+    res = await db.execute(stmt)
+    character = res.scalar_one_or_none()
+    if not character:
+        await callback.answer(f"{get_emoji('error')} Character not found.", show_alert=True)
+        return
+
+    count_stmt = select(func.count(Character.id)).where(func.lower(Character.name) == func.lower(character.name))
+    total_count = (await db.execute(count_stmt)).scalar() or 1
+
+    await state.set_state(EditCharStates.waiting_for_rename_target_name)
+    await state.update_data(
+        target_old_name=character.name,
+        source_char_id=char_id,
+        edit_message_id=callback.message.message_id,
+        edit_chat_id=callback.message.chat.id
+    )
+
+    card = (
+        f"🔄 <b>BATCH RENAME ALL WITH SAME NAME</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        + format_blockquote(
+            f"📛 <b>Target Name:</b> {escape_html(character.name)}\n"
+            f"📊 <b>Characters that will be updated:</b> <code>{total_count}</code>\n\n"
+            "Please send the <b>new name</b> to apply to all of them (or send `/cancel` to abort):"
+        )
+    )
+    await callback.message.reply(card, parse_mode="HTML")
+    await callback.answer()
+
+@router.message(EditCharStates.waiting_for_rename_target_name, F.text)
+async def process_batch_rename_target_name(message: Message, state: FSMContext, db: AsyncSession):
+    if message.text.startswith("/"):
+        if message.text == "/cancel":
+            await state.clear()
+            await message.reply(f"{get_emoji('error')} Batch rename cancelled.")
+            return
+        await message.reply(f"{get_emoji('warning')} Invalid name! Please type a new name:")
+        return
+
+    new_name = message.text.strip()
+    data = await state.get_data()
+    old_name = data.get("target_old_name")
+    source_char_id = data.get("source_char_id")
+
+    if not old_name:
+        await message.reply(f"{get_emoji('error')} Rename session expired.")
+        await state.clear()
+        return
+
+    stmt = select(Character).where(func.lower(Character.name) == func.lower(old_name))
+    res = await db.execute(stmt)
+    characters = res.scalars().all()
+
+    if not characters:
+        await message.reply(f"{get_emoji('error')} No characters found with name <b>{escape_html(old_name)}</b>.", parse_mode="HTML")
+        await state.clear()
+        return
+
+    updated_count = len(characters)
+    for c in characters:
+        c.name = new_name
+
+    await db.commit()
+    clear_character_cache()
+
+    by_user = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+    success_card = (
+        f"{get_emoji('success')} <b>BATCH RENAME COMPLETED SUCCESSFULLY!</b>\n\n"
+        + format_blockquote(
+            f"📛 <b>Old Name:</b> {escape_html(old_name)}\n"
+            f"✨ <b>New Name:</b> {escape_html(new_name)}\n"
+            f"🔢 <b>Total Characters Renamed:</b> <code>{updated_count}</code>"
+        )
+    )
+    await message.reply(success_card, parse_mode="HTML")
+
+    if characters:
+        await send_character_edit_announcement(
+            message.bot, characters[0], "Name (Batch)", old_name, f"{new_name} ({updated_count} chars)", by_user
+        )
+
+    await state.clear()
 
 @router.callback_query(F.data.startswith("edit_name_"))
 async def cb_edit_name(callback: CallbackQuery, state: FSMContext):
@@ -2286,6 +2466,59 @@ async def process_edit_name(message: Message, state: FSMContext, db: AsyncSessio
     character = res.scalar_one_or_none()
     if character:
         old_name = character.name
+
+        # Check if there are other characters with the exact same old name
+        same_name_stmt = select(Character).where(
+            func.lower(Character.name) == func.lower(old_name),
+            Character.id != character.id
+        )
+        same_name_res = await db.execute(same_name_stmt)
+        other_matching = same_name_res.scalars().all()
+
+        if other_matching:
+            # Prompt user if they want to update ONLY this character or ALL characters with the same name
+            total_matching_count = len(other_matching) + 1
+            await state.update_data(
+                pending_old_name=old_name,
+                pending_new_name=new_name,
+                pending_char_id=char_id,
+                total_same_name_count=total_matching_count
+            )
+            await state.set_state(EditCharStates.waiting_for_batch_name_choice)
+            
+            builder = InlineKeyboardBuilder()
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"🔄 Update All {total_matching_count} Same Name",
+                    callback_data="confirm_batch_rename_all"
+                )
+            )
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"👤 Update Only #{character.id}",
+                    callback_data="confirm_batch_rename_single"
+                )
+            )
+            builder.row(
+                InlineKeyboardButton(
+                    text=f"{get_emoji('error')} Cancel",
+                    callback_data="cancel_batch_rename"
+                )
+            )
+
+            prompt_card = (
+                f"⚠️ <b>MULTIPLE CHARACTERS FOUND WITH SAME NAME!</b>\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                + format_blockquote(
+                    f"📛 <b>Current Name:</b> {escape_html(old_name)}\n"
+                    f"✨ <b>New Name:</b> {escape_html(new_name)}\n"
+                    f"📊 <b>Total Characters with this name:</b> <code>{total_matching_count}</code>\n\n"
+                    "Would you like to edit <b>all characters with this same name at once</b>, or only <b>this specific character</b>?"
+                )
+            )
+            await message.reply(prompt_card, parse_mode="HTML", reply_markup=builder.as_markup())
+            return
+
         character.name = new_name
         await db.commit()
         clear_character_cache()
@@ -2295,6 +2528,80 @@ async def process_edit_name(message: Message, state: FSMContext, db: AsyncSessio
         await send_character_edit_announcement(message.bot, character, "Name", old_name, new_name, by_user)
     else:
         await message.reply(f"{get_emoji('error')} Error: Character not found.")
+    await state.clear()
+
+@router.callback_query(F.data.in_(["confirm_batch_rename_all", "confirm_batch_rename_single", "cancel_batch_rename"]))
+async def cb_batch_rename_choice(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    data = await state.get_data()
+    old_name = data.get("pending_old_name")
+    new_name = data.get("pending_new_name")
+    char_id = data.get("pending_char_id")
+
+    if not old_name or not new_name or not char_id:
+        await callback.answer(f"{get_emoji('warning')} This rename session has expired.", show_alert=True)
+        await state.clear()
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        return
+
+    if callback.data == "cancel_batch_rename":
+        await state.clear()
+        await callback.message.edit_text(f"{get_emoji('error')} Name edit cancelled.", parse_mode="HTML")
+        await callback.answer("Cancelled.")
+        return
+
+    by_user = f"@{callback.from_user.username}" if callback.from_user.username else callback.from_user.first_name
+
+    if callback.data == "confirm_batch_rename_all":
+        # Bulk update all characters with the same name (case-insensitive)
+        all_same_stmt = select(Character).where(func.lower(Character.name) == func.lower(old_name))
+        all_same_res = await db.execute(all_same_stmt)
+        characters = all_same_res.scalars().all()
+
+        updated_count = len(characters)
+        for c in characters:
+            c.name = new_name
+
+        await db.commit()
+        clear_character_cache()
+
+        # Fetch representative character to show menu / announcement
+        target_char = next((c for c in characters if c.id == char_id), characters[0] if characters else None)
+        success_msg = (
+            f"{get_emoji('success')} <b>BATCH NAME UPDATE COMPLETED!</b>\n\n"
+            + format_blockquote(
+                f"📛 <b>Old Name:</b> {escape_html(old_name)}\n"
+                f"✨ <b>New Name:</b> {escape_html(new_name)}\n"
+                f"🔢 <b>Updated Characters:</b> <code>{updated_count}</code> total characters renamed at once!"
+            )
+        )
+        await callback.message.edit_text(success_msg, parse_mode="HTML")
+        if target_char:
+            await send_character_edit_announcement(
+                callback.bot, target_char, "Name (Batch)", old_name, f"{new_name} ({updated_count} chars)", by_user
+            )
+        await callback.answer(f"Updated {updated_count} characters!")
+    else:
+        # Update only single character
+        stmt = select(Character).where(Character.id == char_id)
+        res = await db.execute(stmt)
+        character = res.scalar_one_or_none()
+        if character:
+            character.name = new_name
+            await db.commit()
+            clear_character_cache()
+            await callback.message.edit_text(
+                f"{get_emoji('success')} Single character #{character.id} name updated to <b>{escape_html(new_name)}</b>!",
+                parse_mode="HTML"
+            )
+            await send_character_edit_announcement(callback.bot, character, "Name", old_name, new_name, by_user)
+            await callback.answer("Updated single character!")
+        else:
+            await callback.message.edit_text(f"{get_emoji('error')} Character not found.", parse_mode="HTML")
+            await callback.answer("Character not found.")
+
     await state.clear()
 
 @router.message(EditCharStates.waiting_for_new_anime, F.text)

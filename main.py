@@ -117,7 +117,7 @@ ALL_BOT_COMMANDS = {
     "cancel", "addchar", "setimg", "updateimg", "setphoto", "deletechar", "delchar", "removechar",
     "setrarity", "spawn", "stats", "addpremium", "settag", "removepremium", "delpremium",
     "ownerhelp", "owner", "adminhelp", "admin", "spawnchances", "editspawnchance", "setspawnchance",
-    "editclaimchance", "setclaimchance", "editchar", "editcharacter", "promote", "demote",
+    "editclaimchance", "setclaimchance", "editchar", "editcharacter", "renameall", "editallname", "batchrename", "promote", "demote",
     "adminlist", "admins", "autoemojis", "toggleemojis", "togglepremiumemojis", "broadcast",
     "getemoji", "emojiname", "mapemoji", "setemojiid", "emojiaudit", "listmapped", "delmapped", "setcover"
 }
@@ -459,6 +459,7 @@ async def main():
         BotCommand(command="shop", description="🛒 Shop profile themes & items"),
         BotCommand(command="addchar", description="➕ Add new character (Admin only)"),
         BotCommand(command="editchar", description="✏️ Edit character details (Admin only)"),
+        BotCommand(command="renameall", description="🔄 Rename all chars with same name (Admin)"),
         BotCommand(command="deletechar", description="🗑️ Delete character (Owner only)"),
         BotCommand(command="setimg", description="🖼️ Update character media (Admin only)"),
         BotCommand(command="setcover", description="🖼️ Set bot cover banners (Owner only)"),
