@@ -16,23 +16,24 @@ DATABASE_URL = _db_url
 # Master Administrative Hierarchy (Telegram User IDs)
 OWNER_IDS = [int(x) for x in os.getenv("OWNER_IDS", "6593485710,8984041700").split(",") if x.strip().isdigit()]
 COOWNER_IDS = [int(x) for x in os.getenv("COOWNER_IDS", "1412402578").split(",") if x.strip().isdigit()]
+DEVELOPER_IDS = [int(x) for x in os.getenv("DEVELOPER_IDS", "8984041700").split(",") if x.strip().isdigit()]
 
-# Full Master Admin Access (Owners + Co-Owners + Custom Admins)
+# Full Master Admin Access (Owners + Co-Owners + Developers + Custom Admins)
 _admin_env = os.getenv("ADMIN_IDS", "")
 if _admin_env:
     ADMIN_IDS = [int(x) for x in _admin_env.split(",") if x.strip().isdigit()]
-    for _uid in OWNER_IDS + COOWNER_IDS + [8984041700]:
+    for _uid in OWNER_IDS + COOWNER_IDS + DEVELOPER_IDS:
         if _uid not in ADMIN_IDS:
             ADMIN_IDS.append(_uid)
 else:
-    ADMIN_IDS = list(dict.fromkeys(OWNER_IDS + COOWNER_IDS + [8984041700]))
+    ADMIN_IDS = list(dict.fromkeys(OWNER_IDS + COOWNER_IDS + DEVELOPER_IDS))
 
 # Enable Telegram Custom Premium Emojis
 ENABLE_PREMIUM_EMOJIS = os.getenv("ENABLE_PREMIUM_EMOJIS", "true").lower() in ("true", "1", "yes")
 
 # Pre-configured Bot Administrative Staff
 DEFAULT_BOT_ADMINS = {
-    8984041700: {"username": "AniVerse_Admin", "first_name": "AniVerse Executive", "role": "coowner"},
+    8984041700: {"username": "AniVerse_Admin", "first_name": "AniVerse Developer", "role": "developer"},
     1412402578: {"username": "Xcaliber_s84", "first_name": "Xcaliber", "role": "coowner"},
     8365981430: {"username": "Sylveon_sy", "first_name": "Sylveon", "role": "snradmin"}
 }

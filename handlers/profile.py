@@ -339,10 +339,14 @@ async def build_profile_card(user: User, db: AsyncSession) -> str:
                 break
 
     now = datetime.datetime.utcnow()
+    is_developer_user = user.user_id in getattr(config, "DEVELOPER_IDS", [])
     is_owner_user = user.user_id in getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1])
     is_coowner_user = user.user_id in getattr(config, "COOWNER_IDS", [])
-    is_premium = (user.premium_until and user.premium_until > now) or is_owner_user or is_coowner_user
-    if is_owner_user:
+    is_premium = (user.premium_until and user.premium_until > now) or is_owner_user or is_coowner_user or is_developer_user
+    if is_developer_user:
+        premium_line = f"{bullet} 🛠️ Lifetime Developer VIP"
+        tag_line = f"{bullet} 🏷️ Tag: {escape_html(user.premium_tag or 'Developer')}"
+    elif is_owner_user:
         premium_line = f"{bullet} {get_emoji('crown')} Lifetime Owner VIP"
         tag_line = f"{bullet} 🏷️ Tag: {escape_html(user.premium_tag or 'Owner')}"
     elif is_coowner_user:
@@ -1820,7 +1824,9 @@ async def cmd_vipplan(message: Message, db: AsyncSession):
     
     is_vip = (user.premium_until and user.premium_until > now) or is_owner_user
     
-    if user_id in getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1]):
+    if user_id in getattr(config, "DEVELOPER_IDS", []):
+        status_line = "🛠️ <b>Status:</b> <code>LIFETIME DEVELOPER VIP</code>"
+    elif user_id in getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1]):
         status_line = "👑 <b>Status:</b> <code>LIFETIME OWNER VIP</code>"
     elif user_id in getattr(config, "COOWNER_IDS", []):
         status_line = "👑 <b>Status:</b> <code>LIFETIME CO-OWNER VIP</code>"

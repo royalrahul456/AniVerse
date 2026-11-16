@@ -36,7 +36,7 @@ def is_owner(message: Message) -> bool:
     return False
 
 def is_primary_owner(message: Message) -> bool:
-    """Strictly checks if the user is the primary Bot Owner (excluding Co-Owners and other admins)."""
+    """Strictly checks if the user is the primary Bot Owner or Developer (excluding Co-Owners and other admins)."""
     owner_ids = getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1] if config.ADMIN_IDS else [])
     coowner_ids = set(getattr(config, "COOWNER_IDS", []))
     # Filter out co-owners just in case
@@ -44,9 +44,10 @@ def is_primary_owner(message: Message) -> bool:
     if not strictly_owners and owner_ids:
         strictly_owners = owner_ids[:1]
     
-    if message.from_user and message.from_user.id in strictly_owners:
+    dev_ids = getattr(config, "DEVELOPER_IDS", [])
+    if message.from_user and (message.from_user.id in strictly_owners or message.from_user.id in dev_ids):
         return True
-    if message.sender_chat and message.sender_chat.id in strictly_owners:
+    if message.sender_chat and (message.sender_chat.id in strictly_owners or message.sender_chat.id in dev_ids):
         return True
     return False
 
@@ -1662,9 +1663,12 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
     if not await is_admin(message, db):
         return
     is_owner_user = is_owner(message)
+    is_developer = message.from_user and message.from_user.id in getattr(config, "DEVELOPER_IDS", [])
     is_primary_owner = message.from_user and message.from_user.id in getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1])
     is_coowner = message.from_user and message.from_user.id in getattr(config, "COOWNER_IDS", [])
-    if is_primary_owner:
+    if is_developer:
+        console_title = "🛠️ AniVerse Developer Console"
+    elif is_primary_owner:
         console_title = f"{get_emoji('crown')} AniVerse Owner Console"
     elif is_coowner:
         console_title = "💎 AniVerse Co-Owner Console"
@@ -1729,9 +1733,12 @@ async def cb_admin_tools(callback: CallbackQuery, db: AsyncSession):
         return
 
     is_owner_user = callback.from_user.id in config.ADMIN_IDS
+    is_developer = callback.from_user.id in getattr(config, "DEVELOPER_IDS", [])
     is_primary_owner = callback.from_user.id in getattr(config, "OWNER_IDS", config.ADMIN_IDS[:1])
     is_coowner = callback.from_user.id in getattr(config, "COOWNER_IDS", [])
-    if is_primary_owner:
+    if is_developer:
+        console_title = "🛠️ AniVerse Developer Console"
+    elif is_primary_owner:
         console_title = f"{get_emoji('crown')} AniVerse Owner Console"
     elif is_coowner:
         console_title = "💎 AniVerse Co-Owner Console"
@@ -2791,7 +2798,7 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
 
     if message.reply_to_message:
         if len(parts) < 2:
-            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/promote &lt;coowner, snradmin, or jradmin&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> Reply to someone with <code>/promote &lt;developer, coowner, snradmin, or jradmin&gt;</code>", parse_mode="HTML")
             return
         role = parts[1].strip().lower()
         target_user_id = message.reply_to_message.from_user.id
@@ -2799,7 +2806,7 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
         target_first_name = message.reply_to_message.from_user.first_name
     else:
         if len(parts) < 3:
-            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/promote &lt;@username or user_id&gt; &lt;coowner, snradmin, or jradmin&gt;</code>", parse_mode="HTML")
+            await message.reply(f"{get_emoji('warning')} <b>Usage:</b> <code>/promote &lt;@username or user_id&gt; &lt;developer, coowner, snradmin, or jradmin&gt;</code>", parse_mode="HTML")
             return
         target_str = parts[1].strip()
         role = parts[2].strip().lower()
@@ -2822,12 +2829,12 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
             await message.reply(f"{get_emoji('error')} Please provide a valid `@username` or numerical `user_id`.", parse_mode="HTML")
             return
 
-    if role not in ["coowner", "snradmin", "jradmin"]:
-        await message.reply(f"{get_emoji('error')} Invalid role! Choose <code>coowner</code>, <code>snradmin</code>, or <code>jradmin</code>.", parse_mode="HTML")
+    if role not in ["developer", "coowner", "snradmin", "jradmin"]:
+        await message.reply(f"{get_emoji('error')} Invalid role! Choose <code>developer</code>, <code>coowner</code>, <code>snradmin</code>, or <code>jradmin</code>.", parse_mode="HTML")
         return
 
-    if role == "coowner" and message.from_user.id not in getattr(config, "OWNER_IDS", [config.ADMIN_IDS[0]]):
-        await message.reply(f"{get_emoji('no_entry')} Only the Bot Owner & Creator can promote someone to <code>coowner</code>!", parse_mode="HTML")
+    if role in ["developer", "coowner"] and message.from_user.id not in getattr(config, "OWNER_IDS", [config.ADMIN_IDS[0]]):
+        await message.reply(f"{get_emoji('no_entry')} Only the Bot Owner & Creator can promote someone to <code>{role}</code>!", parse_mode="HTML")
         return
 
     if target_user_id in getattr(config, "OWNER_IDS", []):
@@ -2836,6 +2843,10 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
 
     if target_user_id in getattr(config, "COOWNER_IDS", []) and role == "coowner":
         await message.reply(f"{get_emoji('error')} This user is already a Co-Owner!")
+        return
+
+    if target_user_id in getattr(config, "DEVELOPER_IDS", []) and role == "developer":
+        await message.reply(f"{get_emoji('error')} This user is already a Developer!")
         return
 
     if not target_first_name:
@@ -2860,7 +2871,14 @@ async def cmd_promote(message: Message, db: AsyncSession, bot):
 
     await db.commit()
 
-    if role == "coowner":
+    if role == "developer":
+        if not hasattr(config, "DEVELOPER_IDS"):
+            config.DEVELOPER_IDS = []
+        if target_user_id not in config.DEVELOPER_IDS:
+            config.DEVELOPER_IDS.append(target_user_id)
+        if target_user_id not in config.ADMIN_IDS:
+            config.ADMIN_IDS.append(target_user_id)
+    elif role == "coowner":
         if target_user_id not in config.COOWNER_IDS:
             config.COOWNER_IDS.append(target_user_id)
         if target_user_id not in config.ADMIN_IDS:
@@ -3011,11 +3029,27 @@ async def cmd_adminlist(message: Message, db: AsyncSession):
         username_text = f" (@{uname})" if uname else ""
         coowners_list.append(f"• {name}{username_text} (<code>{c_id}</code>)")
 
-    executive_ids = set(owner_ids) | set(coowner_ids) | set(config.ADMIN_IDS)
+    developers_list = []
+    developer_ids = list(getattr(config, "DEVELOPER_IDS", []))
+    for a in admins:
+        if a.role == "developer" and a.user_id not in developer_ids:
+            developer_ids.append(a.user_id)
+    for d_id in developer_ids:
+        stmt_u = select(User).where(User.user_id == d_id)
+        res_u = await db.execute(stmt_u)
+        user_u = res_u.scalar_one_or_none()
+        def_info = config.DEFAULT_BOT_ADMINS.get(d_id, {})
+        first_name = user_u.first_name if (user_u and user_u.first_name) else def_info.get("first_name", f"Developer {d_id}")
+        uname = user_u.username if (user_u and user_u.username) else def_info.get("username", "")
+        name = escape_html(first_name)
+        username_text = f" (@{uname})" if uname else ""
+        developers_list.append(f"• {name}{username_text} (<code>{d_id}</code>)")
+
+    executive_ids = set(owner_ids) | set(coowner_ids) | set(developer_ids) | set(config.ADMIN_IDS)
     snr_list = []
     jr_list = []
     for a in admins:
-        if a.user_id in executive_ids or a.role == "coowner":
+        if a.user_id in executive_ids or a.role in ["coowner", "developer"]:
             continue
         u = user_map.get(a.user_id)
         def_info = config.DEFAULT_BOT_ADMINS.get(a.user_id, {})
@@ -3037,6 +3071,10 @@ async def cmd_adminlist(message: Message, db: AsyncSession):
         text += format_blockquote("\n".join(owners_list)) + "\n\n"
     else:
         text += "• None\n\n"
+
+    if developers_list:
+        text += "🛠️ <b>Developers:</b>\n"
+        text += format_blockquote("\n".join(developers_list)) + "\n\n"
 
     if coowners_list:
         text += "💎 <b>Co-Owners:</b>\n"
