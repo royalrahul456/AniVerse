@@ -38,9 +38,6 @@ DEFAULT_BOT_ADMINS = {
     8365981430: {"username": "Sylveon_sy", "first_name": "Sylveon", "role": "snradmin"}
 }
 
-# Auto-granted user IDs for newly added AMV / Media Arts
-AUTO_GRANT_MEDIA_USER_IDS = [8984041700, 6593485710]
-
 # Official Channels & Groups
 def _parse_channel_id(val, default):
     val = str(val).strip()

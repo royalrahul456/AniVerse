@@ -924,29 +924,6 @@ async def save_character_to_db(message: Message, data: dict, db: AsyncSession, b
     await db.commit()
     clear_character_cache()
 
-    # Automatically add newly registered characters/arts/AMVs to specified VIP/owner accounts (8984041700 and 6593485710)
-    auto_grant_uids = getattr(config, "AUTO_GRANT_MEDIA_USER_IDS", [8984041700, 6593485710])
-    try:
-        for auto_uid in auto_grant_uids:
-            # Check if user already has this character
-            exist_uc_stmt = select(UserCharacter).where(
-                UserCharacter.user_id == auto_uid,
-                UserCharacter.character_id == character.id
-            )
-            exist_uc_res = await db.execute(exist_uc_stmt)
-            if not exist_uc_res.scalar_one_or_none():
-                auto_user = await get_or_create_user(db, auto_uid, "", f"User {auto_uid}")
-                auto_uc = UserCharacter(
-                    user_id=auto_uid,
-                    character_id=character.id,
-                    nickname=character.name
-                )
-                db.add(auto_uc)
-                auto_user.total_catches = (auto_user.total_catches or 0) + 1
-        await db.commit()
-    except Exception as auto_err:
-        logger.error(f"Failed to auto-grant new character to VIP users: {auto_err}", exc_info=True)
-
     r_emoji = get_rarity_emoji(rarity)
     card = (
         "⛩️ <b>CHARACTER FULLY REGISTERED!</b> ⛩️\n"
