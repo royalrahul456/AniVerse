@@ -5,6 +5,7 @@ import datetime
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputMediaVideo, InputMediaAnimation, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
@@ -105,27 +106,50 @@ async def send_or_edit_harem(message_obj, cover_media: str, text: str, reply_mar
     safe_caption = make_safe_caption(text)
 
     if is_callback:
-        if cover_media:
-            try:
-                await message_obj.edit_media(InputMediaPhoto(media=cover_media, caption=safe_caption, parse_mode="HTML"), reply_markup=reply_markup)
-                return
-            except Exception:
-                try:
-                    await message_obj.edit_media(InputMediaVideo(media=cover_media, caption=safe_caption, parse_mode="HTML"), reply_markup=reply_markup)
-                    return
-                except Exception:
-                    pass
-
-        if getattr(message_obj, "photo", None) or getattr(message_obj, "video", None) or getattr(message_obj, "animation", None):
+        # If current message already has media or caption, try editing caption first for instant response
+        has_media = bool(
+            getattr(message_obj, "photo", None)
+            or getattr(message_obj, "video", None)
+            or getattr(message_obj, "animation", None)
+            or getattr(message_obj, "caption", None)
+        )
+        if has_media:
             try:
                 await message_obj.edit_caption(caption=safe_caption, reply_markup=reply_markup, parse_mode="HTML")
                 return
+            except TelegramBadRequest as e:
+                if "not modified" in str(e).lower():
+                    return
+            except Exception:
+                pass
+
+        if cover_media:
+            for media_cls in (InputMediaPhoto, InputMediaVideo, InputMediaAnimation):
+                try:
+                    await message_obj.edit_media(media_cls(media=cover_media, caption=safe_caption, parse_mode="HTML"), reply_markup=reply_markup)
+                    return
+                except TelegramBadRequest as e:
+                    if "not modified" in str(e).lower():
+                        return
+                except Exception:
+                    continue
+
+        if has_media:
+            try:
+                await message_obj.edit_caption(caption=safe_caption, reply_markup=reply_markup, parse_mode="HTML")
+                return
+            except TelegramBadRequest as e:
+                if "not modified" in str(e).lower():
+                    return
             except Exception:
                 pass
 
         try:
             await message_obj.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
             return
+        except TelegramBadRequest as e:
+            if "not modified" in str(e).lower():
+                return
         except Exception:
             pass
 
@@ -138,7 +162,11 @@ async def send_or_edit_harem(message_obj, cover_media: str, text: str, reply_mar
                 await message_obj.reply_video(cover_media, caption=safe_caption, parse_mode="HTML", reply_markup=reply_markup)
                 return
             except Exception:
-                pass
+                try:
+                    await message_obj.reply_animation(cover_media, caption=safe_caption, parse_mode="HTML", reply_markup=reply_markup)
+                    return
+                except Exception:
+                    pass
     await message_obj.reply(text, parse_mode="HTML", reply_markup=reply_markup)
 
 @router.callback_query(F.data == "noop")
@@ -1238,7 +1266,7 @@ async def cmd_claimchance(message: Message, db: AsyncSession):
     )
     await message.reply(text, parse_mode="HTML")
 
-@router.message(Command("leaderboard"))
+@router.message(Command("leaderboard", "top"))
 async def cmd_leaderboard(message: Message, db: AsyncSession):
     parts = message.text.strip().split()
     category = "coins"
@@ -1246,18 +1274,25 @@ async def cmd_leaderboard(message: Message, db: AsyncSession):
         arg = parts[1].lower()
         if "catch" in arg or "snatch" in arg:
             category = "catches"
-        elif "prem" in arg:
+        elif "prem" in arg or "vip" in arg:
             category = "premium"
     await render_leaderboard(category, message, db, is_callback=False)
+
 @router.callback_query(F.data.startswith("dm_leaderboard"))
 async def cb_leaderboard(callback: CallbackQuery, db: AsyncSession):
-    parts = callback.data.split("_")
-    category = parts[2] if len(parts) > 2 else "coins"
-    await render_leaderboard(category, callback.message, db, is_callback=True)
     try:
         await callback.answer()
     except Exception:
         pass
+    parts = callback.data.split("_")
+    category_raw = parts[2].lower() if len(parts) > 2 else "coins"
+    if "catch" in category_raw or "snatch" in category_raw:
+        category = "catches"
+    elif "prem" in category_raw or "vip" in category_raw:
+        category = "premium"
+    else:
+        category = "coins"
+    await render_leaderboard(category, callback.message, db, is_callback=True)
 
 async def render_leaderboard(category: str, message_obj, db: AsyncSession, is_callback: bool = False):
     category = category.lower()
@@ -1309,27 +1344,85 @@ async def render_leaderboard(category: str, message_obj, db: AsyncSession, is_ca
         + format_blockquote(body_content) + "\n\n"
         f"━━━━━━━━━━━━━━━━━━━━"
     )
+    safe_caption = make_safe_caption(text)
     cover_media = get_cover_media("leaderboard")
     kb = get_leaderboard_keyboard(category)
     if is_callback:
-        try:
-            await message_obj.edit_media(InputMediaPhoto(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=kb)
-        except Exception:
+        # First priority: If message already has media (photo/video/animation/caption), edit caption and keyboard directly
+        has_media = bool(
+            getattr(message_obj, "photo", None)
+            or getattr(message_obj, "video", None)
+            or getattr(message_obj, "animation", None)
+            or getattr(message_obj, "caption", None)
+        )
+        if has_media:
             try:
-                await message_obj.edit_media(InputMediaVideo(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=kb)
+                await message_obj.edit_caption(caption=safe_caption, reply_markup=kb, parse_mode="HTML")
+                return
+            except TelegramBadRequest as e:
+                if "not modified" in str(e).lower():
+                    return
+            except Exception:
+                pass
+
+        # Second priority: If message is plain text, edit text directly
+        if getattr(message_obj, "text", None):
+            try:
+                await message_obj.edit_text(text, parse_mode="HTML", reply_markup=kb)
+                return
+            except TelegramBadRequest as e:
+                if "not modified" in str(e).lower():
+                    return
+            except Exception:
+                pass
+
+        # Fallback 1: try edit_caption
+        try:
+            await message_obj.edit_caption(caption=safe_caption, reply_markup=kb, parse_mode="HTML")
+            return
+        except TelegramBadRequest as e:
+            if "not modified" in str(e).lower():
+                return
+        except Exception:
+            pass
+
+        # Fallback 2: try edit_text
+        try:
+            await message_obj.edit_text(text, parse_mode="HTML", reply_markup=kb)
+            return
+        except TelegramBadRequest as e:
+            if "not modified" in str(e).lower():
+                return
+        except Exception:
+            pass
+
+        # Fallback 3: edit_media across Photo, Video, Animation
+        if cover_media:
+            for media_cls in (InputMediaPhoto, InputMediaVideo, InputMediaAnimation):
+                try:
+                    await message_obj.edit_media(media_cls(media=cover_media, caption=safe_caption, parse_mode="HTML"), reply_markup=kb)
+                    return
+                except TelegramBadRequest as e:
+                    if "not modified" in str(e).lower():
+                        return
+                except Exception:
+                    continue
+    else:
+        if cover_media:
+            try:
+                await message_obj.reply_photo(cover_media, caption=safe_caption, parse_mode="HTML", reply_markup=kb)
+                return
             except Exception:
                 try:
-                    await message_obj.edit_text(text, parse_mode="HTML", reply_markup=kb)
+                    await message_obj.reply_video(cover_media, caption=safe_caption, parse_mode="HTML", reply_markup=kb)
+                    return
                 except Exception:
-                    pass
-    else:
-        try:
-            await message_obj.reply_photo(cover_media, caption=text, parse_mode="HTML", reply_markup=kb)
-        except Exception:
-            try:
-                await message_obj.reply_video(cover_media, caption=text, parse_mode="HTML", reply_markup=kb)
-            except Exception:
-                await message_obj.reply(text, parse_mode="HTML", reply_markup=kb)
+                    try:
+                        await message_obj.reply_animation(cover_media, caption=safe_caption, parse_mode="HTML", reply_markup=kb)
+                        return
+                    except Exception:
+                        pass
+        await message_obj.reply(text, parse_mode="HTML", reply_markup=kb)
 
 @router.message(Command("settheme"))
 async def cmd_settheme(message: Message, db: AsyncSession):

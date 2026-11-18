@@ -148,14 +148,14 @@ def get_leaderboard_keyboard(current_category: str) -> InlineKeyboardMarkup:
     currency_emoji = getattr(config, "CURRENCY_EMOJI", "🪙")
     categories = [
         ("coins", f"{currency_emoji} Top {currency_name}"),
-        ("catches", f"{get_emoji('energy')} Top Snatches"),
-        ("premium", f"{get_emoji('crown')} Premium")
+        ("catches", f"{get_emoji('energy', for_button=True)} Top Snatches"),
+        ("premium", f"{get_emoji('crown', for_button=True)} Premium")
     ]
     buttons = []
     for key, label in categories:
-        tick = f" {get_emoji('success')}" if current_category.lower() == key else ""
+        tick = f" {get_emoji('success', for_button=True)}" if current_category.lower() == key else ""
         buttons.append(InlineKeyboardButton(text=f"{label}{tick}", callback_data=f"dm_leaderboard_{key}"))
     builder.row(buttons[0], buttons[1])
     builder.row(buttons[2])
-    builder.row(InlineKeyboardButton(text=f"{get_emoji('back')} Back to Hub Menu", callback_data="dm_home"))
+    builder.row(InlineKeyboardButton(text=f"{get_emoji('back', for_button=True)} Back to Hub Menu", callback_data="dm_home"))
     return builder.as_markup()

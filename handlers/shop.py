@@ -1,7 +1,8 @@
 from utils.emojis import get_emoji
 from aiogram import Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputMediaVideo
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputMediaVideo, InputMediaAnimation
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,33 +27,48 @@ THEMES = {
 
 async def send_or_edit_shop(message_obj, cover_media: str, text: str, reply_markup, is_callback: bool):
     if is_callback:
-        if message_obj.photo or message_obj.video or message_obj.animation:
+        if getattr(message_obj, "photo", None) or getattr(message_obj, "video", None) or getattr(message_obj, "animation", None) or getattr(message_obj, "caption", None):
             try:
                 await message_obj.edit_caption(caption=text, reply_markup=reply_markup, parse_mode="HTML")
                 return
+            except TelegramBadRequest as e:
+                if "not modified" in str(e).lower():
+                    return
             except Exception:
                 pass
-        try:
-            await message_obj.edit_media(InputMediaPhoto(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
-            return
-        except Exception:
-            try:
-                await message_obj.edit_media(InputMediaVideo(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
-                return
-            except Exception:
-                pass
+        if cover_media:
+            for media_cls in (InputMediaPhoto, InputMediaVideo, InputMediaAnimation):
+                try:
+                    await message_obj.edit_media(media_cls(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
+                    return
+                except TelegramBadRequest as e:
+                    if "not modified" in str(e).lower():
+                        return
+                except Exception:
+                    continue
         try:
             await message_obj.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
             return
+        except TelegramBadRequest as e:
+            if "not modified" in str(e).lower():
+                return
         except Exception:
             pass
-    try:
-        await message_obj.reply_photo(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
-    except Exception:
+    if cover_media:
         try:
-            await message_obj.reply_video(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+            await message_obj.reply_photo(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+            return
         except Exception:
-            await message_obj.reply(text, parse_mode="HTML", reply_markup=reply_markup)
+            try:
+                await message_obj.reply_video(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+                return
+            except Exception:
+                try:
+                    await message_obj.reply_animation(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+                    return
+                except Exception:
+                    pass
+    await message_obj.reply(text, parse_mode="HTML", reply_markup=reply_markup)
 
 @router.callback_query(F.data == "dm_shop")
 @router.message(Command("shop"))

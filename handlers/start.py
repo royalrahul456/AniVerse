@@ -4,7 +4,8 @@ import datetime
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo, InputMediaAnimation
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -111,33 +112,48 @@ async def cmd_start(message: Message, state: FSMContext, db: AsyncSession):
 
 async def send_or_edit_start(message_obj, cover_media: str, text: str, reply_markup, is_callback: bool):
     if is_callback:
-        try:
-            await message_obj.edit_media(InputMediaPhoto(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
-            return
-        except Exception:
-            try:
-                await message_obj.edit_media(InputMediaVideo(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
-                return
-            except Exception:
-                pass
-        if message_obj.photo or message_obj.video or message_obj.animation:
+        if cover_media:
+            for media_cls in (InputMediaPhoto, InputMediaVideo, InputMediaAnimation):
+                try:
+                    await message_obj.edit_media(media_cls(media=cover_media, caption=text, parse_mode="HTML"), reply_markup=reply_markup)
+                    return
+                except TelegramBadRequest as e:
+                    if "not modified" in str(e).lower():
+                        return
+                except Exception:
+                    continue
+        if getattr(message_obj, "photo", None) or getattr(message_obj, "video", None) or getattr(message_obj, "animation", None) or getattr(message_obj, "caption", None):
             try:
                 await message_obj.edit_caption(caption=text, reply_markup=reply_markup, parse_mode="HTML")
                 return
+            except TelegramBadRequest as e:
+                if "not modified" in str(e).lower():
+                    return
             except Exception:
                 pass
         try:
             await message_obj.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
             return
+        except TelegramBadRequest as e:
+            if "not modified" in str(e).lower():
+                return
         except Exception:
             pass
-    try:
-        await message_obj.reply_photo(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
-    except Exception:
+    if cover_media:
         try:
-            await message_obj.reply_video(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+            await message_obj.reply_photo(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+            return
         except Exception:
-            await message_obj.reply(text, parse_mode="HTML", reply_markup=reply_markup)
+            try:
+                await message_obj.reply_video(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+                return
+            except Exception:
+                try:
+                    await message_obj.reply_animation(cover_media, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+                    return
+                except Exception:
+                    pass
+    await message_obj.reply(text, parse_mode="HTML", reply_markup=reply_markup)
 
 @router.callback_query(F.data == "dm_home")
 async def cb_dm_home(callback: CallbackQuery, db: AsyncSession):
