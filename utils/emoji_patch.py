@@ -279,8 +279,8 @@ def strip_html_tags(text: str) -> str:
 
 def enhance_reply_markup(markup):
     """Sanitizes button text to ensure clean standard Unicode emojis are ALWAYS visible,
-    strips any raw <tg-emoji> tags, and applies Telegram's vibrant button color styles
-    (primary/success/danger) without risking missing emojis or API rejections."""
+    strips any raw <tg-emoji> tags, and removes all button background color styles
+    (primary/success/danger) so only clean emojis and labels are shown on inline buttons."""
     if not markup:
         return markup
     try:
@@ -295,60 +295,26 @@ def enhance_reply_markup(markup):
                     if not orig_text or not isinstance(orig_text, str):
                         continue
 
-                    cb_data = (btn.get("callback_data", "") if isinstance(btn, dict) else getattr(btn, "callback_data", "")) or ""
-
                     # Always ensure button text has clean Unicode emojis (strip any raw <tg-emoji> tags)
                     clean_text = strip_tg_emojis(orig_text).strip()
                     if not clean_text:
                         clean_text = "❓"
 
-                    # Check if this is a grid game tile (Mines 5x5, Tic-Tac-Toe, noop tiles, or single-character buttons)
-                    is_grid_tile = any(cb_data.startswith(prefix) for prefix in ["mines_click:", "xo_move:", "xo_cell:"]) or cb_data == "noop"
-
-                    if is_grid_tile:
-                        if isinstance(btn, dict):
-                            btn["text"] = clean_text
-                            btn.pop("icon_custom_emoji_id", None)
-                            btn.pop("style", None)
-                        else:
-                            btn.text = clean_text
-                            try:
-                                btn.icon_custom_emoji_id = None
-                                btn.style = None
-                            except Exception:
-                                pass
-                        continue
-
-                    # Determine button color style if not already explicitly set
-                    cur_style = btn.get("style", None) if isinstance(btn, dict) else getattr(btn, "style", None)
-                    if not cur_style:
-                        combined = f"{clean_text} {cb_data}".lower()
-                        if any(k in combined for k in ["claim", "accept", "pokedex", "animedex", "buy", "join", "confirm", "start", "collect", "redeem", "win", "agree", "done", "yes", "cashout", "spin", "coinflip"]):
-                            cur_style = "success"
-                        elif any(k in combined for k in ["cancel", "decline", "delete", "close", "reject", "reset", "remove", "vip", "battle", "no", "stop", "end"]):
-                            cur_style = "danger"
-                        elif any(k in combined for k in ["profile", "refresh", "help", "guide", "update", "updates", "leaderboard", "home", "back", "settings", "shop", "play", "games", "bag", "harem", "streak", "dex", "trivia", "dice", "mines", "scramble", "dart", "prev", "next", "filter", "sort"]):
-                            cur_style = "primary"
-                        else:
-                            cur_style = "primary"
-
-                    # Apply clean Unicode text and style - NO icon_custom_emoji_id so emojis are NEVER lost!
+                    # Apply clean Unicode text with NO button color style and NO icon_custom_emoji_id
                     if isinstance(btn, dict):
                         btn["text"] = clean_text
                         btn.pop("icon_custom_emoji_id", None)
-                        if cur_style:
-                            btn["style"] = cur_style
+                        btn.pop("style", None)
                     else:
                         btn.text = clean_text
                         try:
                             btn.icon_custom_emoji_id = None
                         except Exception:
                             pass
-                        if cur_style:
-                            try:
-                                btn.style = cur_style
-                            except Exception:
-                                pass
+                        try:
+                            btn.style = None
+                        except Exception:
+                            pass
 
         # Also sanitize ReplyKeyboardMarkup
         kb = getattr(markup, "keyboard", None)
@@ -363,7 +329,7 @@ def enhance_reply_markup(markup):
                     elif hasattr(btn, "text") and isinstance(btn.text, str) and "<tg-emoji" in btn.text:
                         btn.text = strip_tg_emojis(btn.text)
     except Exception as e:
-        logger.error(f"Error enhancing reply_markup buttons: {e}", exc_info=True)
+        logger.error(f"Error sanitizing reply_markup buttons: {e}", exc_info=True)
     return markup
 
 
@@ -460,7 +426,7 @@ def patch_bot_emojis(bot: Bot):
             if method.text and isinstance(method.text, str):
                 method.text = strip_html_tags(method.text)
 
-        # 1. Enhance button colors (styles) & try native custom emoji icon (with fallback preservation)
+        # 1. Sanitize inline button text (preserve clean Unicode emojis, remove button color styles)
         if hasattr(method, "reply_markup") and method.reply_markup:
             enhance_reply_markup(method.reply_markup)
 

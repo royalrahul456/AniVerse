@@ -769,8 +769,7 @@ def render_mines_keyboard(user_id: int, state: dict) -> InlineKeyboardMarkup:
         if len(revealed) >= 1:
             builder.row(InlineKeyboardButton(
                 text=f"🪙 Cashout (+{current_reward:,} Coins)",
-                callback_data=f"mines_cashout:{user_id}",
-                style="success"
+                callback_data=f"mines_cashout:{user_id}"
             ))
     return builder.as_markup()
 
