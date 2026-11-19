@@ -130,12 +130,12 @@ async def init_db():
         except Exception:
             pass
 
-    # Reset spawn settings to 700 msgs in every non-official group (cleaning up any past values like 5 set by group admins)
+    # Reset legacy spawn settings (e.g. 5 set by previous group admins) to default 700 msgs
     async with engine.begin() as conn:
         try:
             official_id = getattr(config, "OFFICIAL_CHAT_ID", -1003616974453)
             default_thresh = getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700)
-            await conn.execute(text(f"UPDATE group_settings SET spawn_threshold = {int(default_thresh)} WHERE chat_id != {int(official_id)}"))
+            await conn.execute(text(f"UPDATE group_settings SET spawn_threshold = {int(default_thresh)} WHERE chat_id != {int(official_id)} AND spawn_threshold <= 5"))
         except Exception:
             pass
 
