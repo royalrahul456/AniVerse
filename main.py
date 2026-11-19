@@ -103,7 +103,7 @@ ALL_BOT_COMMANDS = {
     # Catch & Guess
     "guess", "catch", "snatch", "nameguess", "togglenameguess",
     # Spawns & Settings
-    "spawnsettings", "setspawn", "spawnchance", "changetime", "spawnrate", "spawnthreshold", "togglespawn",
+    "spawnsettings", "setspawn", "spawnchance", "changetime", "spawnrate", "spawnthreshold", "togglespawn", "resetallspawns", "resetspawns", "resetgroupspawns",
     # Auction & Trade & Shop & Redeem
     "auction", "bid", "cancelauction", "auctions", "auc", "shop", "trade", "gen", "redeem",
     # Anime Social & Roleplay

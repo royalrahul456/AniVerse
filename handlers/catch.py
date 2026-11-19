@@ -161,8 +161,8 @@ async def get_or_create_group_settings(chat_id: int, db: AsyncSession) -> GroupS
         )
         db.add(settings)
         await db.commit()
-    elif not is_official_group(chat_id) and settings.spawn_threshold == 10:
-        # Auto-upgrade legacy default 10 to 700 for non-official groups
+    elif not is_official_group(chat_id) and settings.spawn_threshold < getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700):
+        # Auto-reset any legacy/group-admin configured threshold (< 700, e.g. 5) to default 700
         settings.spawn_threshold = getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700)
         await db.commit()
     return settings
@@ -580,6 +580,7 @@ async def cmd_setspawn(message: Message, db: AsyncSession, bot):
         await message.reply(
             f"{get_emoji('warning')} <b>Format:</b>\n"
             "• <code>/setspawn on</code> / <code>/setspawn off</code>\n"
+            "• <code>/setspawn reset</code> (Reset to default 700)\n"
             "• <code>/setspawn &lt;threshold_number&gt;</code> (e.g. <code>/setspawn 700</code>)\n"
             "• <code>/setspawn &lt;chat_id&gt; &lt;threshold_number&gt;</code> (from DM)",
             parse_mode="HTML"
@@ -588,7 +589,13 @@ async def cmd_setspawn(message: Message, db: AsyncSession, bot):
 
     settings = await get_or_create_group_settings(target_chat_id, db)
 
-    if arg in ["on", "enable", "true"]:
+    if arg in ["reset", "default"]:
+        default_val = get_default_spawn_threshold(target_chat_id)
+        settings.spawn_threshold = default_val
+        settings.message_counter = 0
+        await db.commit()
+        await message.reply(f"🔄 Spawn threshold has been reset to default (<b>{default_val}</b> messages) for chat <code>{target_chat_id}</code>.", parse_mode="HTML")
+    elif arg in ["on", "enable", "true"]:
         settings.spawns_enabled = True
         await db.commit()
         await message.reply(f"{get_emoji('success')} Wild character spawns have been <b>enabled</b> for chat <code>{target_chat_id}</code>.", parse_mode="HTML")
@@ -637,6 +644,32 @@ async def cmd_togglespawn(message: Message, db: AsyncSession, bot):
         f"<i>Use /spawnsettings to view full settings.</i>"
     )
     await message.reply(text, parse_mode="HTML")
+
+@router.message(Command("resetallspawns", "resetspawns", "resetgroupspawns"))
+async def cmd_resetallspawns(message: Message, db: AsyncSession):
+    """Admin command to reset spawn threshold to 700 messages across all external groups."""
+    if not await is_bot_admin(message, db):
+        await message.reply(f"{get_emoji('no_entry')} Only authorized bot admins can reset spawn settings.")
+        return
+
+    official_id = getattr(config, "OFFICIAL_CHAT_ID", -1003616974453)
+    default_thresh = getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700)
+
+    stmt = (
+        update(GroupSettings)
+        .where(GroupSettings.chat_id != int(official_id))
+        .values(spawn_threshold=int(default_thresh))
+    )
+    res = await db.execute(stmt)
+    await db.commit()
+
+    count = res.rowcount if hasattr(res, "rowcount") and res.rowcount is not None else "all"
+    await message.reply(
+        f"{get_emoji('success')} <b>SPAWN SETTINGS RESET COMPLETED!</b>\n\n"
+        f"Reset spawn threshold to <b>{default_thresh} messages</b> across <code>{count}</code> external group(s)!\n"
+        f"<i>Official community remains at {getattr(config, 'OFFICIAL_GROUP_SPAWN_THRESHOLD', 10)} messages.</i>",
+        parse_mode="HTML"
+    )
 
 # ----------------------------------------------------
 # ANSWER GUESS MONITOR & LEGACY SPAWNS (Catch-all for group chat)

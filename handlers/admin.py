@@ -1660,6 +1660,7 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
         f"│  {get_emoji('energy')} <b>ADMIN COMMANDS (You can use these):</b>\n"
         "│  ├─➩ <code>/stats</code> — View bot stats\n"
         "│  ├─➩ <code>/spawn</code> — Force spawn wild character\n"
+        "│  ├─➩ <code>/resetallspawns</code> — Reset external groups to 700 msgs\n"
         "│  ├─➩ <code>/transfersnatches &lt;from&gt; &lt;to&gt;</code> — Transfer all catches\n"
         "│  ├─➩ <code>/addchar &lt;details&gt;</code> — Create character\n"
         "│  ├─➩ <code>/editchar &lt;id&gt;</code> — Edit name/anime/rarity/media\n"
@@ -1673,6 +1674,7 @@ async def cmd_ownerhelp(message: Message, db: AsyncSession):
         "│  ├─➩ <code>/removefromchance &lt;rarity&gt;</code> — Disable spawn\n"
         "│  ├─➩ <code>/spawnchance</code> — View spawn percentages\n"
         "│  ├─➩ <code>/editspawnchance</code> — Adjust spawn chance (%)\n"
+        "│  ├─➩ <code>/resetallspawns</code> — Reset all external groups to 700 msgs\n"
         "│  ├─➩ <code>/adminlist</code> — View all active admins\n"
     )
     
@@ -1730,6 +1732,7 @@ async def cb_admin_tools(callback: CallbackQuery, db: AsyncSession):
         f"│  {get_emoji('energy')} <b>Management Commands:</b>\n"
         "│  ├─➩ <code>/stats</code> — Server stats & DB info\n"
         "│  ├─➩ <code>/spawn</code> — Force spawn wild character\n"
+        "│  ├─➩ <code>/resetallspawns</code> — Reset external groups to 700 msgs\n"
         "│  ├─➩ <code>/transfersnatches &lt;from&gt; &lt;to&gt;</code> — Transfer all catches\n"
         "│  ├─➩ <code>/setcover &lt;mode&gt;</code> — Set covers (start, xo, dex)\n"
         "│  │\n"
