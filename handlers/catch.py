@@ -129,40 +129,60 @@ async def spawn_character(chat_id: int, db: AsyncSession, bot, custom_rarity: st
         pass
     return True
 
-async def is_admin_or_owner(event, db: AsyncSession) -> bool:
+def is_official_group(chat_id: int) -> bool:
+    """Checks if the given chat is the official AniVerse group/community."""
+    official_id = getattr(config, "OFFICIAL_CHAT_ID", None)
+    if not official_id:
+        return False
     try:
+        return int(chat_id) == int(official_id)
+    except (ValueError, TypeError):
+        return False
+
+def get_default_spawn_threshold(chat_id: int) -> int:
+    """Returns 10 for official community group, 700 for external/non-official groups."""
+    if is_official_group(chat_id):
+        return getattr(config, "OFFICIAL_GROUP_SPAWN_THRESHOLD", 10)
+    return getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700)
+
+async def get_or_create_group_settings(chat_id: int, db: AsyncSession) -> GroupSettings:
+    """Fetches group settings or initializes them with default threshold (10 if official, 700 otherwise)."""
+    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
+    res = await db.execute(stmt)
+    settings = res.scalar_one_or_none()
+    if not settings:
+        thresh = get_default_spawn_threshold(chat_id)
+        settings = GroupSettings(
+            chat_id=chat_id,
+            spawn_threshold=thresh,
+            message_counter=0,
+            spawns_enabled=True,
+            auto_nameguess_enabled=False
+        )
+        db.add(settings)
+        await db.commit()
+    elif not is_official_group(chat_id) and settings.spawn_threshold == 10:
+        # Auto-upgrade legacy default 10 to 700 for non-official groups
+        settings.spawn_threshold = getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700)
+        await db.commit()
+    return settings
+
+async def is_bot_admin(event, db: AsyncSession) -> bool:
+    """Strictly checks if user is a bot owner or bot admin (NOT a regular group admin)."""
+    try:
+        from handlers.admin import is_admin, is_admin_id
+        if isinstance(event, Message):
+            return await is_admin(event, db)
         user_id = event.from_user.id if event.from_user else None
         if not user_id:
             return False
-        # Owner check
-        if config.ADMIN_IDS and user_id in config.ADMIN_IDS:
-            return True
-        # DB Admin check
-        stmt = select(BotAdmin).where(BotAdmin.user_id == user_id)
-        res = await db.execute(stmt)
-        if res.scalar_one_or_none():
-            return True
-            
-        # Get chat ID safely based on event type
-        chat_id = None
-        if isinstance(event, Message):
-            chat_id = event.chat.id
-        elif isinstance(event, CallbackQuery) and event.message:
-            chat_id = event.message.chat.id
-            
-        if not chat_id:
-            return False
-            
-        # Telegram admin check
-        try:
-            member = await event.bot.get_chat_member(chat_id, user_id)
-            if member.status in ("creator", "administrator"):
-                return True
-        except Exception:
-            pass
+        return await is_admin_id(user_id, db)
     except Exception as e:
-        logger.error(f"Error checking admin status: {e}")
-    return False
+        logger.error(f"Error checking bot admin status: {e}")
+        return False
+
+# Backward-compatibility alias
+is_admin_or_owner = is_bot_admin
 
 def generate_vowel_hint(name: str) -> str:
     from utils.formatters import get_clean_name
@@ -307,18 +327,12 @@ async def cmd_togglenameguess(message: Message, db: AsyncSession, bot):
             await message.reply(f"{get_emoji('warning')} This command can only be used inside group chats.")
             return
 
-        if not await is_admin_or_owner(message, db):
-            await message.reply(f"{get_emoji('error')} Only group administrators or bot owners can toggle this setting.")
+        if not await is_bot_admin(message, db):
+            await message.reply(f"{get_emoji('no_entry')} Only authorized bot admins can toggle bot settings.")
             return
 
         chat_id = message.chat.id
-        stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-        res = await db.execute(stmt)
-        settings = res.scalar_one_or_none()
-
-        if not settings:
-            settings = GroupSettings(chat_id=chat_id, spawns_enabled=True, auto_nameguess_enabled=False)
-            db.add(settings)
+        settings = await get_or_create_group_settings(chat_id, db)
 
         settings.auto_nameguess_enabled = not settings.auto_nameguess_enabled
         await db.commit()
@@ -386,8 +400,8 @@ async def cb_nameguess_stop(callback: CallbackQuery, db: AsyncSession):
             await callback.answer(f"{get_emoji('error')} There is no active game running here.", show_alert=True)
             return
 
-        if not await is_admin_or_owner(callback, db):
-            await callback.answer(f"{get_emoji('error')} Only group admins or bot owners can stop the game.", show_alert=True)
+        if not await is_bot_admin(callback, db):
+            await callback.answer(f"{get_emoji('error')} Only authorized bot admins can stop the game.", show_alert=True)
             return
 
         game = active_games.pop(chat_id)
@@ -513,17 +527,6 @@ async def cmd_catch(message: Message, db: AsyncSession, bot):
         logger.error(f"Error in cmd_catch command: {e}")
         await message.reply(f"{get_emoji('warning')} An error occurred while trying to catch the character.")
 
-async def is_user_allowed(message: Message, bot) -> bool:
-    if message.from_user.id in config.ADMIN_IDS:
-        return True
-    if message.chat.type == "private":
-        return True
-    try:
-        member = await bot.get_chat_member(message.chat.id, message.from_user.id)
-        return member.status in ["administrator", "creator"]
-    except Exception:
-        return False
-
 @router.message(Command("spawnsettings"))
 async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
     if message.chat.type == "private":
@@ -531,63 +534,68 @@ async def cmd_spawnsettings(message: Message, db: AsyncSession, bot):
         return
 
     chat_id = message.chat.id
-    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-    res = await db.execute(stmt)
-    settings = res.scalar_one_or_none()
-
-    if not settings:
-        settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0, spawns_enabled=True)
-        db.add(settings)
-        await db.commit()
+    settings = await get_or_create_group_settings(chat_id, db)
 
     status_emoji = f"{get_emoji('success')} Enabled" if settings.spawns_enabled else f"{get_emoji('error')} Disabled"
+    is_official = is_official_group(chat_id)
+    group_type = "Official Community" if is_official else "Standard Group"
     text = (
-        f"⚙️ <b>Group Spawn Settings</b>\n\n"
+        f"⚙️ <b>Group Spawn Settings</b> ({group_type})\n\n"
         f"● <b>Spawns:</b> {status_emoji}\n"
         f"● <b>Threshold:</b> {settings.spawn_threshold} messages\n"
-        f"● <b>Progress:</b> {settings.message_counter}/{settings.spawn_threshold} messages"
+        f"● <b>Progress:</b> {settings.message_counter}/{settings.spawn_threshold} messages\n\n"
+        f"🔒 <i>Note: Only bot admins can change spawn or bot settings.</i>"
     )
     await message.reply(text, parse_mode="HTML")
 
-@router.message(Command("setspawn", "spawnchance", "changetime", "spawnrate", "spawnthreshold"))
+@router.message(Command("setspawn", "changetime", "spawnrate", "spawnthreshold"))
 async def cmd_setspawn(message: Message, db: AsyncSession, bot):
-    if message.chat.type == "private":
-        await message.reply(f"{get_emoji('warning')} This command can only be used in group chats.")
+    if not await is_bot_admin(message, db):
+        await message.reply(f"{get_emoji('no_entry')} Only bot admins can change spawn or bot settings.")
         return
 
-    if not await is_user_allowed(message, bot):
-        await message.reply(f"{get_emoji('warning')} Only group administrators or the bot owner can change spawn settings.")
-        return
+    parts = message.text.split()
+    target_chat_id = message.chat.id
+    arg = None
 
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
+    if len(parts) == 2:
+        if message.chat.type == "private":
+            await message.reply(
+                f"{get_emoji('warning')} <b>Format in DM:</b>\n"
+                "• <code>/setspawn &lt;chat_id&gt; on</code> / <code>off</code>\n"
+                "• <code>/setspawn &lt;chat_id&gt; &lt;threshold&gt;</code>\n\n"
+                "<i>Or run <code>/setspawn &lt;threshold&gt;</code> directly inside the group chat.</i>",
+                parse_mode="HTML"
+            )
+            return
+        arg = parts[1].strip().lower()
+    elif len(parts) >= 3:
+        try:
+            target_chat_id = int(parts[1])
+            arg = parts[2].strip().lower()
+        except ValueError:
+            await message.reply(f"{get_emoji('error')} Invalid chat ID. Please specify a numeric Telegram chat ID.")
+            return
+    else:
         await message.reply(
             f"{get_emoji('warning')} <b>Format:</b>\n"
             "• <code>/setspawn on</code> / <code>/setspawn off</code>\n"
-            "• <code>/setspawn &lt;threshold_number&gt;</code> (e.g. <code>/setspawn 15</code>)",
+            "• <code>/setspawn &lt;threshold_number&gt;</code> (e.g. <code>/setspawn 700</code>)\n"
+            "• <code>/setspawn &lt;chat_id&gt; &lt;threshold_number&gt;</code> (from DM)",
             parse_mode="HTML"
         )
         return
 
-    arg = parts[1].strip().lower()
-    chat_id = message.chat.id
-
-    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-    res = await db.execute(stmt)
-    settings = res.scalar_one_or_none()
-
-    if not settings:
-        settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0, spawns_enabled=True)
-        db.add(settings)
+    settings = await get_or_create_group_settings(target_chat_id, db)
 
     if arg in ["on", "enable", "true"]:
         settings.spawns_enabled = True
         await db.commit()
-        await message.reply(f"{get_emoji('success')} Wild character spawns have been <b>enabled</b> for this group chat.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('success')} Wild character spawns have been <b>enabled</b> for chat <code>{target_chat_id}</code>.", parse_mode="HTML")
     elif arg in ["off", "disable", "false"]:
         settings.spawns_enabled = False
         await db.commit()
-        await message.reply(f"{get_emoji('error')} Wild character spawns have been <b>disabled</b> for this group chat.", parse_mode="HTML")
+        await message.reply(f"{get_emoji('error')} Wild character spawns have been <b>disabled</b> for chat <code>{target_chat_id}</code>.", parse_mode="HTML")
     elif arg.isdigit():
         val = int(arg)
         if val < 5:
@@ -595,7 +603,7 @@ async def cmd_setspawn(message: Message, db: AsyncSession, bot):
             return
         settings.spawn_threshold = val
         await db.commit()
-        await message.reply(f"⚙️ Spawn message threshold has been set to <b>{val}</b> messages.", parse_mode="HTML")
+        await message.reply(f"⚙️ Spawn message threshold has been set to <b>{val}</b> messages for chat <code>{target_chat_id}</code>.", parse_mode="HTML")
     else:
         await message.reply(f"{get_emoji('warning')} Invalid argument. Use <code>on</code>, <code>off</code>, or a number.", parse_mode="HTML")
 
@@ -606,18 +614,12 @@ async def cmd_togglespawn(message: Message, db: AsyncSession, bot):
         await message.reply(f"{get_emoji('warning')} This command can only be used in group chats.")
         return
 
-    if not await is_user_allowed(message, bot):
-        await message.reply(f"{get_emoji('warning')} Only group administrators or the bot owner can toggle spawn settings.")
+    if not await is_bot_admin(message, db):
+        await message.reply(f"{get_emoji('no_entry')} Only bot admins can change spawn or bot settings.")
         return
 
     chat_id = message.chat.id
-    stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-    res = await db.execute(stmt)
-    settings = res.scalar_one_or_none()
-
-    if not settings:
-        settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0, spawns_enabled=True)
-        db.add(settings)
+    settings = await get_or_create_group_settings(chat_id, db)
 
     settings.spawns_enabled = not settings.spawns_enabled
     await db.commit()
@@ -709,14 +711,7 @@ async def group_message_monitor(message: Message, db: AsyncSession, bot):
                 return
 
         # 2. Increment message counter for wild character spawns
-        stmt = select(GroupSettings).where(GroupSettings.chat_id == chat_id)
-        res = await db.execute(stmt)
-        settings = res.scalar_one_or_none()
-
-        if not settings:
-            settings = GroupSettings(chat_id=chat_id, spawn_threshold=10, message_counter=0, spawns_enabled=True)
-            db.add(settings)
-            await db.commit()
+        settings = await get_or_create_group_settings(chat_id, db)
 
         if settings.spawns_enabled:
             settings.message_counter += 1

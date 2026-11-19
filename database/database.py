@@ -118,6 +118,15 @@ async def init_db():
         except Exception:
             pass
 
+    # Migrate legacy default spawn threshold (10) to 700 for non-official groups
+    async with engine.begin() as conn:
+        try:
+            official_id = getattr(config, "OFFICIAL_CHAT_ID", -1003616974453)
+            default_thresh = getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700)
+            await conn.execute(text(f"UPDATE group_settings SET spawn_threshold = {int(default_thresh)} WHERE chat_id != {int(official_id)} AND spawn_threshold = 10"))
+        except Exception:
+            pass
+
     async with engine.begin() as conn:
         try:
             if "sqlite" in str(engine.url):

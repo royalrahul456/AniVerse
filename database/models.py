@@ -76,7 +76,7 @@ class GroupSettings(Base):
     __tablename__ = "group_settings"
 
     chat_id = Column(BigInteger, primary_key=True, index=True)
-    spawn_threshold = Column(Integer, default=10)
+    spawn_threshold = Column(Integer, default=700)
     message_counter = Column(Integer, default=0)
     spawns_enabled = Column(Boolean, default=True)
     auto_nameguess_enabled = Column(Boolean, default=False)

@@ -54,6 +54,10 @@ OFFICIAL_CHAT_ID = int(os.getenv("OFFICIAL_CHAT_ID", "-1003616974453"))
 OFFICIAL_CHANNEL_ID = _parse_channel_id(os.getenv("OFFICIAL_CHANNEL_ID", "@aniverseupdate"), "@aniverseupdate")
 OFFICIAL_CHANNEL_LINK = os.getenv("OFFICIAL_CHANNEL_LINK", "https://t.me/aniverseupdate")
 
+# Spawn Threshold Configuration (Official Community: 10 msgs, External Groups: 700 msgs)
+OFFICIAL_GROUP_SPAWN_THRESHOLD = int(os.getenv("OFFICIAL_GROUP_SPAWN_THRESHOLD", "10"))
+DEFAULT_GROUP_SPAWN_THRESHOLD = int(os.getenv("DEFAULT_GROUP_SPAWN_THRESHOLD", "700"))
+
 # Currency Configuration
 CURRENCY_NAME = "Gold"
 CURRENCY_EMOJI = "🪙"
