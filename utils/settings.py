@@ -32,3 +32,19 @@ def set_cover_media(category: str, media_url_or_id: str):
     os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
     with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f, indent=2)
+
+def get_global_spawn_threshold() -> int:
+    import config
+    settings = _load_settings()
+    default_val = getattr(config, "DEFAULT_GROUP_SPAWN_THRESHOLD", 700)
+    try:
+        return int(settings.get("group_spawn_threshold", default_val))
+    except (ValueError, TypeError):
+        return default_val
+
+def set_global_spawn_threshold(val: int):
+    settings = _load_settings()
+    settings["group_spawn_threshold"] = int(val)
+    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(settings, f, indent=2)

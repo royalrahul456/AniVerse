@@ -174,3 +174,10 @@ class BotEmoji(Base):
     key = Column(String(50), primary_key=True, index=True)
     emoji = Column(String(255), nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class BotSetting(Base):
+    __tablename__ = "bot_settings"
+
+    key = Column(String(50), primary_key=True, index=True)
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow)

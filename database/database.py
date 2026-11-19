@@ -32,6 +32,18 @@ async def init_db():
         except Exception as e:
             print(f"Error creating bot_emojis table: {e}")
 
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bot_settings (
+                key VARCHAR(50) PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP
+            )
+            """))
+        except Exception as e:
+            print(f"Error creating bot_settings table: {e}")
+
     # Fix any legacy underscore emoji_id tags to emoji-id in bot_emojis and rarity_types
     async with engine.begin() as conn:
         try:
